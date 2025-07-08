@@ -967,6 +967,7 @@
             }
 
             try {
+                console.log('Search button clicked! Initiating fetch for:', ticker); // Added for debugging
                 const response = await fetch(`${backendBaseUrl}/get_trailing_metrics?ticker=${ticker}`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
