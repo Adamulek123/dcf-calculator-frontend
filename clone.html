@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Price Estimator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            color: #e2e8f0;
+        }
+        .container {
+            background-color: #2d3748;
+            padding: 1.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 1200px;
+            border: 1px solid #4a5568;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        @media (min-width: 1024px) {
+            .container {
+                flex-direction: row;
+            }
+        }
+
+        .left-panel, .right-panel {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: visible;
+            min-height: 0;
+        }
+
+        .header-section {
+            background-color: #2d3748;
+            padding: 1rem 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border: 1px solid #4a5568;
+        }
+
+        .header-section input {
+            background-color: #1a202c;
+            border: 1px solid #4a5568;
+            color: #e2e8f0;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            flex-grow: 1;
+        }
+
+        .primary-button {
+            background-color: #4299e1;
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            border: none;
+            box-shadow: 0 4px 10px rgba(66, 153, 225, 0.3);
+        }
+        .primary-button:hover {
+            background-color: #3182ce;
+            transform: translateY(-2px);
+        }
+        .primary-button:active {
+            transform: translateY(0);
+        }
+
+        .company-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #2d3748;
+            border-radius: 0.75rem;
+            border: 1px solid #4a5568;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            transition: opacity 0.3s ease-in-out, height 0.3s ease-in-out, margin-bottom 0.3s ease-in-out, padding 0.3s ease-in-out;
+            min-height: 80px;
+        }
+
+        .company-info.hidden-state {
+            opacity: 0;
+            visibility: hidden;
+            height: 0;
+            margin-bottom: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            min-height: 0;
+        }
+
+        .company-info > div {
+            display: flex;
+            flex-direction: column;
+        }
+        .company-info .company-name-and-price {
+            display: flex;
+            align-items: baseline;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .company-logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #4299e1;
+            background-color: #1a202c;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .company-name {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        .current-price {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #48bb78;
+        }
+
+        .tab-buttons {
+            display: flex;
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #4a5568;
+        }
+        .tab-button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            background: none;
+            color: #a0aec0;
+            cursor: pointer;
+            font-weight: 600;
+            transition: color 0.2s, border-bottom 0.2s;
+        }
+        .tab-button.active {
+            color: #4299e1;
+            border-bottom: 2px solid #4299e1;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 1rem;
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .metric-item {
+            background-color: #1a202c;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid #4a5568;
+        }
+        .metric-label {
+            font-size: 0.875rem;
+            color: #a0aec0;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 1.5rem;
+        }
+        .input-group label {
+            font-size: 1rem;
+            color: #e2e8f0;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            text-align: left;
+        }
+        .input-field-wrapper {
+            display: flex;
+            align-items: center;
+            background-color: #1a202c;
+            border: 1px solid #4a5568;
+            border-radius: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .input-field-wrapper:focus-within {
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.25);
+        }
+        .input-field-wrapper input[type="text"],
+        .input-field-wrapper input[type="number"],
+        .input-field-wrapper input[type="password"] {
+            flex-grow: 1;
+            background: none;
+            border: none;
+            outline: none;
+            font-size: 1rem;
+            color: #e2e8f0;
+            padding: 0;
+            -moz-appearance: textfield;
+        }
+        .input-field-wrapper input[type="number"]::-webkit-outer-spin-button,
+        .input-field-wrapper input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .input-field-wrapper .currency-symbol,
+        .input-field-wrapper .percentage-symbol {
+            color: #a0aec0;
+            font-size: 1rem;
+            padding-right: 0.5rem;
+        }
+        .input-field-wrapper .check-icon {
+            color: #48bb78;
+            margin-left: 0.5rem;
+        }
+        .input-description {
+            font-size: 0.875rem;
+            color: #a0aec0;
+            margin-top: 0.5rem;
+            text-align: left;
+            line-height: 1.4;
+        }
+
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        #calculationResults {
+            background-color: #1a202c;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            border: 1px solid #4a5568;
+            margin-bottom: 1rem;
+            height: auto;
+        }
+        #calculationResults p {
+            margin-bottom: 0.25rem;
+            font-size: 1rem;
+            color: #e2e8f0;
+        }
+        #calculationResults p strong {
+            color: #fff;
+        }
+        #calculationResults .large-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #48bb78;
+        }
+
+        .chart-container {
+            background-color: #1a202c;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid #4a5568;
+            position: relative;
+            margin-bottom: 0.5rem;
+        }
+        .chart-container svg {
+            width: 100%;
+            height: 300px;
+            overflow: visible;
+        }
+        .chart-line {
+            fill: none;
+            stroke: #48bb78;
+            stroke-width: 2;
+        }
+        .chart-point {
+            fill: #48bb78;
+            stroke: #1a202c;
+            stroke-width: 2;
+        }
+        .chart-axis-line {
+            stroke: #a0aec0;
+            stroke-width: 1;
+        }
+        .chart-label {
+            font-size: 10px;
+            fill: #a0aec0;
+        }
+        .chart-grid-line {
+            stroke: #4a5568;
+            stroke-width: 0.5;
+            stroke-dasharray: 2,2;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4299e1;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            color: #fc8181;
+            margin-top: 1rem;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .login-container {
+            background-color: #2d3748;
+            padding: 2.5rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #4a5568;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        .login-container h2 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-bottom: 1rem;
+        }
+        .login-container .input-group {
+            width: 100%;
+        }
+        .login-container .primary-button {
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            font-size: 1.125rem;
+        }
+        .login-message {
+            color: #fc8181;
+            font-weight: 500;
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .saved-calculations-list {
+            background-color: #1a202c;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid #4a5568;
+            margin-top: 1.5rem;
+        }
+        .saved-calculations-list h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 1rem;
+        }
+        .saved-calculation-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #4a5568;
+        }
+        .saved-calculation-item:last-child {
+            border-bottom: none;
+        }
+        .saved-calculation-item span {
+            color: #a0aec0;
+        }
+        .saved-calculation-item button {
+            background-color: #ed8936;
+            color: white;
+            padding: 0.3rem 0.6rem;
+            border-radius: 0.3rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.2s;
+        }
+        .saved-calculation-item button.delete-btn {
+            background-color: #e53e3e;
+            margin-left: 0.5rem;
+        }
+        .saved-calculation-item button:hover {
+            background-color: #dd6b20;
+        }
+        .saved-calculation-item button.delete-btn:hover {
+            background-color: #c53030;
+        }
+
+        /* Custom Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #2d3748;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        .modal-content h3 {
+            font-size: 1.5rem;
+            color: #e2e8f0;
+            margin-bottom: 1rem;
+        }
+        .modal-content p {
+            color: #a0aec0;
+            margin-bottom: 1.5rem;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+        .modal-buttons button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .modal-buttons .confirm-btn {
+            background-color: #e53e3e;
+            color: white;
+        }
+        .modal-buttons .confirm-btn:hover {
+            background-color: #c53030;
+        }
+        .modal-buttons .cancel-btn {
+            background-color: #a0aec0;
+            color: #1a202c;
+        }
+        .modal-buttons .cancel-btn:hover {
+            background-color: #718096;
+        }
+    </style>
+</head>
+<body>
+    <div id="loginPage" class="login-container">
+        <h2>Login to DCF Calculator</h2>
+        <div class="input-group">
+            <label for="loginUsername">Username</label>
+            <div class="input-field-wrapper w-full">
+                <input type="text" id="loginUsername" placeholder="Enter your username">
+            </div>
+        </div>
+        <div class="input-group">
+            <label for="loginPassword">Password</label>
+            <div class="input-field-wrapper w-full">
+                <input type="password" id="loginPassword" placeholder="Enter your password">
+            </div>
+        </div>
+        <button id="loginBtn" class="primary-button">Login</button>
+        <p class="text-gray-400 mt-4">Don't have an account?</p>
+        <button id="showRegisterBtn" class="primary-button bg-gray-600 hover:bg-gray-700">Register</button>
+        <p id="loginMessage" class="login-message hidden"></p>
+    </div>
+
+    <div id="registerPage" class="login-container hidden">
+        <h2>Register for DCF Calculator</h2>
+        <div class="input-group">
+            <label for="registerUsername">Username</label>
+            <div class="input-field-wrapper w-full">
+                <input type="text" id="registerUsername" placeholder="Choose a username">
+            </div>
+        </div>
+        <div class="input-group">
+            <label for="registerPassword">Password</label>
+            <div class="input-field-wrapper w-full">
+                <input type="password" id="registerPassword" placeholder="Choose a password">
+            </div>
+        </div>
+        <button id="registerBtn" class="primary-button">Register</button>
+        <p class="text-gray-400 mt-4">Already have an account?</p>
+        <button id="showLoginBtn" class="primary-button bg-gray-600 hover:bg-gray-700">Login</button>
+        <p id="registerMessage" class="login-message hidden"></p>
+    </div>
+
+    <div id="appContent" class="container hidden">
+        <div class="flex flex-col lg:flex-row w-full gap-8">
+            <div class="left-panel">
+                <div class="header-section">
+                    <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., GOOG)" class="text-gray-300">
+                    <button id="getCurrentDataBtn" class="primary-button">Search</button>
+                    <button id="logoutBtn" class="primary-button bg-red-600 hover:bg-red-700">Logout</button>
+                </div>
+
+                <div class="tab-buttons">
+                    <button id="earningsTabBtn" class="tab-button active">Earnings</button>
+                    <button id="cashFlowTabBtn" class="tab-button">Cash Flow</button>
+                </div>
+
+                <div id="earningsSection">
+                    <h2 class="section-title">Assumptions (Earnings)</h2>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <p class="metric-label">EPS (TTM)</p>
+                            <p id="currentEps" class="metric-value">$0.00</p>
+                        </div>
+                        <div class="metric-item">
+                            <p class="metric-label">PE (TTM)</p>
+                            <p id="currentPe" class="metric-value">0.00</p>
+                        </div>
+                        <div class="metric-item">
+                            <p class="metric-label">EPS Growth</p>
+                            <p id="epsGrowth" class="metric-value">0.0%</p>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="epsTtmInput">EPS (TTM)</label>
+                        <div class="input-field-wrapper w-full">
+                            <span class="currency-symbol">$</span>
+                            <input type="number" id="epsTtmInput" value="0.00" step="0.01" readonly>
+                            <span class="check-icon">&#10003;</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group mt-6">
+                        <label for="growthRateInput">EPS Growth Rate</label>
+                        <div class="input-field-wrapper w-full">
+                            <input type="number" id="growthRateInput" placeholder="Enter growth rate" step="0.1">
+                            <span class="percentage-symbol">%</span>
+                            <span class="check-icon">&#10003;</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group mt-6">
+                        <label for="peMultipleInput">Appropriate EPS Multiple</label>
+                        <div class="input-field-wrapper w-full">
+                            <input type="number" id="peMultipleInput" placeholder="Enter multiple" step="0.1">
+                            <span class="check-icon">&#10003;</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cashFlowSection" class="hidden">
+                    <h2 class="section-title">Assumptions (Cash Flow)</h2>
+                    <div class="metric-grid">
+                        <div class="metric-item">
+                            <p class="metric-label">FCF/Share (TTM)</p>
+                            <p id="currentFcfShare" class="metric-value">$0.00</p>
+                        </div>
+                        <div class="metric-item">
+                            <p class="metric-label">FCF Yield (TTM)</p>
+                            <p id="fcfYield" class="metric-value">0.0%</p>
+                        </div>
+                        <div class="metric-item">
+                            <p class="metric-label">SBC Impact</p>
+                            <p id="sbcImpact" class="metric-value">0.0%</p>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="fcfShareInput">FCF/Share (TTM)</label>
+                        <div class="input-field-wrapper w-full">
+                            <span class="currency-symbol">$</span>
+                            <input type="number" id="fcfShareInput" value="0.00" step="0.01" readonly>
+                            <span class="check-icon">&#10003;</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group mt-6">
+                        <label for="fcfGrowthRateInput">FCF Growth Rate</label>
+                        <div class="input-field-wrapper w-full">
+                            <input type="number" id="fcfGrowthRateInput" placeholder="Enter growth rate" step="0.1">
+                            <span class="percentage-symbol">%</span>
+                            <span class="check-icon">&#10003;</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group mt-6">
+                        <label for="fcfYieldInput">Appropriate FCF Yield</label>
+                        <div class="input-field-wrapper w-full">
+                            <input type="number" id="fcfYieldInput" placeholder="Enter FCF yield" step="0.1">
+                            <span class="percentage-symbol">%</span>
+                            <span class="check-icon">&#10003;</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-group mt-6">
+                    <label for="desiredReturnInput">Desired Return</label>
+                    <div class="input-field-wrapper w-full">
+                        <input type="number" id="desiredReturnInput" placeholder="Enter desired return" step="0.1">
+                        <span class="percentage-symbol">%</span>
+                        <span class="check-icon">&#10003;</span>
+                    </div>
+                </div>
+
+                <div class="button-group mt-4">
+                    <button id="calculatePriceBtn" class="primary-button">Calculate Estimated Price</button>
+                    <button id="saveCalculationBtn" class="primary-button bg-green-600 hover:bg-green-700">Save Calculation</button>
+                </div>
+
+                <div class="saved-calculations-list">
+                    <h3>Saved Calculations</h3>
+                    <div id="savedCalculationsContainer">
+                        <p class="text-gray-400">No saved calculations yet.</p>
+                    </div>
+                    <button id="loadCalculationsBtn" class="primary-button mt-4 w-full bg-indigo-600 hover:bg-indigo-700">Load Saved Calculations</button>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div id="companyInfo" class="company-info hidden-state">
+                    <div class="company-logo" id="companyLogo">G</div>
+                    <div>
+                        <p id="companyName" class="company-name">Alphabet Inc.</p>
+                    </div>
+                    <p id="currentStockPrice" class="current-price">$173.78</p>
+                </div>
+
+                <h2 class="section-title">5-Year Projection</h2>
+                <div id="calculationResults" class="hidden">
+                    <h3 class="font-semibold text-lg mb-4 text-white">Calculation Results</h3>
+                    <p>Return from today's price: <strong id="returnFromToday" class="large-value">N/A</strong></p>
+                    <p>Entry Price for <span id="desiredReturnDisplay">N/A</span> Return: <strong id="entryPrice" class="large-value">N/A</strong></p>
+                    <p>Price After 5 Years: <strong id="priceAfter5Years" class="large-value">N/A</strong></p>
+                </div>
+
+                <div class="chart-container mt-6">
+                    <h3 class="font-semibold text-lg mb-4 text-white">Projected Price Growth</h3>
+                    <div id="chartError" class="error-message hidden"></div>
+                    <svg id="priceChart" viewBox="0 0 500 350" preserveAspectRatio="xMidYMid meet">
+                    </svg>
+                </div>
+                <div id="calculationMessage" class="mt-4">
+                    <p class="text-gray-400">Estimated 5-Year Price will appear here...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="confirmationModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 id="modalTitle">Confirm Action</h3>
+            <p id="modalMessage">Are you sure you want to proceed?</p>
+            <div class="modal-buttons">
+                <button id="confirmYesBtn" class="confirm-btn">Yes</button>
+                <button id="confirmNoBtn" class="cancel-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const backendBaseUrl = 'http://127.0.0.1:5000';
+
+        const loginPage = document.getElementById('loginPage');
+        const registerPage = document.getElementById('registerPage');
+        const appContent = document.getElementById('appContent');
+        const loginUsernameInput = document.getElementById('loginUsername');
+        const loginPasswordInput = document.getElementById('loginPassword');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginMessage = document.getElementById('loginMessage');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const showRegisterBtn = document.getElementById('showRegisterBtn');
+        const showLoginBtn = document.getElementById('showLoginBtn');
+
+        const registerUsernameInput = document.getElementById('registerUsername');
+        const registerPasswordInput = document.getElementById('registerPassword');
+        const registerBtn = document.getElementById('registerBtn');
+        const registerMessage = document.getElementById('registerMessage');
+
+        const tickerInput = document.getElementById('tickerInput');
+        const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
+        const companyInfoDiv = document.getElementById('companyInfo');
+        const companyLogo = document.getElementById('companyLogo');
+        const companyNameDisplay = document.getElementById('companyName');
+        const currentStockPriceDisplay = document.getElementById('currentStockPrice');
+
+        const earningsTabBtn = document.getElementById('earningsTabBtn');
+        const earningsSection = document.getElementById('earningsSection');
+        const currentEpsDisplay = document.getElementById('currentEps');
+        const currentPeDisplay = document.getElementById('currentPe');
+        const epsGrowthDisplay = document.getElementById('epsGrowth');
+        const epsTtmInput = document.getElementById('epsTtmInput');
+        const growthRateInput = document.getElementById('growthRateInput');
+        const peMultipleInput = document.getElementById('peMultipleInput');
+
+        const cashFlowTabBtn = document.getElementById('cashFlowTabBtn');
+        const cashFlowSection = document.getElementById('cashFlowSection');
+        const currentFcfShareDisplay = document.getElementById('currentFcfShare');
+        const fcfYieldDisplay = document.getElementById('fcfYield');
+        const sbcImpactDisplay = document.getElementById('sbcImpact');
+        const fcfShareInput = document.getElementById('fcfShareInput');
+        const fcfGrowthRateInput = document.getElementById('fcfGrowthRateInput');
+        const fcfYieldInput = document.getElementById('fcfYieldInput');
+
+        const desiredReturnInput = document.getElementById('desiredReturnInput');
+        const calculatePriceBtn = document.getElementById('calculatePriceBtn');
+        const saveCalculationBtn = document.getElementById('saveCalculationBtn');
+        const loadCalculationsBtn = document.getElementById('loadCalculationsBtn');
+        const savedCalculationsContainer = document.getElementById('savedCalculationsContainer');
+        const calculationMessageDiv = document.getElementById('calculationMessage');
+        const calculationResultsDiv = document.getElementById('calculationResults');
+        const returnFromTodayDisplay = document.getElementById('returnFromToday');
+        const entryPriceDisplay = document.getElementById('entryPrice');
+        const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
+        const priceAfter5YearsDisplay = document.getElementById('priceAfter5Years');
+        const chartErrorDiv = document.getElementById('chartError');
+        const priceChartSvg = document.getElementById('priceChart');
+
+        const confirmationModal = document.getElementById('confirmationModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const confirmYesBtn = document.getElementById('confirmYesBtn');
+        const confirmNoBtn = document.getElementById('confirmNoBtn');
+
+        let currentStockPrice = 0;
+        let activeTab = 'earnings';
+        let currentTicker = '';
+        let currentCalculationData = {};
+        let modalCallback = null;
+
+        function showLoginPage() {
+            loginPage.classList.remove('hidden');
+            registerPage.classList.add('hidden');
+            appContent.classList.add('hidden');
+            loginMessage.classList.add('hidden');
+            registerMessage.classList.add('hidden');
+        }
+
+        function showRegisterPage() {
+            loginPage.classList.add('hidden');
+            registerPage.classList.remove('hidden');
+            appContent.classList.add('hidden');
+            loginMessage.classList.add('hidden');
+            registerMessage.classList.add('hidden');
+        }
+
+        function showAppContent() {
+            loginPage.classList.add('hidden');
+            registerPage.classList.add('hidden');
+            appContent.classList.remove('hidden');
+            loginMessage.classList.add('hidden');
+            registerMessage.classList.add('hidden');
+        }
+
+        function setLoginMessage(message, isError = false) {
+            loginMessage.textContent = message;
+            loginMessage.classList.remove('hidden');
+            if (isError) {
+                loginMessage.style.color = '#fc8181';
+            } else {
+                loginMessage.style.color = '#48bb78';
+            }
+        }
+
+        function setRegisterMessage(message, isError = false) {
+            registerMessage.textContent = message;
+            registerMessage.classList.remove('hidden');
+            if (isError) {
+                registerMessage.style.color = '#fc8181';
+            } else {
+                registerMessage.style.color = '#48bb78';
+            }
+        }
+
+        async function handleLogin() {
+            const username = loginUsernameInput.value.trim();
+            const password = loginPasswordInput.value.trim();
+
+            if (!username || !password) {
+                setLoginMessage('Please enter both username and password.', true);
+                return;
+            }
+
+            setLoginMessage('Logging in...', false);
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('jwt_token', data.token);
+                    localStorage.setItem('current_username', username);
+                    setLoginMessage('Login successful!', false);
+                    showAppContent();
+                    loginUsernameInput.value = '';
+                    loginPasswordInput.value = '';
+                    loadSavedCalculations();
+                } else {
+                    setLoginMessage(data.message || 'Login failed. Please check your credentials.', true);
+                    localStorage.removeItem('jwt_token');
+                    localStorage.removeItem('current_username');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                setLoginMessage('An error occurred during login. Please try again.', true);
+                localStorage.removeItem('jwt_token');
+                localStorage.removeItem('current_username');
+            }
+        }
+
+        async function handleRegister() {
+            const username = registerUsernameInput.value.trim();
+            const password = registerPasswordInput.value.trim();
+
+            if (!username || !password) {
+                setRegisterMessage('Please enter both username and password.', true);
+                return;
+            }
+
+            setRegisterMessage('Registering...', false);
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    setRegisterMessage('Registration successful! You can now log in.', false);
+                    registerUsernameInput.value = '';
+                    registerPasswordInput.value = '';
+                    setTimeout(showLoginPage, 2000);
+                } else {
+                    setRegisterMessage(data.message || 'Registration failed. Please try again.', true);
+                }
+            } catch (error) {
+                console.error('Register error:', error);
+                setRegisterMessage('An error occurred during registration. Please try again.', true);
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('jwt_token');
+            localStorage.removeItem('current_username');
+            showLoginPage();
+            displayMessage('You have been logged out.', false);
+            clearAllFields();
+            savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
+        }
+
+        function checkAuthAndRender() {
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                showAppContent();
+                loadSavedCalculations();
+            } else {
+                showLoginPage();
+            }
+        }
+
+        function displayMessage(message, isError = false) {
+            calculationMessageDiv.innerHTML = `<p class="${isError ? 'error-message' : 'text-gray-400'}">${message}</p>`;
+        }
+
+        function clearAllFields() {
+            companyInfoDiv.classList.add('hidden-state');
+            companyLogo.textContent = '';
+            companyNameDisplay.textContent = '';
+            currentStockPriceDisplay.textContent = '$0.00';
+
+            currentEpsDisplay.textContent = '$0.00';
+            currentPeDisplay.textContent = '0.00';
+            epsGrowthDisplay.textContent = '0.0%';
+            epsTtmInput.value = '0.00';
+            growthRateInput.value = '';
+            peMultipleInput.value = '';
+
+            currentFcfShareDisplay.textContent = '$0.00';
+            fcfYieldDisplay.textContent = '0.0%';
+            sbcImpactDisplay.textContent = '0.0%';
+            fcfShareInput.value = '0.00';
+            fcfGrowthRateInput.value = '';
+            fcfYieldInput.value = '';
+
+            desiredReturnInput.value = '';
+            calculationResultsDiv.classList.add('hidden');
+            returnFromTodayDisplay.textContent = 'N/A';
+            entryPriceDisplay.textContent = 'N/A';
+            desiredReturnDisplay.textContent = 'N/A';
+            priceAfter5YearsDisplay.textContent = 'N/A';
+            calculationMessageDiv.innerHTML = '<p class="text-gray-400">Estimated 5-Year Price will appear here...</p>';
+            priceChartSvg.innerHTML = '';
+            chartErrorDiv.classList.add('hidden');
+            currentTicker = '';
+            currentCalculationData = {};
+        }
+
+        async function fetchAndPopulateMetrics(ticker) {
+            clearAllFields();
+            displayMessage('Fetching current metrics...', false);
+
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                displayMessage('You are not logged in. Please log in to fetch data.', true);
+                showLoginPage();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/get_trailing_metrics?ticker=${ticker}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    displayMessage('Session expired or unauthorized. Please log in again.', true);
+                    handleLogout();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    displayMessage(`Error: ${data.error}`, true);
+                } else {
+                    companyInfoDiv.classList.remove('hidden-state');
+                    companyLogo.textContent = ticker.charAt(0);
+                    companyNameDisplay.textContent = data.longName || ticker;
+
+                    currentStockPrice = (typeof data.regularMarketPrice === 'number' && !isNaN(data.regularMarketPrice)) ? data.regularMarketPrice : 0;
+                    currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+
+                    currentEpsDisplay.textContent = (typeof data.trailing_eps === 'number' && !isNaN(data.trailing_eps)) ? `$${data.trailing_eps.toFixed(2)}` : '$N/A';
+                    currentPeDisplay.textContent = (typeof data.trailing_pe === 'number' && !isNaN(data.trailing_pe)) ? data.trailing_pe.toFixed(2) : 'N/A';
+                    epsGrowthDisplay.textContent = (typeof data.trailing_eps_growth === 'number' && !isNaN(data.trailing_eps_growth)) ? `${(data.trailing_eps_growth * 100).toFixed(2)}%` : 'N/A';
+
+                    epsTtmInput.value = (typeof data.trailing_eps === 'number' && !isNaN(data.trailing_eps)) ? data.trailing_eps.toFixed(2) : '0.00';
+
+                    growthRateInput.value = '';
+
+                    peMultipleInput.value = '';
+
+                    const fcfShare = (typeof data.fcfShare === 'number' && !isNaN(data.fcfShare)) ? data.fcfShare : null;
+                    const fcfYield = (typeof data.fcfYield === 'number' && !isNaN(data.fcfYield)) ? data.fcfYield : null;
+                    const sbcImpact = (typeof data.sbcImpact === 'number' && !isNaN(data.sbcImpact)) ? data.sbcImpact : null;
+
+                    currentFcfShareDisplay.textContent = fcfShare !== null ? `$${fcfShare.toFixed(2)}` : '$N/A';
+                    fcfYieldDisplay.textContent = fcfYield !== null ? `${(fcfYield * 100).toFixed(2)}%` : 'N/A';
+                    sbcImpactDisplay.textContent = sbcImpact !== null ? `${(sbcImpact * 100).toFixed(2)}%` : 'N/A';
+
+                    fcfShareInput.value = fcfShare !== null ? fcfShare.toFixed(2) : '0.00';
+                    fcfGrowthRateInput.value = '';
+                    fcfYieldInput.value = '';
+
+                    displayMessage('Data fetched successfully. Enter your assumptions below to calculate.', false);
+                    currentTicker = ticker;
+                }
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                displayMessage(`Failed to fetch current metrics. Please check the ticker and ensure the backend server is running. Error: ${error.message}`, true);
+                clearAllFields();
+            }
+        }
+
+        function formatPriceLabel(price) {
+            if (price >= 1000) {
+                return `$${(price / 1000).toFixed(1)}k`;
+            }
+            return `$${price.toFixed(0)}`;
+        }
+
+        function drawChart(projectedPrices, currentPrice) {
+            priceChartSvg.innerHTML = '';
+            chartErrorDiv.classList.add('hidden');
+
+            const allPrices = [currentPrice, ...projectedPrices].filter(p => typeof p === 'number' && !isNaN(p));
+
+            if (allPrices.length === 0) {
+                chartErrorDiv.textContent = 'No valid price data to draw chart.';
+                chartErrorDiv.classList.remove('hidden');
+                return;
+            }
+
+            const svgWidth = priceChartSvg.clientWidth || 500;
+            const svgHeight = priceChartSvg.clientHeight || 350;
+            const margin = { top: 30, right: 30, bottom: 50, left: 60 };
+            const chartWidth = svgWidth - margin.left - margin.right;
+            const chartHeight = svgHeight - margin.top - margin.bottom;
+
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left},${margin.top})`);
+            priceChartSvg.appendChild(chartGroup);
+
+            const maxPrice = Math.max(...allPrices);
+            const minPrice = Math.min(...allPrices);
+
+            const paddingFactor = 0.1;
+            const range = maxPrice - minPrice;
+            let effectiveMaxPrice = maxPrice + range * paddingFactor;
+            let effectiveMinPrice = minPrice - range * paddingFactor;
+
+            if (minPrice >= 0 && effectiveMinPrice < 0) {
+                effectiveMinPrice = 0;
+            }
+
+            if (effectiveMaxPrice === effectiveMinPrice) {
+                effectiveMaxPrice += 1;
+                effectiveMinPrice = Math.max(0, effectiveMinPrice - 1);
+            }
+
+            const xScale = (index) => (index / (allPrices.length - 1)) * chartWidth;
+            const yScale = (price) => chartHeight - ((price - effectiveMinPrice) / (effectiveMaxPrice - effectiveMinPrice)) * chartHeight;
+
+            const numYTicks = 5;
+            for (let i = 0; i <= numYTicks; i++) {
+                const y = (i / numYTicks) * chartHeight;
+                const priceValue = effectiveMinPrice + (effectiveMaxPrice - effectiveMinPrice) * (1 - (i / numYTicks));
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', 0);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', chartWidth);
+                line.setAttribute('y2', y);
+                line.setAttribute('class', 'chart-grid-line');
+                chartGroup.appendChild(line);
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', -10);
+                text.setAttribute('y', y + 4);
+                text.setAttribute('text-anchor', 'end');
+                text.setAttribute('class', 'chart-label');
+                text.textContent = formatPriceLabel(priceValue);
+                chartGroup.appendChild(text);
+            }
+
+            const years = ['Today', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'];
+            for (let i = 0; i < allPrices.length; i++) {
+                const x = xScale(i);
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x);
+                text.setAttribute('y', chartHeight + 20);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('class', 'chart-label');
+                text.textContent = years[i];
+                chartGroup.appendChild(text);
+            }
+
+            let pathD = `M ${xScale(0)} ${yScale(allPrices[0])}`;
+            for (let i = 1; i < allPrices.length; i++) {
+                pathD += ` L ${xScale(i)} ${yScale(allPrices[i])}`;
+            }
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathD);
+            path.setAttribute('class', 'chart-line');
+            chartGroup.appendChild(path);
+
+            allPrices.forEach((price, index) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', xScale(index));
+                circle.setAttribute('cy', yScale(price));
+                circle.setAttribute('r', 4);
+                circle.setAttribute('class', 'chart-point');
+                chartGroup.appendChild(circle);
+            });
+        }
+
+        function captureCalculationData() {
+            return {
+                ticker: tickerInput.value.trim().toUpperCase(),
+                currentStockPrice: currentStockPrice,
+                activeTab: activeTab,
+                earnings: {
+                    epsTtm: parseFloat(epsTtmInput.value),
+                    growthRate: parseFloat(growthRateInput.value),
+                    peMultiple: parseFloat(peMultipleInput.value)
+                },
+                cashFlow: {
+                    fcfShare: parseFloat(fcfShareInput.value),
+                    fcfGrowthRate: parseFloat(fcfGrowthRateInput.value),
+                    fcfYield: parseFloat(fcfYieldInput.value)
+                },
+                desiredReturn: parseFloat(desiredReturnInput.value),
+                results: {
+                    returnFromToday: returnFromTodayDisplay.textContent,
+                    entryPrice: entryPriceDisplay.textContent,
+                    priceAfter5Years: priceAfter5YearsDisplay.textContent
+                }
+            };
+        }
+
+        function populateFormWithCalculationData(data) {
+            clearAllFields();
+            tickerInput.value = data.ticker || '';
+            currentStockPrice = data.currentStockPrice || 0;
+            currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+            companyInfoDiv.classList.remove('hidden-state');
+            companyLogo.textContent = data.ticker ? data.ticker.charAt(0) : '';
+            companyNameDisplay.textContent = data.ticker || '';
+
+            if (data.activeTab === 'earnings') {
+                earningsTabBtn.click();
+                epsTtmInput.value = data.earnings.epsTtm !== undefined ? data.earnings.epsTtm.toFixed(2) : '0.00';
+                growthRateInput.value = data.earnings.growthRate !== undefined ? data.earnings.growthRate : '';
+                peMultipleInput.value = data.earnings.peMultiple !== undefined ? data.earnings.peMultiple : '';
+            } else {
+                cashFlowTabBtn.click();
+                fcfShareInput.value = data.cashFlow.fcfShare !== undefined ? data.cashFlow.fcfShare.toFixed(2) : '0.00';
+                fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate !== undefined ? data.cashFlow.fcfGrowthRate : '';
+                fcfYieldInput.value = data.cashFlow.fcfYield !== undefined ? data.cashFlow.fcfYield : '';
+            }
+            desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
+
+            if (data.results) {
+                calculationResultsDiv.classList.remove('hidden');
+                returnFromTodayDisplay.textContent = data.results.returnFromToday || 'N/A';
+                entryPriceDisplay.textContent = data.results.entryPrice || 'N/A';
+                desiredReturnDisplay.textContent = data.desiredReturn !== undefined ? `${(data.desiredReturn).toFixed(2)}%` : 'N/A';
+                priceAfter5YearsDisplay.textContent = data.results.priceAfter5Years || 'N/A';
+            }
+
+            calculatePriceBtn.click();
+            displayMessage('Calculation loaded successfully. Click "Calculate Estimated Price" to re-run.', false);
+        }
+
+        async function saveCalculation() {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                displayMessage('You must be logged in to save calculations.', true);
+                showLoginPage();
+                return;
+            }
+
+            if (!currentTicker) {
+                displayMessage('Please search for a ticker and calculate a price before saving.', true);
+                return;
+            }
+
+            const calculationName = prompt('Enter a name for this calculation:');
+            if (!calculationName || calculationName.trim() === '') {
+                displayMessage('Calculation name cannot be empty.', true);
+                return;
+            }
+
+            const calculationData = captureCalculationData();
+            
+            try {
+                const response = await fetch(`${backendBaseUrl}/save_calculation`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        ticker: currentTicker,
+                        name: calculationName.trim(),
+                        data: calculationData
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    displayMessage(result.message, false);
+                    loadSavedCalculations();
+                } else {
+                    displayMessage(`Error saving calculation: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error('Save calculation error:', error);
+                displayMessage('An error occurred while saving the calculation.', true);
+            }
+        }
+
+        async function loadSavedCalculations() {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/load_calculations`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    displayMessage('Session expired or unauthorized. Please log in again to load calculations.', true);
+                    handleLogout();
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderSavedCalculations(data);
+                } else {
+                    displayMessage(`Error loading calculations: ${data.message}`, true);
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
+                }
+            } catch (error) {
+                console.error('Load calculations error:', error);
+                displayMessage('An error occurred while loading saved calculations.', true);
+                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
+            }
+        }
+
+        function renderSavedCalculations(calculations) {
+            savedCalculationsContainer.innerHTML = '';
+            if (calculations.length === 0) {
+                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
+                return;
+            }
+
+            calculations.forEach(calc => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'saved-calculation-item';
+                itemDiv.innerHTML = `
+                    <span>${calc.id} (${calc.ticker})</span>
+                    <div>
+                        <button data-id="${calc.id}" class="load-btn primary-button bg-orange-500 hover:bg-orange-600">Load</button>
+                        <button data-id="${calc.id}" class="delete-btn primary-button bg-red-500 hover:bg-red-600">Delete</button>
+                    </div>
+                `;
+                savedCalculationsContainer.appendChild(itemDiv);
+            });
+
+            savedCalculationsContainer.querySelectorAll('.load-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const calcId = event.target.dataset.id;
+                    const selectedCalc = calculations.find(c => c.id === calcId);
+                    if (selectedCalc) {
+                        populateFormWithCalculationData(selectedCalc.data);
+                    }
+                });
+            });
+
+            savedCalculationsContainer.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const calcId = event.target.dataset.id;
+                    showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, async () => {
+                        await deleteCalculation(calcId);
+                    });
+                });
+            });
+        }
+
+        function showConfirmationModal(message, callback) {
+            modalMessage.textContent = message;
+            modalTitle.textContent = 'Confirm Deletion';
+            confirmationModal.classList.remove('hidden');
+            modalCallback = callback;
+        }
+
+        function hideConfirmationModal() {
+            confirmationModal.classList.add('hidden');
+            modalCallback = null;
+        }
+
+        confirmYesBtn.addEventListener('click', () => {
+            if (modalCallback) {
+                modalCallback();
+            }
+            hideConfirmationModal();
+        });
+
+        confirmNoBtn.addEventListener('click', () => {
+            hideConfirmationModal();
+        });
+
+        async function deleteCalculation(calcId) {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                displayMessage('You must be logged in to delete calculations.', true);
+                showLoginPage();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/delete_calculation/${calcId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    displayMessage(result.message, false);
+                    loadSavedCalculations();
+                } else {
+                    displayMessage(`Error deleting calculation: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error('Delete calculation error:', error);
+                displayMessage('An error occurred while deleting the calculation.', true);
+            }
+        }
+
+        loginBtn.addEventListener('click', handleLogin);
+        logoutBtn.addEventListener('click', handleLogout);
+        showRegisterBtn.addEventListener('click', showRegisterPage);
+        showLoginBtn.addEventListener('click', showLoginPage);
+        registerBtn.addEventListener('click', handleRegister);
+
+        earningsTabBtn.addEventListener('click', () => {
+            earningsTabBtn.classList.add('active');
+            cashFlowTabBtn.classList.remove('active');
+            earningsSection.classList.remove('hidden');
+            cashFlowSection.classList.add('hidden');
+            activeTab = 'earnings';
+        });
+
+        cashFlowTabBtn.addEventListener('click', () => {
+            cashFlowTabBtn.classList.add('active');
+            earningsTabBtn.classList.remove('active');
+            cashFlowSection.classList.remove('hidden');
+            earningsSection.classList.add('hidden');
+            activeTab = 'cashFlow';
+        });
+
+        getCurrentDataBtn.addEventListener('click', () => {
+            const ticker = tickerInput.value.trim().toUpperCase();
+            if (ticker) {
+                fetchAndPopulateMetrics(ticker);
+            } else {
+                displayMessage('Please enter a stock ticker symbol to get current data.', true);
+                clearAllFields();
+            }
+        });
+
+        tickerInput.addEventListener('change', () => {
+            const ticker = tickerInput.value.trim().toUpperCase();
+            if (!ticker) {
+                displayMessage('Please enter a stock ticker symbol.', true);
+                clearAllFields();
+            }
+        });
+
+        calculatePriceBtn.addEventListener('click', () => {
+            let currentMetric = 0;
+            let growthRate = 0;
+            let targetMultiple = 0;
+            let impliedCurrentMultiple = 0;
+            let calculationType = '';
+
+            if (activeTab === 'earnings') {
+                currentMetric = parseFloat(epsTtmInput.value);
+                growthRate = parseFloat(growthRateInput.value) / 100;
+                targetMultiple = parseFloat(peMultipleInput.value);
+
+                if (currentMetric !== 0) {
+                    impliedCurrentMultiple = currentStockPrice / currentMetric;
+                } else {
+                    impliedCurrentMultiple = targetMultiple;
+                }
+                calculationType = 'EPS';
+            } else {
+                currentMetric = parseFloat(fcfShareInput.value);
+                growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
+                targetMultiple = parseFloat(fcfYieldInput.value) / 100;
+
+                if (currentMetric !== 0) {
+                    impliedCurrentMultiple = currentMetric / currentStockPrice;
+                } else {
+                    impliedCurrentMultiple = targetMultiple;
+                }
+                calculationType = 'FCF';
+            }
+
+            if (isNaN(impliedCurrentMultiple) || !isFinite(impliedCurrentMultiple) || impliedCurrentMultiple === 0) {
+                impliedCurrentMultiple = targetMultiple;
+            }
+
+            const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
+
+            if (isNaN(currentMetric) || currentMetric <= 0) {
+                displayMessage(`Please ensure a valid Current ${calculationType} (TTM) is available. Click "Get Current Data" first.`, true);
+                return;
+            }
+            if (isNaN(growthRate)) {
+                displayMessage(`Please enter a valid ${calculationType} Growth Rate (e.g., 10 for 10%).`, true);
+                return;
+            }
+            if (isNaN(targetMultiple) || targetMultiple <= 0) {
+                displayMessage(`Please enter a valid Appropriate ${calculationType === 'EPS' ? 'EPS Multiple (P/E ratio)' : 'FCF Yield'}.`, true);
+                return;
+            }
+
+            const estimatedMetric5Yr = currentMetric * Math.pow((1 + growthRate), 5);
+
+            let estimatedPrice5Yr = 0;
+            if (calculationType === 'EPS') {
+                estimatedPrice5Yr = estimatedMetric5Yr * targetMultiple;
+            } else {
+                estimatedPrice5Yr = targetMultiple !== 0 ? estimatedMetric5Yr / targetMultiple : 0;
+            }
+
+            let returnFromToday = 'N/A';
+            if (currentStockPrice > 0 && estimatedPrice5Yr > 0) {
+                returnFromToday = ((estimatedPrice5Yr / currentStockPrice) ** (1/5) - 1) * 100;
+            }
+
+            let entryPriceForDesiredReturn = 'N/A';
+            if (!isNaN(desiredReturn) && desiredReturn !== -1 && estimatedPrice5Yr > 0) {
+                entryPriceForDesiredReturn = estimatedPrice5Yr / ((1 + desiredReturn) ** 5);
+            }
+
+            calculationResultsDiv.classList.remove('hidden');
+            returnFromTodayDisplay.textContent = returnFromToday !== 'N/A' ? `${returnFromToday.toFixed(2)}%` : 'N/A';
+            entryPriceDisplay.textContent = entryPriceForDesiredReturn !== 'N/A' ? `$${entryPriceForDesiredReturn.toFixed(2)}` : 'N/A';
+            desiredReturnDisplay.textContent = !isNaN(desiredReturn) ? `${(desiredReturn * 100).toFixed(2)}%` : 'N/A';
+            priceAfter5YearsDisplay.textContent = estimatedPrice5Yr !== 0 ? `$${estimatedPrice5Yr.toFixed(2)}` : 'N/A';
+
+            calculationMessageDiv.innerHTML = '';
+
+            const projectedPrices = [];
+            const numYears = 5;
+
+            for (let i = 1; i <= numYears; i++) {
+                const futureMetric = currentMetric * Math.pow((1 + growthRate), i);
+                const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
+
+                if (calculationType === 'EPS') {
+                    projectedPrices.push(futureMetric * interpolatedMultiple);
+                } else {
+                    projectedPrices.push(interpolatedMultiple !== 0 ? futureMetric / interpolatedMultiple : 0);
+                }
+            }
+            drawChart(projectedPrices, currentStockPrice);
+            currentCalculationData = captureCalculationData();
+        });
+
+        saveCalculationBtn.addEventListener('click', saveCalculation);
+        loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
+
+        checkAuthAndRender();
+    
+    </script>
+</body>
+</html>
