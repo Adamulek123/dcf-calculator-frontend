@@ -1387,10 +1387,23 @@
             activeTab = 'cashFlow';
         });
 
+        // Debounce utility function
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        }
+
+        // Wrap fetchAndPopulateMetrics call with debounce
+        const debouncedFetchAndPopulateMetrics = debounce(fetchAndPopulateMetrics, 300); // 300ms delay
+
         getCurrentDataBtn.addEventListener('click', () => {
             const ticker = tickerInput.value.trim().toUpperCase();
             if (ticker) {
-                fetchAndPopulateMetrics(ticker);
+                debouncedFetchAndPopulateMetrics(ticker); // Use the debounced function
             } else {
                 displayMessage('Please enter a stock ticker symbol to get current data.', true);
                 clearAllFields();
