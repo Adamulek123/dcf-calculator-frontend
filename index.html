@@ -100,6 +100,14 @@
             transform: translateY(0) scale(0.98);
             box-shadow: 0 2px 5px rgba(66, 153, 225, 0.3);
         }
+        /* Style for disabled buttons to prevent spamming */
+        .primary-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            background-image: linear-gradient(to right, #4a5568, #718096);
+        }
 
         .primary-button.bg-red-600 {
             background-image: linear-gradient(to right, #e53e3e, #fc8181);
@@ -972,9 +980,12 @@
                 return;
             }
 
-            setLoginMessage('Logging in...', false);
+            const originalBtnText = loginBtn.innerHTML;
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = 'Logging in...';
 
             try {
+                setLoginMessage('Logging in...', false);
                 const response = await fetch(`${backendBaseUrl}/login`, {
                     method: 'POST',
                     headers: {
@@ -1003,6 +1014,9 @@
                 setLoginMessage('An error occurred during login. Please try again.', true);
                 localStorage.removeItem('jwt_token');
                 localStorage.removeItem('current_username');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = originalBtnText;
             }
         }
 
@@ -1015,9 +1029,12 @@
                 return;
             }
 
-            setRegisterMessage('Registering...', false);
+            const originalBtnText = registerBtn.innerHTML;
+            registerBtn.disabled = true;
+            registerBtn.innerHTML = 'Registering...';
 
             try {
+                setRegisterMessage('Registering...', false);
                 const response = await fetch(`${backendBaseUrl}/register`, {
                     method: 'POST',
                     headers: {
@@ -1039,6 +1056,9 @@
             } catch (error) {
                 console.error('Register error:', error);
                 setRegisterMessage('An error occurred during registration. Please try again.', true);
+            } finally {
+                registerBtn.disabled = false;
+                registerBtn.innerHTML = originalBtnText;
             }
         }
 
@@ -1109,8 +1129,11 @@
                 return;
             }
 
+            const originalBtnText = getCurrentDataBtn.innerHTML;
+            getCurrentDataBtn.disabled = true;
+            getCurrentDataBtn.innerHTML = 'Fetching...';
+
             try {
-                console.log('Search button clicked! Initiating fetch for:', ticker);
                 const response = await fetch(`${backendBaseUrl}/get_trailing_metrics?ticker=${ticker}`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -1120,6 +1143,11 @@
                 if (response.status === 401) {
                     displayMessage('Session expired or unauthorized. Please log in again.', true);
                     handleLogout();
+                    return;
+                }
+                
+                if (response.status === 429) {
+                    displayMessage('Too many requests. Please wait a moment before trying again.', true);
                     return;
                 }
 
@@ -1170,6 +1198,9 @@
                 console.error('Fetch error:', error);
                 displayMessage(`Failed to fetch current metrics. Please check the ticker and ensure the backend server is running. Error: ${error.message}`, true);
                 clearAllFields();
+            } finally {
+                getCurrentDataBtn.disabled = false;
+                getCurrentDataBtn.innerHTML = originalBtnText;
             }
         }
 
@@ -1538,21 +1569,10 @@
             activeTab = 'cashFlow';
         });
 
-        function debounce(func, delay) {
-            let timeout;
-            return function(...args) {
-                const context = this;
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(context, args), delay);
-            };
-        }
-
-        const debouncedFetchAndPopulateMetrics = debounce(fetchAndPopulateMetrics, 300);
-
         getCurrentDataBtn.addEventListener('click', () => {
             const ticker = tickerInput.value.trim().toUpperCase();
             if (ticker) {
-                debouncedFetchAndPopulateMetrics(ticker);
+                fetchAndPopulateMetrics(ticker);
             } else {
                 displayMessage('Please enter a stock ticker symbol to get current data.', true);
                 clearAllFields();
