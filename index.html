@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Price Estimator</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #1a202c;
+            background-color: #f8f9fa;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -18,18 +19,18 @@
             margin: 0;
             padding: 20px;
             box-sizing: border-box;
-            color: #e2e8f0;
+            color: #212529;
             overflow-x: hidden;
         }
 
-        .container {
-            background-color: #2d3748;
+        .container, .insights-page-container {
+            background-color: #ffffff;
             padding: 2rem;
             border-radius: 1.5rem;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 1200px;
-            border: 1px solid #4a5568;
+            border: 1px solid #dee2e6;
             display: flex;
             flex-direction: column;
             gap: 2.5rem;
@@ -45,41 +46,70 @@
         .left-panel, .right-panel {
             flex: 1;
             padding: 1.5rem;
-            background-color: #2d3748;
+            background-color: #ffffff;
             border-radius: 1rem;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
             min-height: 0;
         }
 
         .header-section {
-            background-color: #2d3748;
+            background-color: #ffffff;
             padding: 1.25rem 2rem;
             border-radius: 1rem;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
             margin-bottom: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            border: 1px solid #dee2e6;
+        }
+
+        .header-top-row {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             gap: 1.25rem;
-            border: 1px solid #4a5568;
+            width: 100%;
         }
 
         .header-section input {
-            background-color: #1a202c;
-            border: 1px solid #4a5568;
-            color: #e2e8f0;
+            background-color: #f8f9fa;
+            border: 1px solid #ced4da;
+            color: #495057;
             padding: 0.75rem 1.25rem;
             border-radius: 0.75rem;
             flex-grow: 1;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         .header-section input:focus {
-            border-color: #63b3ed;
-            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.3);
+            border-color: #80bdff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+            outline: none;
+        }
+
+        .period-toggle {
+            display: flex;
+            background-color: #e9ecef;
+            border-radius: 0.75rem;
+            padding: 0.25rem;
+        }
+        .period-toggle button {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: none;
+            color: #6c757d;
+            cursor: pointer;
+            font-weight: 600;
+            border-radius: 0.6rem;
+            transition: all 0.2s;
+        }
+        .period-toggle button.active {
+            background-color: #ffffff;
+            color: #007bff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .primary-button {
-            background-image: linear-gradient(to right, #4299e1, #63b3ed);
+            background-image: linear-gradient(to right, #007bff, #0056b3);
             color: white;
             padding: 0.75rem 2rem;
             border-radius: 0.75rem;
@@ -87,737 +117,218 @@
             cursor: pointer;
             transition: all 0.2s ease-in-out;
             border: none;
-            box-shadow: 0 6px 15px rgba(66, 153, 225, 0.4);
+            box-shadow: 0 6px 15px rgba(0, 123, 255, 0.3);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
-        .primary-button:hover {
-            background-image: linear-gradient(to right, #3182ce, #4299e1);
+        .primary-button:hover:not(:disabled) {
+            background-image: linear-gradient(to right, #0056b3, #004085);
             transform: translateY(-3px) scale(1.02);
-            box-shadow: 0 8px 20px rgba(66, 153, 225, 0.5);
+            box-shadow: 0 8px 20px rgba(0, 123, 255, 0.4);
         }
-        .primary-button:active {
+        .primary-button:active:not(:disabled) {
             transform: translateY(0) scale(0.98);
-            box-shadow: 0 2px 5px rgba(66, 153, 225, 0.3);
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
         }
-        /* Style for disabled buttons to prevent spamming */
         .primary-button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
-            background-image: linear-gradient(to right, #4a5568, #718096);
+            background-image: linear-gradient(to right, #6c757d, #5a6268);
         }
 
-        .primary-button.bg-red-600 {
-            background-image: linear-gradient(to right, #e53e3e, #fc8181);
-            box-shadow: 0 6px 15px rgba(229, 62, 62, 0.4);
-        }
-        .primary-button.bg-red-600:hover {
-            background-image: linear-gradient(to right, #c53030, #e53e3e);
-            box-shadow: 0 8px 20px rgba(229, 62, 62, 0.5);
-        }
-        .primary-button.bg-gray-600 {
-            background-image: linear-gradient(to right, #4a5568, #718096);
-            box-shadow: 0 6px 15px rgba(74, 85, 104, 0.4);
-        }
-        .primary-button.bg-gray-600:hover {
-            background-image: linear-gradient(to right, #2d3748, #4a5568);
-            box-shadow: 0 8px 20px rgba(74, 85, 104, 0.5);
-        }
-        .primary-button.bg-green-600 {
-            background-image: linear-gradient(to right, #38a169, #48bb78);
-            box-shadow: 0 6px 15px rgba(56, 161, 105, 0.4);
-        }
-        .primary-button.bg-green-600:hover {
-            background-image: linear-gradient(to right, #2f855a, #38a169);
-            box-shadow: 0 8px 20px rgba(56, 161, 105, 0.5);
-        }
-        .primary-button.bg-indigo-600 {
-            background-image: linear-gradient(to right, #667eea, #7f9cf5);
-            box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4);
-        }
-        .primary-button.bg-indigo-600:hover {
-            background-image: linear-gradient(to right, #5a67d8, #667eea);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.5);
-        }
-        .primary-button.bg-orange-500 {
-            background-image: linear-gradient(to right, #ed8936, #f6ad55);
-            box-shadow: 0 6px 15px rgba(237, 137, 54, 0.4);
-        }
-        .primary-button.bg-orange-500:hover {
-            background-image: linear-gradient(to right, #dd6b20, #ed8936);
-            box-shadow: 0 8px 20px rgba(237, 137, 54, 0.5);
-        }
-
+        .primary-button.bg-red-600 { background-image: linear-gradient(to right, #dc3545, #c82333); box-shadow: 0 6px 15px rgba(220, 53, 69, 0.4); }
+        .primary-button.bg-red-600:hover:not(:disabled) { background-image: linear-gradient(to right, #c82333, #bd2130); box-shadow: 0 8px 20px rgba(220, 53, 69, 0.5); }
+        .primary-button.bg-gray-600 { background-image: linear-gradient(to right, #6c757d, #5a6268); box-shadow: 0 6px 15px rgba(108, 117, 125, 0.4); }
+        .primary-button.bg-gray-600:hover:not(:disabled) { background-image: linear-gradient(to right, #5a6268, #495057); box-shadow: 0 8px 20px rgba(108, 117, 125, 0.5); }
+        .primary-button.bg-green-600 { background-image: linear-gradient(to right, #28a745, #218838); box-shadow: 0 6px 15px rgba(40, 167, 69, 0.4); }
+        .primary-button.bg-green-600:hover:not(:disabled) { background-image: linear-gradient(to right, #218838, #1e7e34); box-shadow: 0 8px 20px rgba(40, 167, 69, 0.5); }
+        .primary-button.bg-indigo-600 { background-image: linear-gradient(to right, #6610f2, #560bad); box-shadow: 0 6px 15px rgba(102, 16, 242, 0.4); }
+        .primary-button.bg-indigo-600:hover:not(:disabled) { background-image: linear-gradient(to right, #560bad, #480994); box-shadow: 0 8px 20px rgba(102, 16, 242, 0.5); }
+        .primary-button.bg-orange-500 { background-image: linear-gradient(to right, #fd7e14, #e86a04); box-shadow: 0 6px 15px rgba(253, 126, 20, 0.4); }
+        .primary-button.bg-orange-500:hover:not(:disabled) { background-image: linear-gradient(to right, #e86a04, #d95f02); box-shadow: 0 8px 20px rgba(253, 126, 20, 0.5); }
 
         .company-info {
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
-            padding: 1.5rem;
-            background-color: #2d3748;
-            border-radius: 1rem;
-            border: 1px solid #4a5568;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            transition: opacity 0.4s ease-in-out, height 0.4s ease-in-out, margin-bottom 0.4s ease-in-out, padding 0.4s ease-in-out;
-            min-height: 90px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-        }
+            display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.5rem; padding: 1.5rem; background-color: #ffffff; border-radius: 1rem; border: 1px solid #dee2e6; justify-content: space-between; flex-wrap: wrap; transition: opacity 0.4s ease-in-out, height 0.4s ease-in-out, margin-bottom 0.4s ease-in-out, padding 0.4s ease-in-out; min-height: 90px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05); }
+        .company-info.hidden-state { opacity: 0; visibility: hidden; height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; min-height: 0; }
+        .company-logo { font-size: 2.8rem; font-weight: bold; color: #007bff; background-color: #e9ecef; border-radius: 50%; width: 70px; height: 70px; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
+        .company-name { font-size: 1.75rem; font-weight: 700; color: #212529; }
+        .current-price { font-size: 2.2rem; font-weight: 800; color: #28a745; }
 
-        .company-info.hidden-state {
-            opacity: 0;
-            visibility: hidden;
-            height: 0;
-            margin-bottom: 0;
-            padding-top: 0;
-            padding-bottom: 0;
-            min-height: 0;
-        }
+        .tab-buttons { display: flex; margin-top: 1.75rem; margin-bottom: 1.75rem; border-bottom: 2px solid #dee2e6; }
+        .tab-button { padding: 0.85rem 1.75rem; border: none; background: none; color: #6c757d; cursor: pointer; font-weight: 600; transition: color 0.2s, border-bottom 0.2s; font-size: 1.05rem; }
+        .tab-button.active { color: #007bff; border-bottom: 3px solid #007bff; }
+        .tab-button:hover:not(.active) { color: #495057; }
 
-        .company-info > div {
-            display: flex;
-            flex-direction: column;
-        }
-        .company-info .company-name-and-price {
-            display: flex;
-            align-items: baseline;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        .company-logo {
-            font-size: 2.8rem;
-            font-weight: bold;
-            color: #4299e1;
-            background-color: #1a202c;
-            border-radius: 50%;
-            width: 70px;
-            height: 70px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-shrink: 0;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
-        }
-        .company-name {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #e2e8f0;
-        }
-        .current-price {
-            font-size: 2.2rem;
-            font-weight: 800;
-            color: #48bb78;
-        }
+        .section-title { font-size: 1.5rem; font-weight: 700; color: #212529; margin-bottom: 1.5rem; text-align: center; }
+        
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1.25rem; margin-bottom: 2.5rem; text-align: center; }
+        .metric-item { background-color: #f8f9fa; padding: 1.25rem; border-radius: 0.85rem; border: 1px solid #e9ecef; }
+        .metric-label { font-size: 0.95rem; color: #6c757d; margin-bottom: 0.4rem; font-weight: 500; }
+        .metric-value { font-size: 1.4rem; font-weight: 700; color: #212529; }
 
-        .tab-buttons {
-            display: flex;
-            margin-top: 1.75rem;
-            margin-bottom: 1.75rem;
-            border-bottom: 2px solid #4a5568;
-        }
-        .tab-button {
-            padding: 0.85rem 1.75rem;
-            border: none;
-            background: none;
-            color: #a0aec0;
-            cursor: pointer;
-            font-weight: 600;
-            transition: color 0.2s, border-bottom 0.2s;
-            font-size: 1.05rem;
-        }
-        .tab-button.active {
-            color: #4299e1;
-            border-bottom: 3px solid #4299e1;
-        }
-        .tab-button:hover:not(.active) {
-            color: #cbd5e0;
-        }
+        .input-group { display: flex; flex-direction: column; margin-bottom: 1.75rem; }
+        .input-group label { font-size: 1.05rem; color: #212529; font-weight: 500; margin-bottom: 0.6rem; text-align: left; }
+        .input-field-wrapper { display: flex; align-items: center; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 0.75rem; padding: 0.6rem 1rem; transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
+        .input-field-wrapper:focus-within { border-color: #80bdff; box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); }
+        .input-field-wrapper input { color: #495057; background: none; border: none; outline: none; flex-grow: 1; padding: 0; -moz-appearance: textfield; }
+        .input-field-wrapper input::-webkit-outer-spin-button, .input-field-wrapper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .input-field-wrapper .currency-symbol, .input-field-wrapper .percentage-symbol { color: #6c757d; font-size: 1.05rem; padding-right: 0.6rem; }
+        
+        .login-container, .main-menu { background-color: #ffffff; padding: 3rem; border-radius: 1.5rem; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1); width: 100%; max-width: 450px; border: 1px solid #dee2e6; display: flex; flex-direction: column; gap: 1.75rem; align-items: center; transition: all 0.3s ease-in-out; }
+        .login-container h2, .main-menu h2 { color: #212529; font-weight: 700; }
+        .login-message { font-size: 1.05rem; font-weight: 500; text-align: center; margin-top: 1.25rem; }
+        
+        .hidden { display: none !important; }
 
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #e2e8f0;
-            margin-bottom: 1.5rem;
-            text-align: center;
-        }
+        .saved-calculations-list { background-color: #f8f9fa; padding: 1.5rem; border-radius: 1rem; border: 1px solid #e9ecef; }
+        .saved-calculations-list h3 { font-size: 1.35rem; font-weight: 700; color: #212529; margin-bottom: 1.25rem; text-align: center; }
+        .saved-calculation-item { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 0; border-bottom: 1px solid #dee2e6; font-size: 1rem; }
+        .saved-calculation-item:last-child { border-bottom: none; }
+        .saved-calculation-item span { color: #495057; font-weight: 500; }
+        .saved-calculation-item button { padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.9rem; }
 
-        .metric-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 1.25rem;
-            margin-bottom: 2.5rem;
-            text-align: center;
-        }
-        .metric-item {
-            background-color: #1a202c;
-            padding: 1.25rem;
-            border-radius: 0.85rem;
-            border: 1px solid #4a5568;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
-        }
-        .metric-label {
-            font-size: 0.95rem;
-            color: #a0aec0;
-            margin-bottom: 0.4rem;
-            font-weight: 500;
-        }
-        .metric-value {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: #e2e8f0;
-        }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(5px); }
+        .modal-content { background-color: #ffffff; color: #212529; padding: 2.5rem; border-radius: 1.25rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); text-align: center; max-width: 450px; width: 90%; border: 1px solid #dee2e6; }
+        .modal-content h3 { font-size: 1.8rem; margin-bottom: 1.25rem; font-weight: 700; }
+        .modal-content p { color: #6c757d; margin-bottom: 2rem; font-size: 1.1rem; }
+        .modal-buttons { display: flex; justify-content: center; gap: 1.25rem; }
+        .modal-buttons button { padding: 0.8rem 1.8rem; border-radius: 0.6rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s, transform 0.1s; }
+        .modal-buttons .confirm-btn { background-color: #dc3545; color: white; }
+        .modal-buttons .confirm-btn:hover { background-color: #c82333; transform: translateY(-2px); }
+        .modal-buttons .cancel-btn { background-color: #6c757d; color: white; }
+        .modal-buttons .cancel-btn:hover { background-color: #5a6268; transform: translateY(-2px); }
 
-        .input-group {
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 1.75rem;
-        }
-        .input-group label {
-            font-size: 1.05rem;
-            color: #e2e8f0;
-            font-weight: 500;
-            margin-bottom: 0.6rem;
-            text-align: left;
-        }
-        .input-field-wrapper {
-            display: flex;
-            align-items: center;
-            background-color: #1a202c;
-            border: 1px solid #4a5568;
-            border-radius: 0.75rem;
-            padding: 0.6rem 1rem;
-            transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-        }
-        .input-field-wrapper:focus-within {
-            border-color: #4299e1;
-            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.25);
-        }
-        .input-field-wrapper input[type="text"],
-        .input-field-wrapper input[type="number"],
-        .input-field-wrapper input[type="password"] {
-            flex-grow: 1;
-            background: none;
-            border: none;
-            outline: none;
-            font-size: 1.05rem;
-            color: #e2e8f0;
-            padding: 0;
-            -moz-appearance: textfield;
-        }
-        .input-field-wrapper input[type="number"]::-webkit-outer-spin-button,
-        .input-field-wrapper input[type="number"]::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .input-field-wrapper .currency-symbol,
-        .input-field-wrapper .percentage-symbol {
-            color: #a0aec0;
-            font-size: 1.05rem;
-            padding-right: 0.6rem;
-        }
-        .input-field-wrapper .check-icon {
-            color: #48bb78;
-            margin-left: 0.6rem;
-        }
-        .input-description {
-            font-size: 0.9rem;
-            color: #a0aec0;
-            margin-top: 0.6rem;
-            text-align: left;
-            line-height: 1.5;
-        }
+        .insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+        .chart-card { background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+        .chart-card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1); }
+        .chart-card h3 { text-align: center; font-weight: 600; margin-bottom: 1rem; color: #495057; }
 
-        .button-group {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 1.5rem;
-            margin-top: 2.5rem;
-        }
+        #fullscreen-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 2rem; backdrop-filter: blur(5px); }
+        #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
+        #close-fullscreen-btn { position: absolute; top: 2rem; right: 2rem; font-size: 2rem; background: none; border: none; color: #212529; cursor: pointer; }
 
-        #calculationResults {
-            background-color: #1a202c;
-            padding: 1.5rem;
-            border-radius: 1rem;
-            border: 1px solid #4a5568;
-            margin-bottom: 1.5rem;
-            height: auto;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-        #calculationResults h3 {
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-        #calculationResults p {
-            margin-bottom: 0.5rem;
-            font-size: 1.05rem;
-            color: #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-        }
-        #calculationResults p strong {
-            color: #48bb78;
-            font-size: 1.15rem;
-        }
-        #calculationResults .large-value {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: #48bb78;
-        }
-
-        .chart-container {
-            background-color: #1a202c;
-            padding: 1.75rem;
-            border-radius: 1rem;
-            border: 1px solid #4a5568;
-            position: relative;
-            margin-bottom: 0.75rem;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-        .chart-container h3 {
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-        .chart-container svg {
-            width: 100%;
-            height: 300px;
-            overflow: visible;
-        }
-        .chart-line {
-            fill: none;
-            stroke: #48bb78;
-            stroke-width: 3;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-        .chart-point {
-            fill: #48bb78;
-            stroke: #1a202c;
-            stroke-width: 2.5;
-            r: 5;
-        }
-        .chart-axis-line {
-            stroke: #a0aec0;
-            stroke-width: 1.5;
-        }
-        .chart-label {
-            font-size: 12px;
-            fill: #a0aec0;
-        }
-        .chart-grid-line {
-            stroke: #4a5568;
-            stroke-width: 0.75;
-            stroke-dasharray: 3,3;
-        }
-        .loading-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #4299e1;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-            display: none;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .error-message {
-            color: #fc8181;
-            margin-top: 1rem;
-            font-weight: 500;
-            text-align: center;
-        }
-
-        .login-container {
-            background-color: #2d3748;
-            padding: 3rem;
-            border-radius: 1.5rem;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
-            width: 100%;
-            max-width: 450px;
-            border: 1px solid #4a5568;
-            display: flex;
-            flex-direction: column;
-            gap: 1.75rem;
-            align-items: center;
-            transition: all 0.3s ease-in-out;
-        }
-        .login-container h2 {
-            font-size: 2.2rem;
-            font-weight: 700;
-            color: #e2e8f0;
-            margin-bottom: 1.5rem;
-        }
-        .login-container .input-group {
-            width: 100%;
-        }
-        .login-container .primary-button {
-            width: 90%;
-            padding: 1rem 1.5rem;
-            font-size: 1.25rem;
-        }
-        .login-message {
-            font-size: 1.05rem;
-            font-weight: 500;
-            text-align: center;
-            margin-top: 1.25rem;
-        }
-        .hidden {
-            display: none !important;
-        }
-
-        .saved-calculations-list {
-            background-color: #1a202c;
-            padding: 1.5rem;
-            border-radius: 1rem;
-            border: 1px solid #4a5568;
-            margin-top: 2rem;
-            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-        .saved-calculations-list h3 {
-            font-size: 1.35rem;
-            font-weight: 700;
-            color: #e2e8f0;
-            margin-bottom: 1.25rem;
-            text-align: center;
-        }
-        .saved-calculation-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.85rem 0;
-            border-bottom: 1px solid #4a5568;
-            font-size: 1rem;
-        }
-        .saved-calculation-item:last-child {
-            border-bottom: none;
-        }
-        .saved-calculation-item span {
-            color: #a0aec0;
-            font-weight: 500;
-        }
-        .saved-calculation-item button {
-            padding: 0.4rem 0.8rem;
-            border-radius: 0.4rem;
-            font-size: 0.9rem;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            backdrop-filter: blur(5px);
-        }
-        .modal-content {
-            background-color: #2d3748;
-            padding: 2.5rem;
-            border-radius: 1.25rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-            text-align: center;
-            max-width: 450px;
-            width: 90%;
-            border: 1px solid #4a5568;
-        }
-        .modal-content h3 {
-            font-size: 1.8rem;
-            color: #e2e8f0;
-            margin-bottom: 1.25rem;
-            font-weight: 700;
-        }
-        .modal-content p {
-            color: #a0aec0;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
-        }
-        .modal-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 1.25rem;
-        }
-        .modal-buttons button {
-            padding: 0.8rem 1.8rem;
-            border-radius: 0.6rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s, transform 0.1s;
-        }
-        .modal-buttons .confirm-btn {
-            background-color: #e53e3e;
-            color: white;
-        }
-        .modal-buttons .confirm-btn:hover {
-            background-color: #c53030;
-            transform: translateY(-2px);
-        }
-        .modal-buttons .cancel-btn {
-            background-color: #a0aec0;
-            color: #1a202c;
-        }
-        .modal-buttons .cancel-btn:hover {
-            background-color: #718096;
-            transform: translateY(-2px);
-        }
-
-        .main-menu {
-            background-color: #2d3748;
-            padding: 3rem;
-            border-radius: 1.5rem;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
-            width: 100%;
-            max-width: 450px;
-            border: 1px solid #4a5568;
-            display: flex;
-            flex-direction: column;
-            gap: 1.75rem;
-            align-items: center;
-            text-align: center;
-            transition: all 0.3s ease-in-out;
-        }
-        .main-menu h2 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: #e2e8f0;
-            margin-bottom: 1.5rem;
-            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-        }
-        .main-menu button {
-            width: 85%;
-            padding: 1.25rem 1.5rem;
-            font-size: 1.4rem;
-            box-shadow: 0 8px 20px rgba(66, 153, 225, 0.4);
-        }
-        .main-menu button:hover {
-            transform: translateY(-4px) scale(1.03);
-            box-shadow: 0 10px 25px rgba(66, 153, 225, 0.6);
-        }
     </style>
 </head>
 <body>
     <div id="mainMenu" class="main-menu hidden">
         <h2>Welcome!</h2>
         <button id="dcfCalculatorMenuBtn" class="primary-button">DCF Calculator</button>
-        <button id="logoutMenuBtn" class="primary-button bg-red-600 hover:bg-red-700">Logout</button>
+        <button id="insightsMenuBtn" class="primary-button">Insights</button>
+        <button id="logoutMenuBtn" class="primary-button bg-red-600">Logout</button>
     </div>
 
     <div id="loginPage" class="login-container">
         <h2>Login to DCF Calculator</h2>
-        <div class="input-group">
-            <label for="loginUsername">Username</label>
-            <div class="input-field-wrapper w-full">
-                <input type="text" id="loginUsername" placeholder="Enter your username">
-            </div>
-        </div>
-        <div class="input-group">
-            <label for="loginPassword">Password</label>
-            <div class="input-field-wrapper w-full">
-                <input type="password" id="loginPassword" placeholder="Enter your password">
-            </div>
-        </div>
-        <button id="loginBtn" class="primary-button">Login</button>
-        <p class="text-gray-400 mt-4">Don't have an account?</p>
-        <button id="showRegisterBtn" class="primary-button bg-gray-600 hover:bg-gray-700">Register</button>
+        <div class="input-group w-full"><label for="loginUsername">Username</label><div class="input-field-wrapper"><input type="text" id="loginUsername" placeholder="Enter your username"></div></div>
+        <div class="input-group w-full"><label for="loginPassword">Password</label><div class="input-field-wrapper"><input type="password" id="loginPassword" placeholder="Enter your password"></div></div>
+        <button id="loginBtn" class="primary-button w-full">Login</button>
+        <p class="text-gray-600 mt-4">Don't have an account? <button id="showRegisterBtn" class="text-blue-500 hover:underline font-semibold">Register</button></p>
         <p id="loginMessage" class="login-message hidden"></p>
     </div>
 
     <div id="registerPage" class="login-container hidden">
         <h2>Register for DCF Calculator</h2>
-        <div class="input-group">
-            <label for="registerUsername">Username</label>
-            <div class="input-field-wrapper w-full">
-                <input type="text" id="registerUsername" placeholder="Choose a username">
-            </div>
-        </div>
-        <div class="input-group">
-            <label for="registerPassword">Password</label>
-            <div class="input-field-wrapper w-full">
-                <input type="password" id="registerPassword" placeholder="Choose a password">
-            </div>
-        </div>
-        <button id="registerBtn" class="primary-button">Register</button>
-        <p class="text-gray-400 mt-4">Already have an account?</p>
-        <button id="showLoginBtn" class="primary-button bg-gray-600 hover:bg-gray-700">Login</button>
+        <div class="input-group w-full"><label for="registerUsername">Username</label><div class="input-field-wrapper"><input type="text" id="registerUsername" placeholder="Choose a username"></div></div>
+        <div class="input-group w-full"><label for="registerPassword">Password</label><div class="input-field-wrapper"><input type="password" id="registerPassword" placeholder="Choose a password"></div></div>
+        <button id="registerBtn" class="primary-button w-full">Register</button>
+        <p class="text-gray-600 mt-4">Already have an account? <button id="showLoginBtn" class="text-blue-500 hover:underline font-semibold">Login</button></p>
         <p id="registerMessage" class="login-message hidden"></p>
     </div>
 
     <div id="appContent" class="container hidden">
-        <div class="flex flex-col lg:flex-row w-full gap-8">
-            <div class="left-panel">
-                <div class="header-section">
-                    <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., GOOG)" class="text-gray-300">
-                    <button id="getCurrentDataBtn" class="primary-button">Search</button>
-                    <button id="backToMenuBtn" class="primary-button bg-gray-600 hover:bg-gray-700">Menu</button>
-                </div>
-
-                <div class="tab-buttons">
-                    <button id="earningsTabBtn" class="tab-button active">Earnings</button>
-                    <button id="cashFlowTabBtn" class="tab-button">Cash Flow</button>
-                </div>
-
-                <div id="earningsSection">
-                    <h2 class="section-title">Assumptions (Earnings)</h2>
-                    <div class="metric-grid">
-                        <div class="metric-item">
-                            <p class="metric-label">EPS (TTM)</p>
-                            <p id="currentEps" class="metric-value">$0.00</p>
-                        </div>
-                        <div class="metric-item">
-                            <p class="metric-label">PE (TTM)</p>
-                            <p id="currentPe" class="metric-value">0.00</p>
-                        </div>
-                        <div class="metric-item">
-                            <p class="metric-label">EPS Growth</p>
-                            <p id="epsGrowth" class="metric-value">0.0%</p>
-                        </div>
-                    </div>
-
-                    <div class="input-group">
-                        <label for="epsTtmInput">EPS (TTM)</label>
-                        <div class="input-field-wrapper w-full">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" id="epsTtmInput" value="0.00" step="0.01" readonly>
-                            <span class="check-icon">&#10003;</span>
-                        </div>
-                    </div>
-
-                    <div class="input-group mt-6">
-                        <label for="growthRateInput">EPS Growth Rate</label>
-                        <div class="input-field-wrapper w-full">
-                            <input type="number" id="growthRateInput" placeholder="Enter growth rate" step="0.1">
-                            <span class="percentage-symbol">%</span>
-                            <span class="check-icon">&#10003;</span>
-                        </div>
-                    </div>
-
-                    <div class="input-group mt-6">
-                        <label for="peMultipleInput">Appropriate EPS Multiple</label>
-                        <div class="input-field-wrapper w-full">
-                            <input type="number" id="peMultipleInput" placeholder="Enter multiple" step="0.1">
-                            <span class="check-icon">&#10003;</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="cashFlowSection" class="hidden">
-                    <h2 class="section-title">Assumptions (Cash Flow)</h2>
-                    <div class="metric-grid">
-                        <div class="metric-item">
-                            <p class="metric-label">FCF/Share (TTM)</p>
-                            <p id="currentFcfShare" class="metric-value">$0.00</p>
-                        </div>
-                        <div class="metric-item">
-                            <p class="metric-label">FCF Yield (TTM)</p>
-                            <p id="fcfYield" class="metric-value">0.0%</p>
-                        </div>
-                        <div class="metric-item">
-                            <p class="metric-label">SBC Impact</p>
-                            <p id="sbcImpact" class="metric-value">0.0%</p>
-                        </div>
-                    </div>
-
-                    <div class="input-group">
-                        <label for="fcfShareInput">FCF/Share (TTM)</label>
-                        <div class="input-field-wrapper w-full">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" id="fcfShareInput" value="0.00" step="0.01" readonly>
-                            <span class="check-icon">&#10003;</span>
-                        </div>
-                    </div>
-
-                    <div class="input-group mt-6">
-                        <label for="fcfGrowthRateInput">FCF Growth Rate</label>
-                        <div class="input-field-wrapper w-full">
-                            <input type="number" id="fcfGrowthRateInput" placeholder="Enter growth rate" step="0.1">
-                            <span class="percentage-symbol">%</span>
-                            <span class="check-icon">&#10003;</span>
-                        </div>
-                    </div>
-
-                    <div class="input-group mt-6">
-                        <label for="fcfYieldInput">Appropriate FCF Yield</label>
-                        <div class="input-field-wrapper w-full">
-                            <input type="number" id="fcfYieldInput" placeholder="Enter FCF yield" step="0.1">
-                            <span class="percentage-symbol">%</span>
-                            <span class="check-icon">&#10003;</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="input-group mt-6">
-                    <label for="desiredReturnInput">Desired Return</label>
-                    <div class="input-field-wrapper w-full">
-                        <input type="number" id="desiredReturnInput" placeholder="Enter desired return" step="0.1">
-                        <span class="percentage-symbol">%</span>
-                        <span class="check-icon">&#10003;</span>
-                    </div>
-                </div>
-
-                <div class="button-group mt-4">
-                    <button id="calculatePriceBtn" class="primary-button">Calculate Estimated Price</button>
-                    <button id="saveCalculationBtn" class="primary-button bg-green-600 hover:bg-green-700">Save Calculation</button>
-                </div>
-
-                <div class="saved-calculations-list">
-                    <h3>Saved Calculations</h3>
-                    <div id="savedCalculationsContainer">
-                        <p class="text-gray-400">No saved calculations yet.</p>
-                    </div>
-                    <button id="loadCalculationsBtn" class="primary-button mt-4 w-full bg-indigo-600 hover:bg-indigo-700">Load Saved Calculations</button>
-                </div>
+        <div class="left-panel">
+            <div class="header-section" style="flex-direction: row;">
+                <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., GOOG)">
+                <button id="getCurrentDataBtn" class="primary-button">Search</button>
+                <button id="backToMenuBtn" class="primary-button bg-gray-600">Menu</button>
             </div>
-
-            <div class="right-panel">
-                <div id="companyInfo" class="company-info hidden-state">
-                    <div class="company-logo" id="companyLogo">G</div>
-                    <div>
-                        <p id="companyName" class="company-name">Alphabet Inc.</p>
-                    </div>
-                    <p id="currentStockPrice" class="current-price">$173.78</p>
+            <div class="tab-buttons">
+                <button id="earningsTabBtn" class="tab-button active">Earnings</button>
+                <button id="cashFlowTabBtn" class="tab-button">Cash Flow</button>
+            </div>
+            <div id="earningsSection">
+                <h2 class="section-title">Assumptions (Earnings)</h2>
+                <div class="metric-grid">
+                    <div class="metric-item"><p class="metric-label">EPS (TTM)</p><p id="currentEps" class="metric-value">$0.00</p></div>
+                    <div class="metric-item"><p class="metric-label">PE (TTM)</p><p id="currentPe" class="metric-value">0.00</p></div>
+                    <div class="metric-item"><p class="metric-label">EPS Growth</p><p id="epsGrowth" class="metric-value">0.0%</p></div>
                 </div>
-
-                <h2 class="section-title">5-Year Projection</h2>
-                <div id="calculationResults" class="hidden">
-                    <h3 class="font-semibold text-lg mb-4 text-white">Calculation Results</h3>
-                    <p>Return from today's price: <strong id="returnFromToday" class="large-value">N/A</strong></p>
-                    <p>Entry Price for <span id="desiredReturnDisplay">N/A</span> Return: <strong id="entryPrice" class="large-value">N/A</strong></p>
-                    <p>Price After 5 Years: <strong id="priceAfter5Years" class="large-value">N/A</strong></p>
+                <div class="input-group"><label for="epsTtmInput">EPS (TTM)</label><div class="input-field-wrapper"><span class="currency-symbol">$</span><input type="number" id="epsTtmInput" value="0.00" step="0.01" readonly></div></div>
+                <div class="input-group"><label for="growthRateInput">EPS Growth Rate</label><div class="input-field-wrapper"><input type="number" id="growthRateInput" placeholder="e.g., 15" step="0.1"><span class="percentage-symbol">%</span></div></div>
+                <div class="input-group"><label for="peMultipleInput">Appropriate PE Multiple</label><div class="input-field-wrapper"><input type="number" id="peMultipleInput" placeholder="e.g., 20" step="0.1"></div></div>
+            </div>
+            <div id="cashFlowSection" class="hidden">
+                <h2 class="section-title">Assumptions (Cash Flow)</h2>
+                <div class="metric-grid">
+                    <div class="metric-item"><p class="metric-label">FCF/Share (TTM)</p><p id="currentFcfShare" class="metric-value">$0.00</p></div>
+                    <div class="metric-item"><p class="metric-label">FCF Yield (TTM)</p><p id="fcfYield" class="metric-value">0.0%</p></div>
+                    <div class="metric-item"><p class="metric-label">SBC Impact</p><p id="sbcImpact" class="metric-value">0.0%</p></div>
                 </div>
-
-                <div class="chart-container mt-6">
-                    <h3 class="font-semibold text-lg mb-4 text-white">Projected Price Growth</h3>
-                    <div id="chartError" class="error-message hidden"></div>
-                    <svg id="priceChart" viewBox="0 0 500 350" preserveAspectRatio="xMidYMid meet">
-                    </svg>
-                </div>
-                <div id="calculationMessage" class="mt-4">
-                    <p class="text-gray-400">Estimated 5-Year Price will appear here...</p>
-                </div>
+                <div class="input-group"><label for="fcfShareInput">FCF/Share (TTM)</label><div class="input-field-wrapper"><span class="currency-symbol">$</span><input type="number" id="fcfShareInput" value="0.00" step="0.01" readonly></div></div>
+                <div class="input-group"><label for="fcfGrowthRateInput">FCF Growth Rate</label><div class="input-field-wrapper"><input type="number" id="fcfGrowthRateInput" placeholder="e.g., 12" step="0.1"><span class="percentage-symbol">%</span></div></div>
+                <div class="input-group"><label for="fcfYieldInput">Appropriate FCF Yield</label><div class="input-field-wrapper"><input type="number" id="fcfYieldInput" placeholder="e.g., 5" step="0.1"><span class="percentage-symbol">%</span></div></div>
+            </div>
+            <div class="input-group"><label for="desiredReturnInput">Desired Return</label><div class="input-field-wrapper"><input type="number" id="desiredReturnInput" placeholder="e.g., 10" step="0.1"><span class="percentage-symbol">%</span></div></div>
+            <div class="button-group mt-4">
+                <button id="calculatePriceBtn" class="primary-button">Calculate</button>
+                <button id="saveCalculationBtn" class="primary-button bg-green-600">Save</button>
             </div>
         </div>
+        <div class="right-panel">
+            <div id="companyInfo" class="company-info hidden-state">
+                <div class="company-logo" id="companyLogo"></div>
+                <div><p id="companyName" class="company-name"></p></div>
+                <p id="currentStockPrice" class="current-price"></p>
+            </div>
+
+            <div id="projectionPlaceholder" class="text-center p-8 bg-gray-50 rounded-lg border">
+                <h3 class="text-xl font-semibold text-gray-700">5-Year Projection</h3>
+                <p class="mt-2 text-gray-500">Enter a stock ticker and your assumptions, then click "Calculate" to see the projected stock price and potential returns.</p>
+            </div>
+        
+            <div id="projectionOutput" class="hidden">
+                <h2 class="section-title">5-Year Projection</h2>
+                <div id="calculationResults" class="p-4 bg-gray-50 rounded-lg border"></div>
+                <div class="chart-container mt-6" style="position: relative; height:300px">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div id="calculationMessage" class="mt-4 text-center text-gray-500"></div>
+            </div>
+            
+            <div class="saved-calculations-list mt-8">
+                <h3>Saved Calculations</h3>
+                <div id="savedCalculationsContainer"><p class="text-gray-500 text-center">No saved calculations yet.</p></div>
+                <button id="loadCalculationsBtn" class="primary-button mt-4 w-full bg-indigo-600">Load</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="insightsPage" class="insights-page-container hidden">
+        <div class="header-section">
+            <div class="header-top-row">
+                <input type="text" id="insightsTickerInput" placeholder="Enter Ticker (e.g., MSFT)">
+                <button id="getInsightsBtn" class="primary-button">Get Insights</button>
+                <button id="insightsBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
+            </div>
+            <div class="period-toggle">
+                <button id="annualToggleBtn" class="active">Annual</button>
+                <button id="quarterlyToggleBtn">Quarterly</button>
+            </div>
+        </div>
+        <div class="insights-grid" id="insightsGrid"></div>
+    </div>
+
+    <div id="fullscreen-chart-modal" class="hidden">
+        <button id="close-fullscreen-btn">&times;</button>
+        <div id="fullscreen-chart-container"><canvas id="fullscreen-canvas"></canvas></div>
     </div>
 
     <div id="confirmationModal" class="modal-overlay hidden">
         <div class="modal-content">
             <h3 id="modalTitle">Confirm Action</h3>
-            <p id="modalMessage">Are you sure you want to proceed?</p>
+            <p id="modalMessage">Are you sure?</p>
             <div class="modal-buttons">
                 <button id="confirmYesBtn" class="confirm-btn">Yes</button>
                 <button id="confirmNoBtn" class="cancel-btn">No</button>
@@ -826,866 +337,497 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
         const backendBaseUrl = 'https://dcf-backend.onrender.com';
 
+        // --- Page Elements ---
+        const mainMenu = document.getElementById('mainMenu');
         const loginPage = document.getElementById('loginPage');
         const registerPage = document.getElementById('registerPage');
         const appContent = document.getElementById('appContent');
-        const mainMenu = document.getElementById('mainMenu');
+        const insightsPage = document.getElementById('insightsPage');
 
+        // --- Navigation Buttons ---
+        const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
+        const insightsMenuBtn = document.getElementById('insightsMenuBtn');
+        const logoutMenuBtn = document.getElementById('logoutMenuBtn');
+        const backToMenuBtn = document.getElementById('backToMenuBtn');
+        const insightsBackToMenuBtn = document.getElementById('insightsBackToMenuBtn');
+        const showRegisterBtn = document.getElementById('showRegisterBtn');
+        const showLoginBtn = document.getElementById('showLoginBtn');
+        
+        // --- Auth Elements ---
         const loginUsernameInput = document.getElementById('loginUsername');
         const loginPasswordInput = document.getElementById('loginPassword');
         const loginBtn = document.getElementById('loginBtn');
         const loginMessage = document.getElementById('loginMessage');
-        const showRegisterBtn = document.getElementById('showRegisterBtn');
-        const showLoginBtn = document.getElementById('showLoginBtn');
-
         const registerUsernameInput = document.getElementById('registerUsername');
         const registerPasswordInput = document.getElementById('registerPassword');
         const registerBtn = document.getElementById('registerBtn');
         const registerMessage = document.getElementById('registerMessage');
 
-        const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
-        const logoutMenuBtn = document.getElementById('logoutMenuBtn');
-        const backToMenuBtn = document.getElementById('backToMenuBtn');
-
+        // --- Insights Elements ---
+        const insightsTickerInput = document.getElementById('insightsTickerInput');
+        const getInsightsBtn = document.getElementById('getInsightsBtn');
+        const insightsGrid = document.getElementById('insightsGrid');
+        const annualToggleBtn = document.getElementById('annualToggleBtn');
+        const quarterlyToggleBtn = document.getElementById('quarterlyToggleBtn');
+        const fullscreenModal = document.getElementById('fullscreen-chart-modal');
+        const fullscreenCanvas = document.getElementById('fullscreen-canvas');
+        const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
+        
+        // --- DCF Elements ---
         const tickerInput = document.getElementById('tickerInput');
         const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
         const companyInfoDiv = document.getElementById('companyInfo');
         const companyLogo = document.getElementById('companyLogo');
         const companyNameDisplay = document.getElementById('companyName');
         const currentStockPriceDisplay = document.getElementById('currentStockPrice');
-
         const earningsTabBtn = document.getElementById('earningsTabBtn');
+        const cashFlowTabBtn = document.getElementById('cashFlowTabBtn');
         const earningsSection = document.getElementById('earningsSection');
+        const cashFlowSection = document.getElementById('cashFlowSection');
         const currentEpsDisplay = document.getElementById('currentEps');
         const currentPeDisplay = document.getElementById('currentPe');
         const epsGrowthDisplay = document.getElementById('epsGrowth');
         const epsTtmInput = document.getElementById('epsTtmInput');
         const growthRateInput = document.getElementById('growthRateInput');
         const peMultipleInput = document.getElementById('peMultipleInput');
-
-        const cashFlowTabBtn = document.getElementById('cashFlowTabBtn');
-        const cashFlowSection = document.getElementById('cashFlowSection');
         const currentFcfShareDisplay = document.getElementById('currentFcfShare');
         const fcfYieldDisplay = document.getElementById('fcfYield');
         const sbcImpactDisplay = document.getElementById('sbcImpact');
         const fcfShareInput = document.getElementById('fcfShareInput');
         const fcfGrowthRateInput = document.getElementById('fcfGrowthRateInput');
         const fcfYieldInput = document.getElementById('fcfYieldInput');
-
         const desiredReturnInput = document.getElementById('desiredReturnInput');
         const calculatePriceBtn = document.getElementById('calculatePriceBtn');
         const saveCalculationBtn = document.getElementById('saveCalculationBtn');
         const loadCalculationsBtn = document.getElementById('loadCalculationsBtn');
         const savedCalculationsContainer = document.getElementById('savedCalculationsContainer');
         const calculationMessageDiv = document.getElementById('calculationMessage');
-        const calculationResultsDiv = document.getElementById('calculationResults');
-        const returnFromTodayDisplay = document.getElementById('returnFromToday');
-        const entryPriceDisplay = document.getElementById('entryPrice');
-        const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
-        const priceAfter5YearsDisplay = document.getElementById('priceAfter5Years');
-        const chartErrorDiv = document.getElementById('chartError');
-        const priceChartSvg = document.getElementById('priceChart');
-
+        const priceChartCanvas = document.getElementById('priceChart');
         const confirmationModal = document.getElementById('confirmationModal');
         const modalTitle = document.getElementById('modalTitle');
         const modalMessage = document.getElementById('modalMessage');
         const confirmYesBtn = document.getElementById('confirmYesBtn');
         const confirmNoBtn = document.getElementById('confirmNoBtn');
+        const projectionPlaceholder = document.getElementById('projectionPlaceholder');
+        const projectionOutput = document.getElementById('projectionOutput');
+        const calculationResultsDiv = document.getElementById('calculationResults');
 
+        let activeFullscreenChart = null;
+        let dcfProjectionChart = null;
         let currentStockPrice = 0;
         let activeTab = 'earnings';
         let currentTicker = '';
-        let currentCalculationData = {};
         let modalCallback = null;
+        let fullInsightsData = {}; // Store full historical data {price, annual, quarterly}
+        let currentPeriod = 'annual'; // 'annual' or 'quarterly'
 
-        function showLoginPage() {
-            loginPage.classList.remove('hidden');
-            registerPage.classList.add('hidden');
-            appContent.classList.add('hidden');
+        // --- Navigation Logic ---
+        function showPage(page) {
             mainMenu.classList.add('hidden');
-            loginMessage.classList.add('hidden');
-            registerMessage.classList.add('hidden');
-        }
-
-        function showRegisterPage() {
-            loginPage.classList.add('hidden');
-            registerPage.classList.remove('hidden');
-            appContent.classList.add('hidden');
-            mainMenu.classList.add('hidden');
-            loginMessage.classList.add('hidden');
-            registerMessage.classList.add('hidden');
-        }
-
-        function showMainMenu() {
             loginPage.classList.add('hidden');
             registerPage.classList.add('hidden');
             appContent.classList.add('hidden');
-            mainMenu.classList.remove('hidden');
-            loginMessage.classList.add('hidden');
-            registerMessage.classList.add('hidden');
+            insightsPage.classList.add('hidden');
+            page.classList.remove('hidden');
         }
 
-        function showAppContent() {
-            loginPage.classList.add('hidden');
-            registerPage.classList.add('hidden');
-            mainMenu.classList.add('hidden');
-            appContent.classList.remove('hidden');
-            loginMessage.classList.add('hidden');
-            registerMessage.classList.add('hidden');
-        }
+        dcfCalculatorMenuBtn.addEventListener('click', () => showPage(appContent));
+        insightsMenuBtn.addEventListener('click', () => showPage(insightsPage));
+        logoutMenuBtn.addEventListener('click', handleLogout);
+        backToMenuBtn.addEventListener('click', () => showPage(mainMenu));
+        insightsBackToMenuBtn.addEventListener('click', () => showPage(mainMenu));
+        showRegisterBtn.addEventListener('click', () => showPage(registerPage));
+        showLoginBtn.addEventListener('click', () => showPage(loginPage));
+        
+        // --- Charting Logic ---
+        function createChart(canvas, title, chartData, isFullscreen = false) {
+            const ctx = canvas.getContext('2d');
+            
+            const datasetOptions = {
+                label: title,
+                data: chartData.data,
+                backgroundColor: chartData.backgroundColor,
+                borderColor: chartData.borderColor,
+                borderWidth: chartData.type === 'bar' ? 1 : 2,
+                fill: chartData.type === 'line',
+                tension: 0.1,
+                pointBackgroundColor: chartData.borderColor,
+                pointHoverRadius: 5,
+                pointRadius: 3
+            };
+            
+            let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
 
-        function setLoginMessage(message, isError = false) {
-            loginMessage.textContent = message;
-            loginMessage.classList.remove('hidden');
-            if (isError) {
-                loginMessage.style.color = '#fc8181';
-            } else {
-                loginMessage.style.color = '#48bb78';
+            // Specific styling for the insights price chart
+            if (title.includes('Price')) {
+                datasetOptions.pointRadius = 0;
             }
-        }
-
-        function setRegisterMessage(message, isError = false) {
-            registerMessage.textContent = message;
-            registerMessage.classList.remove('hidden');
-            if (isError) {
-                registerMessage.style.color = '#fc8181';
-            } else {
-                registerMessage.style.color = '#48bb78';
+            // Specific styling for the DCF projection chart
+            if (title === 'Projected Price Growth') {
+                datasetOptions.pointRadius = 3; // Ensure dots are visible
+                onClickHandler = null; // Disable fullscreen click
             }
+
+            const chartInstance = new Chart(ctx, {
+                type: chartData.type,
+                data: {
+                    labels: chartData.labels,
+                    datasets: [datasetOptions]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
+                    scales: {
+                        y: { beginAtZero: false, grid: { color: '#e9ecef' }, ticks: { color: '#6c757d' } },
+                        x: { grid: { display: false }, ticks: { color: '#6c757d' } }
+                    },
+                    onClick: onClickHandler
+                }
+            });
+            return chartInstance;
         }
 
-        async function handleLogin() {
-            const username = loginUsernameInput.value.trim();
-            const password = loginPasswordInput.value.trim();
+        function openFullscreen(title) {
+            fullscreenModal.classList.remove('hidden');
+            if (activeFullscreenChart) activeFullscreenChart.destroy();
+            
+            // Determine which dataset to use for fullscreen
+            let fullChartData;
+            if (title.includes('Price')) {
+                fullChartData = fullInsightsData.price[title];
+            } else {
+                fullChartData = fullInsightsData[currentPeriod][title];
+            }
+            
+            activeFullscreenChart = createChart(fullscreenCanvas, title, fullChartData, true);
+        }
 
-            if (!username || !password) {
-                setLoginMessage('Please enter both username and password.', true);
+        closeFullscreenBtn.addEventListener('click', () => {
+            fullscreenModal.classList.add('hidden');
+            if (activeFullscreenChart) {
+                activeFullscreenChart.destroy();
+                activeFullscreenChart = null;
+            }
+        });
+
+        // --- Insights Page Logic ---
+        function renderInsightsCharts() {
+            insightsGrid.innerHTML = '';
+            
+            const priceData = fullInsightsData.price || {};
+            const financialData = fullInsightsData[currentPeriod] || {};
+
+            if (Object.keys(priceData).length === 0 && Object.keys(financialData).length === 0) {
+                insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">No insights data found for the selected ticker.</p>`;
                 return;
             }
 
-            const originalBtnText = loginBtn.innerHTML;
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = 'Logging in...';
+            // Define the desired order of charts
+            const chartOrder = [
+                'Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'
+            ];
+
+            const allCharts = { ...priceData, ...financialData };
+            const remainingCharts = Object.keys(allCharts).filter(title => !chartOrder.includes(title));
+            const finalChartOrder = [...chartOrder, ...remainingCharts];
+
+            finalChartOrder.forEach(title => {
+                const chartData = allCharts[title];
+                if (chartData && chartData.data && chartData.data.length > 0) {
+                    
+                    const previewData = { ...chartData };
+                    if (previewData.labels.length > 5 && !title.includes('Price')) {
+                         previewData.labels = previewData.labels.slice(-5);
+                         previewData.data = previewData.data.slice(-5);
+                    } else if (previewData.labels.length > 252 && title.includes('Price')) { // ~1 year of daily data
+                         previewData.labels = previewData.labels.slice(-252);
+                         previewData.data = previewData.data.slice(-252);
+                    }
+
+                    const chartCard = document.createElement('div');
+                    chartCard.className = 'chart-card';
+                    chartCard.innerHTML = `<h3>${title}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
+                    insightsGrid.appendChild(chartCard);
+                    const canvas = chartCard.querySelector('canvas');
+                    createChart(canvas, title, previewData, false);
+                }
+            });
+        }
+
+        async function fetchInsightsData() {
+            const ticker = insightsTickerInput.value.trim().toUpperCase();
+            if (!ticker) {
+                insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol to see financial insights.</p>';
+                return;
+            }
+
+            setButtonState(getInsightsBtn, 'Loading...', true);
+            insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
 
             try {
-                setLoginMessage('Logging in...', false);
-                const response = await fetch(`${backendBaseUrl}/login`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
-                });
+                const response = await apiCall(`/get_insights_data?ticker=${ticker}`);
+                const fetchedData = await response.json();
 
-                const data = await response.json();
-
-                if (response.ok) {
-                    localStorage.setItem('jwt_token', data.token);
-                    localStorage.setItem('current_username', username);
-                    setLoginMessage('Login successful!', false);
-                    showMainMenu();
-                    loginUsernameInput.value = '';
-                    loginPasswordInput.value = '';
-                    loadSavedCalculations();
-                } else {
-                    setLoginMessage(data.message || 'Login failed. Please check your credentials.', true);
-                    localStorage.removeItem('jwt_token');
-                    localStorage.removeItem('current_username');
+                if (!response.ok) {
+                    throw new Error(fetchedData.error || 'Failed to fetch insights data.');
                 }
+                
+                fullInsightsData = fetchedData; // Store the full data globally {price, annual, quarterly}
+                renderInsightsCharts();
+
             } catch (error) {
-                console.error('Login error:', error);
-                setLoginMessage('An error occurred during login. Please try again.', true);
-                localStorage.removeItem('jwt_token');
-                localStorage.removeItem('current_username');
+                insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
             } finally {
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = originalBtnText;
+                setButtonState(getInsightsBtn, 'Get Insights', false);
+            }
+        }
+        
+        getInsightsBtn.addEventListener('click', fetchInsightsData);
+        
+        annualToggleBtn.addEventListener('click', () => {
+            currentPeriod = 'annual';
+            annualToggleBtn.classList.add('active');
+            quarterlyToggleBtn.classList.remove('active');
+            if (fullInsightsData.annual) renderInsightsCharts();
+        });
+
+        quarterlyToggleBtn.addEventListener('click', () => {
+            currentPeriod = 'quarterly';
+            quarterlyToggleBtn.classList.add('active');
+            annualToggleBtn.classList.remove('active');
+            if (fullInsightsData.quarterly) renderInsightsCharts();
+        });
+
+        insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
+
+        // --- All original DCF Calculator JS ---
+        function setButtonState(button, text, disabled) {
+            button.innerHTML = text;
+            button.disabled = disabled;
+        }
+        
+        function showMessage(element, message, isError = false) {
+            element.textContent = message;
+            element.className = `login-message ${isError ? 'text-red-500' : 'text-green-500'}`;
+            element.classList.remove('hidden');
+        }
+
+        async function apiCall(endpoint, options = {}) {
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+            }
+            try {
+                const response = await fetch(`${backendBaseUrl}${endpoint}`, options);
+                if (response.status === 401) {
+                    handleLogout();
+                    throw new Error('Session expired. Please log in again.');
+                }
+                return response;
+            } catch (error) {
+                console.error(`API call to ${endpoint} failed:`, error);
+                throw error;
+            }
+        }
+        
+        async function handleLogin() {
+            setButtonState(loginBtn, 'Logging in...', true);
+            try {
+                const response = await apiCall('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: loginUsernameInput.value, password: loginPasswordInput.value })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Login failed');
+                
+                localStorage.setItem('jwt_token', data.token);
+                localStorage.setItem('current_username', loginUsernameInput.value);
+                showMessage(loginMessage, 'Login successful!', false);
+                setTimeout(() => {
+                    showPage(mainMenu);
+                }, 1000);
+            } catch (error) {
+                showMessage(loginMessage, error.message, true);
+            } finally {
+                setButtonState(loginBtn, 'Login', false);
             }
         }
 
         async function handleRegister() {
-            const username = registerUsernameInput.value.trim();
-            const password = registerPasswordInput.value.trim();
-
-            if (!username || !password) {
-                setRegisterMessage('Please enter both username and password.', true);
-                return;
-            }
-
-            const originalBtnText = registerBtn.innerHTML;
-            registerBtn.disabled = true;
-            registerBtn.innerHTML = 'Registering...';
-
+            setButtonState(registerBtn, 'Registering...', true);
             try {
-                setRegisterMessage('Registering...', false);
-                const response = await fetch(`${backendBaseUrl}/register`, {
+                const response = await apiCall('/register', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: registerUsernameInput.value, password: registerPasswordInput.value })
                 });
-
                 const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Registration failed');
 
-                if (response.ok) {
-                    setRegisterMessage('Registration successful! You can now log in.', false);
-                    registerUsernameInput.value = '';
-                    registerPasswordInput.value = '';
-                    setTimeout(showLoginPage, 2000);
-                } else {
-                    setRegisterMessage(data.message || 'Registration failed. Please try again.', true);
-                }
+                showMessage(registerMessage, 'Registration successful! Please log in.', false);
+                setTimeout(() => showPage(loginPage), 2000);
             } catch (error) {
-                console.error('Register error:', error);
-                setRegisterMessage('An error occurred during registration. Please try again.', true);
+                showMessage(registerMessage, error.message, true);
             } finally {
-                registerBtn.disabled = false;
-                registerBtn.innerHTML = originalBtnText;
+                setButtonState(registerBtn, 'Register', false);
             }
         }
-
+        
         function handleLogout() {
             localStorage.removeItem('jwt_token');
             localStorage.removeItem('current_username');
-            showLoginPage();
-            displayMessage('You have been logged out.', false);
-            clearAllFields();
-            savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
+            showPage(loginPage);
         }
 
         function checkAuthAndRender() {
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                showMainMenu();
-                loadSavedCalculations();
+            if (localStorage.getItem('jwt_token')) {
+                showPage(mainMenu);
             } else {
-                showLoginPage();
+                showPage(loginPage);
             }
         }
 
-        function displayMessage(message, isError = false) {
-            calculationMessageDiv.innerHTML = `<p class="${isError ? 'error-message' : 'text-gray-400'}">${message}</p>`;
+        function displayCalcMessage(message, isError = false) {
+            calculationMessageDiv.textContent = message;
+            calculationMessageDiv.className = `mt-4 text-center ${isError ? 'text-red-500' : 'text-gray-500'}`;
         }
-
-        function clearAllFields() {
-            companyInfoDiv.classList.add('hidden-state');
-            companyLogo.textContent = '';
-            companyNameDisplay.textContent = '';
-            currentStockPriceDisplay.textContent = '$0.00';
-
-            currentEpsDisplay.textContent = '$0.00';
-            currentPeDisplay.textContent = '0.00';
-            epsGrowthDisplay.textContent = '0.0%';
-            epsTtmInput.value = '0.00';
-            growthRateInput.value = '';
-            peMultipleInput.value = '';
-
-            currentFcfShareDisplay.textContent = '$0.00';
-            fcfYieldDisplay.textContent = '0.0%';
-            sbcImpactDisplay.textContent = '0.0%';
-            fcfShareInput.value = '0.00';
-            fcfGrowthRateInput.value = '';
-            fcfYieldInput.value = '';
-
-            desiredReturnInput.value = '';
-            calculationResultsDiv.classList.add('hidden');
-            returnFromTodayDisplay.textContent = 'N/A';
-            entryPriceDisplay.textContent = 'N/A';
-            desiredReturnDisplay.textContent = 'N/A';
-            priceAfter5YearsDisplay.textContent = 'N/A';
-            calculationMessageDiv.innerHTML = '<p class="text-gray-400">Estimated 5-Year Price will appear here...</p>';
-            priceChartSvg.innerHTML = '';
-            chartErrorDiv.classList.add('hidden');
-            currentTicker = '';
-            currentCalculationData = {};
-        }
-
-        async function fetchAndPopulateMetrics(ticker) {
-            clearAllFields();
-            displayMessage('Fetching current metrics...', false);
-
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                displayMessage('You are not logged in. Please log in to fetch data.', true);
-                showLoginPage();
+        
+        async function fetchAndPopulateMetrics() {
+            const ticker = tickerInput.value.trim().toUpperCase();
+            if (!ticker) {
+                displayCalcMessage('Please enter a ticker symbol.', true);
                 return;
             }
+            setButtonState(getCurrentDataBtn, 'Fetching...', true);
 
-            const originalBtnText = getCurrentDataBtn.innerHTML;
-            getCurrentDataBtn.disabled = true;
-            getCurrentDataBtn.innerHTML = 'Fetching...';
+            projectionPlaceholder.classList.remove('hidden');
+            projectionOutput.classList.add('hidden');
+            if (dcfProjectionChart) dcfProjectionChart.destroy();
+            calculationResultsDiv.innerHTML = '';
 
             try {
-                const response = await fetch(`${backendBaseUrl}/get_trailing_metrics?ticker=${ticker}`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                const response = await apiCall(`/get_trailing_metrics?ticker=${ticker}`);
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Failed to fetch data');
 
-                if (response.status === 401) {
-                    displayMessage('Session expired or unauthorized. Please log in again.', true);
-                    handleLogout();
-                    return;
-                }
+                companyInfoDiv.classList.remove('hidden-state');
+                companyLogo.textContent = ticker.charAt(0);
+                companyNameDisplay.textContent = data.longName || ticker;
+                currentStockPrice = data.regularMarketPrice || 0;
+                currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
                 
-                if (response.status === 429) {
-                    displayMessage('Too many requests. Please wait a moment before trying again.', true);
-                    return;
-                }
+                const formatNum = (num, prefix = '', suffix = '') => (typeof num === 'number' && !isNaN(num)) ? `${prefix}${(num).toFixed(2)}${suffix}` : 'N/A';
+                const formatPercent = (num) => (typeof num === 'number' && !isNaN(num)) ? `${(num * 100).toFixed(2)}%` : 'N/A';
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                }
+                currentEpsDisplay.textContent = formatNum(data.trailing_eps, '$');
+                currentPeDisplay.textContent = formatNum(data.trailing_pe);
+                epsGrowthDisplay.textContent = formatPercent(data.trailing_eps_growth);
+                epsTtmInput.value = (data.trailing_eps || 0).toFixed(2);
+                
+                currentFcfShareDisplay.textContent = formatNum(data.fcfShare, '$');
+                fcfYieldDisplay.textContent = formatPercent(data.fcfYield);
+                sbcImpactDisplay.textContent = formatPercent(data.sbcImpact);
+                fcfShareInput.value = (data.fcfShare || 0).toFixed(2);
 
-                const data = await response.json();
-
-                if (data.error) {
-                    displayMessage(`Error: ${data.error}`, true);
-                } else {
-                    companyInfoDiv.classList.remove('hidden-state');
-                    companyLogo.textContent = ticker.charAt(0);
-                    companyNameDisplay.textContent = data.longName || ticker;
-
-                    currentStockPrice = (typeof data.regularMarketPrice === 'number' && !isNaN(data.regularMarketPrice)) ? data.regularMarketPrice : 0;
-                    currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-
-                    currentEpsDisplay.textContent = (typeof data.trailing_eps === 'number' && !isNaN(data.trailing_eps)) ? `$${data.trailing_eps.toFixed(2)}` : '$N/A';
-                    currentPeDisplay.textContent = (typeof data.trailing_pe === 'number' && !isNaN(data.trailing_pe)) ? data.trailing_pe.toFixed(2) : 'N/A';
-                    epsGrowthDisplay.textContent = (typeof data.trailing_eps_growth === 'number' && !isNaN(data.trailing_eps_growth)) ? `${(data.trailing_eps_growth * 100).toFixed(2)}%` : 'N/A';
-
-                    epsTtmInput.value = (typeof data.trailing_eps === 'number' && !isNaN(data.trailing_eps)) ? data.trailing_eps.toFixed(2) : '0.00';
-
-                    growthRateInput.value = '';
-
-                    peMultipleInput.value = '';
-
-                    const fcfShare = (typeof data.fcfShare === 'number' && !isNaN(data.fcfShare)) ? data.fcfShare : null;
-                    const fcfYield = (typeof data.fcfYield === 'number' && !isNaN(data.fcfYield)) ? data.fcfYield : null;
-                    const sbcImpact = (typeof data.sbcImpact === 'number' && !isNaN(data.sbcImpact)) ? data.sbcImpact : null;
-
-                    currentFcfShareDisplay.textContent = fcfShare !== null ? `$${fcfShare.toFixed(2)}` : '$N/A';
-                    fcfYieldDisplay.textContent = fcfYield !== null ? `${(fcfYield * 100).toFixed(2)}%` : 'N/A';
-                    sbcImpactDisplay.textContent = sbcImpact !== null ? `${(sbcImpact * 100).toFixed(2)}%` : 'N/A';
-
-                    fcfShareInput.value = fcfShare !== null ? fcfShare.toFixed(2) : '0.00';
-                    fcfGrowthRateInput.value = '';
-                    fcfYieldInput.value = '';
-
-                    displayMessage('Data fetched successfully. Enter your assumptions below to calculate.', false);
-                    currentTicker = ticker;
-                }
+                currentTicker = ticker;
+                displayCalcMessage('Data fetched. Enter assumptions to calculate.', false);
 
             } catch (error) {
-                console.error('Fetch error:', error);
-                displayMessage(`Failed to fetch current metrics. Please check the ticker and ensure the backend server is running. Error: ${error.message}`, true);
-                clearAllFields();
+                displayCalcMessage(error.message, true);
             } finally {
-                getCurrentDataBtn.disabled = false;
-                getCurrentDataBtn.innerHTML = originalBtnText;
+                setButtonState(getCurrentDataBtn, 'Search', false);
             }
         }
-
-        function formatPriceLabel(price) {
-            if (price >= 1000) {
-                return `$${(price / 1000).toFixed(1)}k`;
-            }
-            return `$${price.toFixed(0)}`;
-        }
-
-        function drawChart(projectedPrices, currentPrice) {
-            priceChartSvg.innerHTML = '';
-            chartErrorDiv.classList.add('hidden');
-
-            const allPrices = [currentPrice, ...projectedPrices].filter(p => typeof p === 'number' && !isNaN(p));
-
-            if (allPrices.length === 0) {
-                chartErrorDiv.textContent = 'No valid price data to draw chart.';
-                chartErrorDiv.classList.remove('hidden');
-                return;
-            }
-
-            const svgWidth = priceChartSvg.clientWidth || 500;
-            const svgHeight = priceChartSvg.clientHeight || 350;
-            const margin = { top: 30, right: 30, bottom: 50, left: 60 };
-            const chartWidth = svgWidth - margin.left - margin.right;
-            const chartHeight = svgHeight - margin.top - margin.bottom;
-
-            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            chartGroup.setAttribute('transform', `translate(${margin.left},${margin.top})`);
-            priceChartSvg.appendChild(chartGroup);
-
-            const maxPrice = Math.max(...allPrices);
-            const minPrice = Math.min(...allPrices);
-
-            const paddingFactor = 0.1;
-            const range = maxPrice - minPrice;
-            let effectiveMaxPrice = maxPrice + range * paddingFactor;
-            let effectiveMinPrice = minPrice - range * paddingFactor;
-
-            if (minPrice >= 0 && effectiveMinPrice < 0) {
-                effectiveMinPrice = 0;
-            }
-
-            if (effectiveMaxPrice === effectiveMinPrice) {
-                effectiveMaxPrice += 1;
-                effectiveMinPrice = Math.max(0, effectiveMinPrice - 1);
-            }
-
-            const xScale = (index) => (index / (allPrices.length - 1)) * chartWidth;
-            const yScale = (price) => chartHeight - ((price - effectiveMinPrice) / (effectiveMaxPrice - effectiveMinPrice)) * chartHeight;
-
-            const numYTicks = 5;
-            for (let i = 0; i <= numYTicks; i++) {
-                const y = (i / numYTicks) * chartHeight;
-                const priceValue = effectiveMinPrice + (effectiveMaxPrice - effectiveMinPrice) * (1 - (i / numYTicks));
-
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', 0);
-                line.setAttribute('y1', y);
-                line.setAttribute('x2', chartWidth);
-                line.setAttribute('y2', y);
-                line.setAttribute('class', 'chart-grid-line');
-                chartGroup.appendChild(line);
-
-                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', -10);
-                text.setAttribute('y', y + 4);
-                text.setAttribute('text-anchor', 'end');
-                text.setAttribute('class', 'chart-label');
-                text.textContent = formatPriceLabel(priceValue);
-                chartGroup.appendChild(text);
-            }
-
-            const years = ['Today', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'];
-            for (let i = 0; i < allPrices.length; i++) {
-                const x = xScale(i);
-                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                text.setAttribute('x', x);
-                text.setAttribute('y', chartHeight + 20);
-                text.setAttribute('text-anchor', 'middle');
-                text.setAttribute('class', 'chart-label');
-                text.textContent = years[i];
-                chartGroup.appendChild(text);
-            }
-
-            let pathD = `M ${xScale(0)} ${yScale(allPrices[0])}`;
-            for (let i = 1; i < allPrices.length; i++) {
-                pathD += ` L ${xScale(i)} ${yScale(allPrices[i])}`;
-            }
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', pathD);
-            path.setAttribute('class', 'chart-line');
-            chartGroup.appendChild(path);
-
-            allPrices.forEach((price, index) => {
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', xScale(index));
-                circle.setAttribute('cy', yScale(price));
-                circle.setAttribute('r', 4);
-                circle.setAttribute('class', 'chart-point');
-                chartGroup.appendChild(circle);
-            });
-        }
-
-        function captureCalculationData() {
-            return {
-                ticker: tickerInput.value.trim().toUpperCase(),
-                currentStockPrice: currentStockPrice,
-                activeTab: activeTab,
-                earnings: {
-                    epsTtm: parseFloat(epsTtmInput.value),
-                    growthRate: parseFloat(growthRateInput.value),
-                    peMultiple: parseFloat(peMultipleInput.value)
-                },
-                cashFlow: {
-                    fcfShare: parseFloat(fcfShareInput.value),
-                    fcfGrowthRate: parseFloat(fcfGrowthRateInput.value),
-                    fcfYield: parseFloat(fcfYieldInput.value)
-                },
-                desiredReturn: parseFloat(desiredReturnInput.value),
-                results: {
-                    returnFromToday: returnFromTodayDisplay.textContent,
-                    entryPrice: entryPriceDisplay.textContent,
-                    priceAfter5Years: priceAfter5YearsDisplay.textContent
-                }
-            };
-        }
-
-        function populateFormWithCalculationData(data) {
-            clearAllFields();
-            tickerInput.value = data.ticker || '';
-            currentStockPrice = data.currentStockPrice || 0;
-            currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-            companyInfoDiv.classList.remove('hidden-state');
-            companyLogo.textContent = data.ticker ? data.ticker.charAt(0) : '';
-            companyNameDisplay.textContent = data.ticker || '';
-
-            if (data.activeTab === 'earnings') {
-                earningsTabBtn.click();
-                epsTtmInput.value = data.earnings.epsTtm !== undefined ? data.earnings.epsTtm.toFixed(2) : '0.00';
-                growthRateInput.value = data.earnings.growthRate !== undefined ? data.earnings.growthRate : '';
-                peMultipleInput.value = data.earnings.peMultiple !== undefined ? data.earnings.peMultiple : '';
-            } else {
-                cashFlowTabBtn.click();
-                fcfShareInput.value = data.cashFlow.fcfShare !== undefined ? data.cashFlow.fcfShare.toFixed(2) : '0.00';
-                fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate !== undefined ? data.cashFlow.fcfGrowthRate : '';
-                fcfYieldInput.value = data.cashFlow.fcfYield !== undefined ? data.cashFlow.fcfYield : '';
-            }
-            desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
-
-            if (data.results) {
-                calculationResultsDiv.classList.remove('hidden');
-                returnFromTodayDisplay.textContent = data.results.returnFromToday || 'N/A';
-                entryPriceDisplay.textContent = data.results.entryPrice || 'N/A';
-                desiredReturnDisplay.textContent = data.desiredReturn !== undefined ? `${(data.desiredReturn).toFixed(2)}%` : 'N/A';
-                priceAfter5YearsDisplay.textContent = data.results.priceAfter5Years || 'N/A';
-            }
-
-            calculatePriceBtn.click();
-            displayMessage('Calculation loaded successfully. Click "Calculate Estimated Price" to re-run.', false);
-        }
-
-        async function saveCalculation() {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                displayMessage('You must be logged in to save calculations.', true);
-                showLoginPage();
-                return;
-            }
-
-            if (!currentTicker) {
-                displayMessage('Please search for a ticker and calculate a price before saving.', true);
-                return;
-            }
-
-            const calculationName = prompt('Enter a name for this calculation:');
-            if (!calculationName || calculationName.trim() === '') {
-                displayMessage('Calculation name cannot be empty.', true);
-                return;
-            }
-
-            const calculationData = captureCalculationData();
+        
+        function calculatePrice() {
+            let currentMetric, growthRate, targetMultiple, calculationType, impliedCurrentMultiple;
             
-            try {
-                const response = await fetch(`${backendBaseUrl}/save_calculation`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        ticker: currentTicker,
-                        name: calculationName.trim(),
-                        data: calculationData
-                    })
-                });
-
-                const result = await response.json();
-                if (response.ok) {
-                    displayMessage(result.message, false);
-                    loadSavedCalculations();
-                } else {
-                    displayMessage(`Error saving calculation: ${result.message}`, true);
-                }
-            } catch (error) {
-                console.error('Save calculation error:', error);
-                displayMessage('An error occurred while saving the calculation.', true);
+            if (activeTab === 'earnings') {
+                currentMetric = parseFloat(epsTtmInput.value);
+                growthRate = parseFloat(growthRateInput.value) / 100;
+                targetMultiple = parseFloat(peMultipleInput.value); // This is PE
+                calculationType = 'EPS';
+                impliedCurrentMultiple = currentMetric > 0 ? currentStockPrice / currentMetric : targetMultiple;
+            } else {
+                currentMetric = parseFloat(fcfShareInput.value);
+                growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
+                targetMultiple = parseFloat(fcfYieldInput.value) / 100; // This is Yield
+                calculationType = 'FCF';
+                impliedCurrentMultiple = currentStockPrice > 0 ? currentMetric / currentStockPrice : targetMultiple;
             }
-        }
+            const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
 
-        async function loadSavedCalculations() {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
+            if (isNaN(currentMetric) || isNaN(growthRate) || isNaN(targetMultiple) || isNaN(desiredReturn)) {
+                displayCalcMessage('Please fill all input fields with valid numbers.', true);
+                projectionOutput.classList.add('hidden');
+                projectionPlaceholder.classList.remove('hidden');
                 return;
             }
 
-            try {
-                const response = await fetch(`${backendBaseUrl}/load_calculations`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+            projectionPlaceholder.classList.add('hidden');
+            projectionOutput.classList.remove('hidden');
 
-                if (response.status === 401) {
-                    displayMessage('Session expired or unauthorized. Please log in again to load calculations.', true);
-                    handleLogout();
-                    return;
-                }
+            const estimatedMetric5Yr = currentMetric * Math.pow(1 + growthRate, 5);
+            const estimatedPrice5Yr = calculationType === 'EPS' ? estimatedMetric5Yr * targetMultiple : estimatedMetric5Yr / targetMultiple;
+            const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1/5) - 1) * 100 : 0;
+            const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
 
-                const data = await response.json();
+            calculationResultsDiv.innerHTML = `
+                <p class="flex justify-between p-2 border-b">Return from today: <strong class="text-green-600">${returnFromToday.toFixed(2)}%</strong></p>
+                <p class="flex justify-between p-2 border-b">Entry Price for ${desiredReturnInput.value}% Return: <strong class="text-green-600">$${entryPriceForDesiredReturn.toFixed(2)}</strong></p>
+                <p class="flex justify-between p-2">Price After 5 Years: <strong class="text-green-600">$${estimatedPrice5Yr.toFixed(2)}</strong></p>
+            `;
 
-                if (response.ok) {
-                    renderSavedCalculations(data);
-                } else {
-                    displayMessage(`Error loading calculations: ${data.message}`, true);
-                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
-                }
-            } catch (error) {
-                console.error('Load calculations error:', error);
-                displayMessage('An error occurred while loading saved calculations.', true);
-                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
+            const projectedPrices = [];
+            const numYears = 5;
+            for (let i = 1; i <= numYears; i++) {
+                const futureMetric = currentMetric * Math.pow(1 + growthRate, i);
+                const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
+                const futurePrice = calculationType === 'EPS' 
+                    ? futureMetric * interpolatedMultiple
+                    : (interpolatedMultiple > 0 ? futureMetric / interpolatedMultiple : 0);
+                projectedPrices.push(futurePrice);
             }
+            
+            if (dcfProjectionChart) dcfProjectionChart.destroy();
+            const chartData = {
+                labels: ['Today', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'],
+                data: [currentStockPrice, ...projectedPrices],
+                type: 'line',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                borderColor: 'rgba(40, 167, 69, 1)'
+            };
+            dcfProjectionChart = createChart(priceChartCanvas, 'Projected Price Growth', chartData);
         }
-
-        function renderSavedCalculations(calculations) {
-            savedCalculationsContainer.innerHTML = '';
-            if (calculations.length === 0) {
-                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
-                return;
-            }
-
-            calculations.forEach(calc => {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'saved-calculation-item';
-                itemDiv.innerHTML = `
-                    <span>${calc.id} (${calc.ticker})</span>
-                    <div>
-                        <button data-id="${calc.id}" class="load-btn primary-button bg-orange-500 hover:bg-orange-600">Load</button>
-                        <button data-id="${calc.id}" class="delete-btn primary-button bg-red-500 hover:bg-red-600">Delete</button>
-                    </div>
-                `;
-                savedCalculationsContainer.appendChild(itemDiv);
-            });
-
-            savedCalculationsContainer.querySelectorAll('.load-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const calcId = event.target.dataset.id;
-                    const selectedCalc = calculations.find(c => c.id === calcId);
-                    if (selectedCalc) {
-                        populateFormWithCalculationData(selectedCalc.data);
-                    }
-                });
-            });
-
-            savedCalculationsContainer.querySelectorAll('.delete-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const calcId = event.target.dataset.id;
-                    showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, async () => {
-                        await deleteCalculation(calcId);
-                    });
-                });
-            });
-        }
-
-        function showConfirmationModal(message, callback) {
-            modalMessage.textContent = message;
-            modalTitle.textContent = 'Confirm Deletion';
-            confirmationModal.classList.remove('hidden');
-            modalCallback = callback;
-        }
-
-        function hideConfirmationModal() {
-            confirmationModal.classList.add('hidden');
-            modalCallback = null;
-        }
-
-        confirmYesBtn.addEventListener('click', () => {
-            if (modalCallback) {
-                modalCallback();
-            }
-            hideConfirmationModal();
-        });
-
-        confirmNoBtn.addEventListener('click', () => {
-            hideConfirmationModal();
-        });
-
-        async function deleteCalculation(calcId) {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                displayMessage('You must be logged in to delete calculations.', true);
-                showLoginPage();
-                return;
-            }
-
-            try {
-                const response = await fetch(`${backendBaseUrl}/delete_calculation/${calcId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                const result = await response.json();
-                if (response.ok) {
-                    displayMessage(result.message, false);
-                    loadSavedCalculations();
-                } else {
-                    displayMessage(`Error deleting calculation: ${result.message}`, true);
-                }
-            } catch (error) {
-                console.error('Delete calculation error:', error);
-                displayMessage('An error occurred while deleting the calculation.', true);
-            }
-        }
-
+        
+        // Add event listeners
         loginBtn.addEventListener('click', handleLogin);
-        showRegisterBtn.addEventListener('click', showRegisterPage);
-        showLoginBtn.addEventListener('click', showLoginPage);
         registerBtn.addEventListener('click', handleRegister);
-
-        dcfCalculatorMenuBtn.addEventListener('click', () => {
-            showAppContent();
-        });
-        logoutMenuBtn.addEventListener('click', handleLogout);
-
-        backToMenuBtn.addEventListener('click', () => {
-            showMainMenu();
-        });
-
+        getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
+        calculatePriceBtn.addEventListener('click', calculatePrice);
+        
         earningsTabBtn.addEventListener('click', () => {
+            activeTab = 'earnings';
             earningsTabBtn.classList.add('active');
             cashFlowTabBtn.classList.remove('active');
             earningsSection.classList.remove('hidden');
             cashFlowSection.classList.add('hidden');
-            activeTab = 'earnings';
         });
 
         cashFlowTabBtn.addEventListener('click', () => {
+            activeTab = 'cashFlow';
             cashFlowTabBtn.classList.add('active');
             earningsTabBtn.classList.remove('active');
             cashFlowSection.classList.remove('hidden');
             earningsSection.classList.add('hidden');
-            activeTab = 'cashFlow';
         });
 
-        getCurrentDataBtn.addEventListener('click', () => {
-            const ticker = tickerInput.value.trim().toUpperCase();
-            if (ticker) {
-                fetchAndPopulateMetrics(ticker);
-            } else {
-                displayMessage('Please enter a stock ticker symbol to get current data.', true);
-                clearAllFields();
-            }
-        });
-
-        tickerInput.addEventListener('change', () => {
-            const ticker = tickerInput.value.trim().toUpperCase();
-            if (!ticker) {
-                displayMessage('Please enter a stock ticker symbol.', true);
-                clearAllFields();
-            }
-        });
-
-        calculatePriceBtn.addEventListener('click', () => {
-            let currentMetric = 0;
-            let growthRate = 0;
-            let targetMultiple = 0;
-            let impliedCurrentMultiple = 0;
-            let calculationType = '';
-
-            if (activeTab === 'earnings') {
-                currentMetric = parseFloat(epsTtmInput.value);
-                growthRate = parseFloat(growthRateInput.value) / 100;
-                targetMultiple = parseFloat(peMultipleInput.value);
-
-                if (currentMetric !== 0) {
-                    impliedCurrentMultiple = currentStockPrice / currentMetric;
-                } else {
-                    impliedCurrentMultiple = targetMultiple;
-                }
-                calculationType = 'EPS';
-            } else {
-                currentMetric = parseFloat(fcfShareInput.value);
-                growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
-                targetMultiple = parseFloat(fcfYieldInput.value) / 100;
-
-                if (currentMetric !== 0) {
-                    impliedCurrentMultiple = currentMetric / currentStockPrice;
-                } else {
-                    impliedCurrentMultiple = targetMultiple;
-                }
-                calculationType = 'FCF';
-            }
-
-            if (isNaN(impliedCurrentMultiple) || !isFinite(impliedCurrentMultiple) || impliedCurrentMultiple === 0) {
-                impliedCurrentMultiple = targetMultiple;
-            }
-
-            const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
-
-            if (isNaN(currentMetric) || currentMetric <= 0) {
-                displayMessage(`Please ensure a valid Current ${calculationType} (TTM) is available. Click "Get Current Data" first.`, true);
-                return;
-            }
-            if (isNaN(growthRate)) {
-                displayMessage(`Please enter a valid ${calculationType} Growth Rate (e.g., 10 for 10%).`, true);
-                return;
-            }
-            if (isNaN(targetMultiple) || targetMultiple <= 0) {
-                displayMessage(`Please enter a valid Appropriate ${calculationType === 'EPS' ? 'EPS Multiple (P/E ratio)' : 'FCF Yield'}.`, true);
-                return;
-            }
-
-            const estimatedMetric5Yr = currentMetric * Math.pow((1 + growthRate), 5);
-
-            let estimatedPrice5Yr = 0;
-            if (calculationType === 'EPS') {
-                estimatedPrice5Yr = estimatedMetric5Yr * targetMultiple;
-            } else {
-                estimatedPrice5Yr = targetMultiple !== 0 ? estimatedMetric5Yr / targetMultiple : 0;
-            }
-
-            let returnFromToday = 'N/A';
-            if (currentStockPrice > 0 && estimatedPrice5Yr > 0) {
-                returnFromToday = ((estimatedPrice5Yr / currentStockPrice) ** (1/5) - 1) * 100;
-            }
-
-            let entryPriceForDesiredReturn = 'N/A';
-            if (!isNaN(desiredReturn) && desiredReturn !== -1 && estimatedPrice5Yr > 0) {
-                entryPriceForDesiredReturn = estimatedPrice5Yr / ((1 + desiredReturn) ** 5);
-            }
-
-            calculationResultsDiv.classList.remove('hidden');
-            returnFromTodayDisplay.textContent = returnFromToday !== 'N/A' ? `${returnFromToday.toFixed(2)}%` : 'N/A';
-            entryPriceDisplay.textContent = entryPriceForDesiredReturn !== 'N/A' ? `$${entryPriceForDesiredReturn.toFixed(2)}` : 'N/A';
-            desiredReturnDisplay.textContent = !isNaN(desiredReturn) ? `${(desiredReturn * 100).toFixed(2)}%` : 'N/A';
-            priceAfter5YearsDisplay.textContent = estimatedPrice5Yr !== 0 ? `$${estimatedPrice5Yr.toFixed(2)}` : 'N/A';
-
-            calculationMessageDiv.innerHTML = '';
-
-            const projectedPrices = [];
-            const numYears = 5;
-
-            for (let i = 1; i <= numYears; i++) {
-                const futureMetric = currentMetric * Math.pow((1 + growthRate), i);
-                const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
-
-                if (calculationType === 'EPS') {
-                    projectedPrices.push(futureMetric * interpolatedMultiple);
-                } else {
-                    projectedPrices.push(interpolatedMultiple !== 0 ? futureMetric / interpolatedMultiple : 0);
-                }
-            }
-            drawChart(projectedPrices, currentStockPrice);
-            currentCalculationData = captureCalculationData();
-        });
-
-        saveCalculationBtn.addEventListener('click', saveCalculation);
-        loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
-
+        // Initial Load
         checkAuthAndRender();
-    
     </script>
 </body>
 </html>
