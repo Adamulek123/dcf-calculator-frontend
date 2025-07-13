@@ -171,7 +171,10 @@
         .input-group { display: flex; flex-direction: column; margin-bottom: 1.75rem; }
         .input-group label { font-size: 1.05rem; color: #212529; font-weight: 500; margin-bottom: 0.6rem; text-align: left; }
         .input-field-wrapper { display: flex; align-items: center; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 0.75rem; padding: 0.6rem 1rem; transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
-        .input-field-wrapper:focus-within { border-color: #80bdff; box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); }
+        .input-field-wrapper:focus-within { border-color: #80bdff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+            outline: none;
+        }
         .input-field-wrapper input { color: #495057; background: none; border: none; outline: none; flex-grow: 1; padding: 0; -moz-appearance: textfield; }
         .input-field-wrapper input::-webkit-outer-spin-button, .input-field-wrapper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .input-field-wrapper .currency-symbol, .input-field-wrapper .percentage-symbol { color: #6c757d; font-size: 1.05rem; padding-right: 0.6rem; }
@@ -209,6 +212,58 @@
         #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
         #close-fullscreen-btn { position: absolute; top: 2rem; right: 2rem; font-size: 2rem; background: none; border: none; color: #212529; cursor: pointer; }
 
+        /* Toast Notification styles */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1002; /* Higher than all other modals */
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none; /* Allows clicks to pass through */
+        }
+
+        .toast {
+            background-color: #333;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateX(100%);
+            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s; /* Slide in, then fade out after 2.5s delay */
+            min-width: 250px;
+            max-width: 350px;
+            font-size: 1rem;
+            line-height: 1.4;
+            pointer-events: auto; /* Re-enable pointer events for the toast itself */
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toast.success {
+            background-color: #28a745; /* Green */
+        }
+
+        .toast.error {
+            background-color: #dc3545; /* Red */
+        }
+
+        .toast-icon {
+            font-size: 1.5rem;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -342,6 +397,9 @@
         </div>
     </div>
 
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
     <script type="module">
         const backendBaseUrl = 'https://dcf-backend.onrender.com';
 
@@ -365,15 +423,15 @@
         const loginUsernameInput = document.getElementById('loginUsername');
         const loginPasswordInput = document.getElementById('loginPassword');
         const loginBtn = document.getElementById('loginBtn');
-        const loginMessage = document.getElementById('loginMessage');
+        // const loginMessage = document.getElementById('loginMessage'); // Removed, replaced by toast
         const registerUsernameInput = document.getElementById('registerUsername');
         const registerPasswordInput = document.getElementById('registerPassword');
         const registerBtn = document.getElementById('registerBtn');
-        const registerMessage = document.getElementById('registerMessage');
+        // const registerMessage = document.getElementById('registerMessage'); // Removed, replaced by toast
 
         // --- Insights Elements ---
         const insightsTickerInput = document.getElementById('insightsTickerInput');
-        const getInsightsBtn = document.getElementById('getInsightsBtn'); // Corrected typo
+        const getInsightsBtn = document.getElementById('getInsightsBtn');
         const insightsGrid = document.getElementById('insightsGrid');
         const annualToggleBtn = document.getElementById('annualToggleBtn');
         const quarterlyToggleBtn = document.getElementById('quarterlyToggleBtn');
@@ -409,7 +467,7 @@
         const saveCalculationBtn = document.getElementById('saveCalculationBtn');
         const loadCalculationsBtn = document.getElementById('loadCalculationsBtn');
         const savedCalculationsContainer = document.getElementById('savedCalculationsContainer');
-        const calculationMessageDiv = document.getElementById('calculationMessage');
+        // const calculationMessageDiv = document.getElementById('calculationMessage'); // Removed, replaced by toast
         const priceChartCanvas = document.getElementById('priceChart');
         const confirmationModal = document.getElementById('confirmationModal');
         const modalTitle = document.getElementById('modalTitle');
@@ -421,11 +479,15 @@
         const calculationResultsDiv = document.getElementById('calculationResults');
 
         // These elements are now static in HTML, so we can declare them once globally
-        const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay'); // Updated ID to match HTML
+        const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay');
         const entryPriceDisplay = document.getElementById('entryPriceDisplay');
         const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
-        const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay'); // Updated ID to match HTML
-        const chartErrorDiv = document.getElementById('chartError'); // This element still doesn't exist in HTML. Removed its usage in clearAllFields.
+        const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay');
+        // const chartErrorDiv = document.getElementById('chartError'); // This element still doesn't exist in HTML. Removed its usage in clearAllFields.
+
+        // Toast Container Element
+        const toastContainer = document.getElementById('toast-container');
+
 
         let activeFullscreenChart = null;
         let dcfProjectionChart = null;
@@ -594,6 +656,7 @@
         async function fetchInsightsData() {
             const ticker = insightsTickerInput.value.trim().toUpperCase();
             if (!ticker) {
+                showToast('Please enter a ticker symbol to see financial insights.', true); // Changed to toast
                 insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol to see financial insights.</p>';
                 return;
             }
@@ -611,9 +674,11 @@
                 
                 fullInsightsData = fetchedData; // Store the full data globally {price, annual, quarterly}
                 renderInsightsCharts();
+                showToast('Insights data fetched successfully!', false); // Changed to toast
 
             } catch (error) {
                 insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
+                showToast(`Failed to get insights: ${error.message}`, true); // Changed to toast
             } finally {
                 setButtonState(getInsightsBtn, 'Get Insights', false);
             }
@@ -643,12 +708,6 @@
             button.disabled = disabled;
         }
         
-        function showMessage(element, message, isError = false) {
-            element.textContent = message;
-            element.className = `login-message ${isError ? 'text-red-500' : 'text-green-500'}`;
-            element.classList.remove('hidden');
-        }
-
         async function apiCall(endpoint, options = {}) {
             const token = localStorage.getItem('jwt_token');
             if (token) {
@@ -680,12 +739,12 @@
                 
                 localStorage.setItem('jwt_token', data.token);
                 localStorage.setItem('current_username', loginUsernameInput.value);
-                showMessage(loginMessage, 'Login successful!', false);
+                showToast('Login successful!', false); // Changed to toast
                 setTimeout(() => {
                     showPage(mainMenu);
                 }, 1000);
             } catch (error) {
-                showMessage(loginMessage, error.message, true);
+                showToast(`Login failed: ${error.message}`, true); // Changed to toast
             } finally {
                 setButtonState(loginBtn, 'Login', false);
             }
@@ -702,12 +761,12 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message || 'Registration failed');
 
-                showMessage(registerMessage, 'Registration successful! Please log in.', false);
+                showToast('Registration successful! Please log in.', false); // Changed to toast
                 setTimeout(() => showPage(loginPage), 2000);
             } catch (error) {
-                showMessage(registerMessage, error.message, true);
+                showToast(`Registration failed: ${error.message}`, true); // Changed to toast
             } finally {
-                setButtonState(registerBtn, 'Register', false); // Corrected 'register' to 'registerBtn'
+                setButtonState(registerBtn, 'Register', false);
             }
         }
         
@@ -715,6 +774,7 @@
             localStorage.removeItem('jwt_token');
             localStorage.removeItem('current_username');
             showPage(loginPage);
+            showToast('You have been successfully logged out.', false); // Changed to toast
         }
 
         function checkAuthAndRender() {
@@ -723,11 +783,6 @@
             } else {
                 showPage(loginPage);
             }
-        }
-
-        function displayCalcMessage(message, isError = false) {
-            calculationMessageDiv.textContent = message;
-            calculationMessageDiv.className = `mt-4 text-center ${isError ? 'text-red-500' : 'text-gray-500'}`;
         }
         
         function clearAllFields() {
@@ -751,8 +806,6 @@
             if (fcfYieldInput) fcfYieldInput.value = '';
 
             if (desiredReturnInput) desiredReturnInput.value = '';
-            // No longer hide calculationResultsDiv, just clear its content
-            // if (calculationResultsDiv) calculationResultsDiv.classList.add('hidden');
             
             // These elements are now static, so we just clear their text content
             if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
@@ -760,7 +813,8 @@
             if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
             if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = 'N/A';
             
-            if (calculationMessageDiv) calculationMessageDiv.innerHTML = '<p class="text-gray-400">Estimated 5-Year Price will appear here...</p>';
+            // calculationMessageDiv is no longer used for messages, replaced by toast
+            // if (calculationMessageDiv) calculationMessageDiv.innerHTML = '<p class="text-gray-400">Estimated 5-Year Price will appear here...</p>';
             
             // Check if priceChartCanvas exists before trying to manipulate it
             if (priceChartCanvas) {
@@ -770,16 +824,13 @@
                     dcfProjectionChart = null; // Clear the reference
                 }
             }
-            // Removed usage of chartErrorDiv as it doesn't exist in HTML
-            // if (chartErrorDiv) chartErrorDiv.classList.add('hidden');
             currentTicker = '';
-            // currentCalculationData = {}; // This variable is not declared, removed its usage
         }
 
         async function fetchAndPopulateMetrics() {
             const ticker = tickerInput.value.trim().toUpperCase();
             if (!ticker) {
-                displayCalcMessage('Please enter a ticker symbol.', true);
+                showToast('Please enter a ticker symbol.', true); // Changed to toast
                 return;
             }
             setButtonState(getCurrentDataBtn, 'Fetching...', true);
@@ -787,8 +838,6 @@
             projectionPlaceholder.classList.remove('hidden');
             projectionOutput.classList.add('hidden');
             if (dcfProjectionChart) dcfProjectionChart.destroy();
-            // Removed the dynamic innerHTML overwrite here, as elements are now static
-            // calculationResultsDiv.innerHTML = `...`; 
 
             try {
                 const response = await apiCall(`/get_trailing_metrics?ticker=${ticker}`);
@@ -815,10 +864,10 @@
                 fcfShareInput.value = (data.fcfShare || 0).toFixed(2);
 
                 currentTicker = ticker;
-                displayCalcMessage('Data fetched. Enter assumptions to calculate.', false);
+                showToast('Current data loaded successfully!', false); // Changed to toast
 
             } catch (error) {
-                displayCalcMessage(error.message, true);
+                showToast(`Data fetch error: ${error.message}`, true); // Changed to toast
             } finally {
                 setButtonState(getCurrentDataBtn, 'Search', false);
             }
@@ -827,19 +876,19 @@
         async function saveCalculation() {
             const token = localStorage.getItem('jwt_token');
             if (!token) {
-                displayCalcMessage('You must be logged in to save calculations.', true);
+                showToast('You must be logged in to save calculations.', true); // Changed to toast
                 showPage(loginPage);
                 return;
             }
 
             if (!currentTicker) {
-                displayCalcMessage('Please search for a ticker and calculate a price before saving.', true);
+                showToast('Please search for a ticker and calculate a price before saving.', true); // Changed to toast
                 return;
             }
 
             const calculationName = prompt('Enter a name for this calculation:');
             if (!calculationName || calculationName.trim() === '') {
-                displayCalcMessage('Calculation name cannot be empty.', true);
+                showToast('Calculation name cannot be empty.', true); // Changed to toast
                 return;
             }
 
@@ -861,14 +910,14 @@
 
                 const result = await response.json();
                 if (response.ok) {
-                    displayCalcMessage(result.message, false);
+                    showToast(result.message, false); // Changed to toast
                     loadSavedCalculations();
                 } else {
-                    displayCalcMessage(`Error saving calculation: ${result.message}`, true);
+                    showToast(`Error saving calculation: ${result.message}`, true); // Changed to toast
                 }
             } catch (error) {
                 console.error('Save calculation error:', error);
-                displayCalcMessage('An error occurred while saving the calculation.', true);
+                showToast('An error occurred while saving the calculation.', true); // Changed to toast
             }
         }
         
@@ -887,7 +936,7 @@
                 });
 
                 if (response.status === 401) {
-                    displayCalcMessage('Session expired or unauthorized. Please log in again to load calculations.', true);
+                    showToast('Session expired or unauthorized. Please log in again to load calculations.', true); // Changed to toast
                     handleLogout();
                     return;
                 }
@@ -896,13 +945,14 @@
 
                 if (response.ok) {
                     renderSavedCalculations(data);
+                    showToast('Saved calculations loaded.', false); // Changed to toast
                 } else {
-                    displayCalcMessage(`Error loading calculations: ${data.message}`, true);
+                    showToast(`Error loading calculations: ${data.message}`, true); // Changed to toast
                     savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
                 }
             } catch (error) {
                 console.error('Load calculations error:', error);
-                displayCalcMessage('An error occurred while loading saved calculations.', true);
+                showToast('An error occurred while loading saved calculations.', true); // Changed to toast
                 savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
             }
         }
@@ -965,7 +1015,7 @@
             const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
 
             if (isNaN(currentMetric) || isNaN(growthRate) || isNaN(targetMultiple) || isNaN(desiredReturn)) {
-                displayCalcMessage('Please fill all input fields with valid numbers.', true);
+                showToast('Please fill all input fields with valid numbers.', true); // Changed to toast
                 projectionOutput.classList.add('hidden');
                 projectionPlaceholder.classList.remove('hidden');
                 return;
@@ -1064,7 +1114,7 @@
             // Trigger calculation to update chart and ensure all fields are consistent
             // This will also update the static result display elements.
             calculatePriceBtn.click(); 
-            displayCalcMessage('Calculation loaded successfully. Click "Calculate" to re-run.', false);
+            showToast('Saved calculation loaded successfully. Click "Calculate" to re-run.', false); // Changed to toast
         }
 
         
@@ -1094,7 +1144,7 @@
         async function deleteCalculation(calcId) {
             const token = localStorage.getItem('jwt_token');
             if (!token) {
-                displayCalcMessage('You must be logged in to delete calculations.', true);
+                showToast('You must be logged in to delete calculations.', true); // Changed to toast
                 showPage(loginPage);
                 return;
             }
@@ -1109,16 +1159,42 @@
 
                 const result = await response.json();
                 if (response.ok) {
-                    displayCalcMessage(result.message, false);
+                    showToast(result.message, false); // Changed to toast
                     loadSavedCalculations();
                 } else {
-                    displayCalcMessage(`Error deleting calculation: ${result.message}`, true);
+                    showToast(`Error deleting calculation: ${result.message}`, true); // Changed to toast
                 }
             } catch (error) {
                 console.error('Delete calculation error:', error);
-                displayCalcMessage('An error occurred while deleting the calculation.', true);
+                showToast('An error occurred while deleting the calculation.', true); // Changed to toast
             }
         }
+
+        // --- New Toast Notification Function ---
+        function showToast(message, isError = false, duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${isError ? 'error' : 'success'}`;
+            // Optional: Add an icon
+            const icon = document.createElement('span');
+            icon.className = 'toast-icon';
+            icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; // Cross for error, Checkmark for success
+            toast.appendChild(icon);
+            
+            const text = document.createElement('span');
+            text.textContent = message;
+            toast.appendChild(text);
+
+            toastContainer.appendChild(toast);
+
+            // Remove toast after duration
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.5s forwards'; // Start fade out animation
+                toast.addEventListener('animationend', () => {
+                    toast.remove();
+                });
+            }, duration);
+        }
+
         // Add event listeners
         loginBtn.addEventListener('click', handleLogin);
         registerBtn.addEventListener('click', handleRegister);
