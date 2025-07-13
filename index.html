@@ -290,7 +290,13 @@
         
             <div id="projectionOutput" class="hidden">
                 <h2 class="section-title">5-Year Projection</h2>
-                <div id="calculationResults" class="p-4 bg-gray-50 rounded-lg border"></div>
+                <div id="calculationResults" class="p-4 bg-gray-50 rounded-lg border">
+                    <!-- These elements are now static, matching clone.html's approach -->
+                    <p class="flex justify-between p-2 border-b">Return from today: <strong id="returnFromTodayDisplay" class="text-green-600">N/A</strong></p>
+                    <p class="flex justify-between p-2 border-b">Entry Price for Desired Return: <strong id="entryPriceDisplay" class="text-green-600">N/A</strong></p>
+                    <p class="flex justify-between p-2 border-b">Desired Return: <strong id="desiredReturnDisplay" class="text-green-600">N/A</strong></p>
+                    <p class="flex justify-between p-2">Price After 5 Years: <strong id="priceAfter5YearsDisplay" class="text-green-600">N/A</strong></p>
+                </div>
                 <div class="chart-container mt-6" style="position: relative; height:300px">
                     <canvas id="priceChart"></canvas>
                 </div>
@@ -367,7 +373,7 @@
 
         // --- Insights Elements ---
         const insightsTickerInput = document.getElementById('insightsTickerInput');
-        const getInsightsBtn = document.getElementById('getInsightsBtn');
+        const getInsightsBtn = document.getElementById('getInsightsBtn'); // Corrected typo
         const insightsGrid = document.getElementById('insightsGrid');
         const annualToggleBtn = document.getElementById('annualToggleBtn');
         const quarterlyToggleBtn = document.getElementById('quarterlyToggleBtn');
@@ -413,6 +419,13 @@
         const projectionPlaceholder = document.getElementById('projectionPlaceholder');
         const projectionOutput = document.getElementById('projectionOutput');
         const calculationResultsDiv = document.getElementById('calculationResults');
+
+        // These elements are now static in HTML, so we can declare them once globally
+        const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay'); // Updated ID to match HTML
+        const entryPriceDisplay = document.getElementById('entryPriceDisplay');
+        const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
+        const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay'); // Updated ID to match HTML
+        const chartErrorDiv = document.getElementById('chartError'); // This element still doesn't exist in HTML. Removed its usage in clearAllFields.
 
         let activeFullscreenChart = null;
         let dcfProjectionChart = null;
@@ -480,10 +493,31 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
+                    
                     scales: {
-                        y: { beginAtZero: false, grid: { color: '#e9ecef' }, ticks: { color: '#6c757d' } },
+                        y: {
+                            beginAtZero: ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'].includes(title) ? true : false,
+                            grid: { color: '#e9ecef' },
+                            ticks: {
+                                color: '#6c757d',
+                                callback: function(value, index, values) {
+                                    const chartTitlesToFormat = ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'];
+                                    if (chartTitlesToFormat.includes(title)) {
+                                        if (Math.abs(value) >= 1000000000) {
+                                            return '$' + (value / 1000000000).toFixed(1) + 'B';
+                                        }
+                                        if (Math.abs(value) >= 1000000) {
+                                            return '$' + (value / 1000000).toFixed(1) + 'M';
+                                        }
+                                        return '$' + value.toLocaleString();
+                                    }
+                                    return value.toLocaleString();
+                                }
+                            }
+                        },
                         x: { grid: { display: false }, ticks: { color: '#6c757d' } }
-                    },
+                    }
+                ,
                     onClick: onClickHandler
                 }
             });
@@ -673,7 +707,7 @@
             } catch (error) {
                 showMessage(registerMessage, error.message, true);
             } finally {
-                setButtonState(registerBtn, 'Register', false);
+                setButtonState(registerBtn, 'Register', false); // Corrected 'register' to 'registerBtn'
             }
         }
         
@@ -696,6 +730,52 @@
             calculationMessageDiv.className = `mt-4 text-center ${isError ? 'text-red-500' : 'text-gray-500'}`;
         }
         
+        function clearAllFields() {
+            companyInfoDiv.classList.add('hidden-state');
+            if (companyLogo) companyLogo.textContent = '';
+            if (companyNameDisplay) companyNameDisplay.textContent = '';
+            if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = '$0.00';
+
+            if (currentEpsDisplay) currentEpsDisplay.textContent = '$0.00';
+            if (currentPeDisplay) currentPeDisplay.textContent = '0.00';
+            if (epsGrowthDisplay) epsGrowthDisplay.textContent = '0.0%';
+            if (epsTtmInput) epsTtmInput.value = '0.00';
+            if (growthRateInput) growthRateInput.value = '';
+            if (peMultipleInput) peMultipleInput.value = '';
+
+            if (currentFcfShareDisplay) currentFcfShareDisplay.textContent = '$0.00';
+            if (fcfYieldDisplay) fcfYieldDisplay.textContent = '0.0%';
+            if (sbcImpactDisplay) sbcImpactDisplay.textContent = '0.0%';
+            if (fcfShareInput) fcfShareInput.value = '0.00';
+            if (fcfGrowthRateInput) fcfGrowthRateInput.value = '';
+            if (fcfYieldInput) fcfYieldInput.value = '';
+
+            if (desiredReturnInput) desiredReturnInput.value = '';
+            // No longer hide calculationResultsDiv, just clear its content
+            // if (calculationResultsDiv) calculationResultsDiv.classList.add('hidden');
+            
+            // These elements are now static, so we just clear their text content
+            if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
+            if (entryPriceDisplay) entryPriceDisplay.textContent = 'N/A';
+            if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
+            if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = 'N/A';
+            
+            if (calculationMessageDiv) calculationMessageDiv.innerHTML = '<p class="text-gray-400">Estimated 5-Year Price will appear here...</p>';
+            
+            // Check if priceChartCanvas exists before trying to manipulate it
+            if (priceChartCanvas) {
+                // If you have a Chart.js instance associated with priceChartCanvas, destroy it
+                if (dcfProjectionChart) {
+                    dcfProjectionChart.destroy();
+                    dcfProjectionChart = null; // Clear the reference
+                }
+            }
+            // Removed usage of chartErrorDiv as it doesn't exist in HTML
+            // if (chartErrorDiv) chartErrorDiv.classList.add('hidden');
+            currentTicker = '';
+            // currentCalculationData = {}; // This variable is not declared, removed its usage
+        }
+
         async function fetchAndPopulateMetrics() {
             const ticker = tickerInput.value.trim().toUpperCase();
             if (!ticker) {
@@ -707,7 +787,8 @@
             projectionPlaceholder.classList.remove('hidden');
             projectionOutput.classList.add('hidden');
             if (dcfProjectionChart) dcfProjectionChart.destroy();
-            calculationResultsDiv.innerHTML = '';
+            // Removed the dynamic innerHTML overwrite here, as elements are now static
+            // calculationResultsDiv.innerHTML = `...`; 
 
             try {
                 const response = await apiCall(`/get_trailing_metrics?ticker=${ticker}`);
@@ -743,6 +824,128 @@
             }
         }
         
+        async function saveCalculation() {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                displayCalcMessage('You must be logged in to save calculations.', true);
+                showPage(loginPage);
+                return;
+            }
+
+            if (!currentTicker) {
+                displayCalcMessage('Please search for a ticker and calculate a price before saving.', true);
+                return;
+            }
+
+            const calculationName = prompt('Enter a name for this calculation:');
+            if (!calculationName || calculationName.trim() === '') {
+                displayCalcMessage('Calculation name cannot be empty.', true);
+                return;
+            }
+
+            const calculationData = captureCalculationData();
+            
+            try {
+                const response = await fetch(`${backendBaseUrl}/save_calculation`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        ticker: currentTicker,
+                        name: calculationName.trim(),
+                        data: calculationData
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    displayCalcMessage(result.message, false);
+                    loadSavedCalculations();
+                } else {
+                    displayCalcMessage(`Error saving calculation: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error('Save calculation error:', error);
+                displayCalcMessage('An error occurred while saving the calculation.', true);
+            }
+        }
+        
+        async function loadSavedCalculations() {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/load_calculations`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 401) {
+                    displayCalcMessage('Session expired or unauthorized. Please log in again to load calculations.', true);
+                    handleLogout();
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    renderSavedCalculations(data);
+                } else {
+                    displayCalcMessage(`Error loading calculations: ${data.message}`, true);
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
+                }
+            } catch (error) {
+                console.error('Load calculations error:', error);
+                displayCalcMessage('An error occurred while loading saved calculations.', true);
+                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
+            }
+        }
+        
+        function renderSavedCalculations(calculations) {
+            savedCalculationsContainer.innerHTML = '';
+            if (calculations.length === 0) {
+                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
+                return;
+            }
+
+            calculations.forEach(calc => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'saved-calculation-item';
+                itemDiv.innerHTML = `
+                    <span>${calc.id} (${calc.ticker})</span>
+                    <div>
+                        <button data-id="${calc.id}" class="load-btn primary-button bg-orange-500 hover:bg-orange-600">Load</button>
+                        <button data-id="${calc.id}" class="delete-btn primary-button bg-red-500 hover:bg-red-600">Delete</button>
+                    </div>
+                `;
+                savedCalculationsContainer.appendChild(itemDiv);
+            });
+
+            savedCalculationsContainer.querySelectorAll('.load-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const calcId = event.target.dataset.id;
+                    const selectedCalc = calculations.find(c => c.id === calcId);
+                    if (selectedCalc) {
+                        await populateFormWithCalculationData(selectedCalc.data);
+                    }
+                });
+            });
+
+            savedCalculationsContainer.querySelectorAll('.delete-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const calcId = event.target.dataset.id;
+                    showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, async () => {
+                        await deleteCalculation(calcId);
+                    });
+                });
+            });
+        }
         function calculatePrice() {
             let currentMetric, growthRate, targetMultiple, calculationType, impliedCurrentMultiple;
             
@@ -776,11 +979,11 @@
             const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1/5) - 1) * 100 : 0;
             const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
 
-            calculationResultsDiv.innerHTML = `
-                <p class="flex justify-between p-2 border-b">Return from today: <strong class="text-green-600">${returnFromToday.toFixed(2)}%</strong></p>
-                <p class="flex justify-between p-2 border-b">Entry Price for ${desiredReturnInput.value}% Return: <strong class="text-green-600">$${entryPriceForDesiredReturn.toFixed(2)}</strong></p>
-                <p class="flex justify-between p-2">Price After 5 Years: <strong class="text-green-600">$${estimatedPrice5Yr.toFixed(2)}</strong></p>
-            `;
+            // Update the text content of the display elements (now static)
+            if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
+            if (entryPriceDisplay) entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
+            if (desiredReturnDisplay) desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`; // Ensure this always shows the input desired return
+            if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
 
             const projectedPrices = [];
             const numYears = 5;
@@ -804,6 +1007,118 @@
             dcfProjectionChart = createChart(priceChartCanvas, 'Projected Price Growth', chartData);
         }
         
+        function captureCalculationData() {
+            // Since the elements are now static and globally referenced,
+            // we can directly use the global variables.
+            return {
+                ticker: tickerInput.value.trim().toUpperCase(),
+                currentStockPrice: currentStockPrice,
+                activeTab: activeTab,
+                earnings: {
+                    epsTtm: parseFloat(epsTtmInput.value),
+                    growthRate: parseFloat(growthRateInput.value),
+                    peMultiple: parseFloat(peMultipleInput.value)
+                },
+                cashFlow: {
+                    fcfShare: parseFloat(fcfShareInput.value),
+                    fcfGrowthRate: parseFloat(fcfGrowthRateInput.value),
+                    fcfYield: parseFloat(fcfYieldInput.value)
+                },
+                desiredReturn: parseFloat(desiredReturnInput.value),
+                results: {
+                    // Safely access textContent using the globally defined variables
+                    returnFromToday: returnFromTodayDisplay ? returnFromTodayDisplay.textContent : 'N/A',
+                    entryPrice: entryPriceDisplay ? entryPriceDisplay.textContent : 'N/A',
+                    priceAfter5Years: priceAfter5YearsDisplay ? priceAfter5YearsDisplay.textContent : 'N/A'
+                }
+            };
+        }
+
+        async function populateFormWithCalculationData(data) { // Made async
+            clearAllFields();
+            tickerInput.value = data.ticker || ''; // Set ticker input first
+
+            // Fetch and populate current metrics for the loaded ticker
+            // This will update companyInfoDiv, currentEpsDisplay, currentPeDisplay, etc.
+            await fetchAndPopulateMetrics(); // Await this call
+
+            // Now populate input fields with saved data, overriding fetched defaults
+            // Use saved stock price if available, otherwise use the one fetched by fetchAndPopulateMetrics
+            currentStockPrice = data.currentStockPrice || currentStockPrice; 
+            if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+            // companyInfoDiv, companyLogo, companyNameDisplay are already updated by fetchAndPopulateMetrics
+
+            if (data.activeTab === 'earnings') {
+                if (earningsTabBtn) earningsTabBtn.click();
+                if (epsTtmInput) epsTtmInput.value = data.earnings.epsTtm !== undefined ? data.earnings.epsTtm.toFixed(2) : '0.00';
+                if (growthRateInput) growthRateInput.value = data.earnings.growthRate !== undefined ? data.earnings.growthRate : '';
+                if (peMultipleInput) peMultipleInput.value = data.earnings.peMultiple !== undefined ? data.earnings.peMultiple : '';
+            } else {
+                if (cashFlowTabBtn) cashFlowTabBtn.click();
+                if (fcfShareInput) fcfShareInput.value = data.cashFlow.fcfShare !== undefined ? data.cashFlow.fcfShare.toFixed(2) : '0.00';
+                if (fcfGrowthRateInput) fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate !== undefined ? data.cashFlow.fcfGrowthRate : '';
+                if (fcfYieldInput) fcfYieldInput.value = data.cashFlow.fcfYield !== undefined ? data.cashFlow.fcfYield : '';
+            }
+            if (desiredReturnInput) desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
+
+            // Trigger calculation to update chart and ensure all fields are consistent
+            // This will also update the static result display elements.
+            calculatePriceBtn.click(); 
+            displayCalcMessage('Calculation loaded successfully. Click "Calculate" to re-run.', false);
+        }
+
+        
+        function showConfirmationModal(message, callback) {
+            modalMessage.textContent = message;
+            modalTitle.textContent = 'Confirm Deletion';
+            confirmationModal.classList.remove('hidden');
+            modalCallback = callback;
+        }
+
+        function hideConfirmationModal() {
+            confirmationModal.classList.add('hidden');
+            modalCallback = null;
+        }
+
+        confirmYesBtn.addEventListener('click', () => {
+            if (modalCallback) {
+                modalCallback();
+            }
+            hideConfirmationModal();
+        });
+
+        confirmNoBtn.addEventListener('click', () => {
+            hideConfirmationModal();
+        });
+
+        async function deleteCalculation(calcId) {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                displayCalcMessage('You must be logged in to delete calculations.', true);
+                showPage(loginPage);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${backendBaseUrl}/delete_calculation/${calcId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    displayCalcMessage(result.message, false);
+                    loadSavedCalculations();
+                } else {
+                    displayCalcMessage(`Error deleting calculation: ${result.message}`, true);
+                }
+            } catch (error) {
+                console.error('Delete calculation error:', error);
+                displayCalcMessage('An error occurred while deleting the calculation.', true);
+            }
+        }
         // Add event listeners
         loginBtn.addEventListener('click', handleLogin);
         registerBtn.addEventListener('click', handleRegister);
@@ -825,7 +1140,8 @@
             cashFlowSection.classList.remove('hidden');
             earningsSection.classList.add('hidden');
         });
-
+        saveCalculationBtn.addEventListener('click', saveCalculation);
+        loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
         // Initial Load
         checkAuthAndRender();
     </script>
