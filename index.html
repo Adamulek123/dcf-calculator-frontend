@@ -561,7 +561,7 @@
             const modalTitle = document.getElementById('modalTitle');
             const modalMessage = document.getElementById('modalMessage');
             const confirmYesBtn = document.getElementById('confirmYesBtn');
-            const confirmNoBtn = document.getElementById('confirmNoBtn');
+            const confirmNoBtn = document.getElementById('confirmNoBtn'); /* FIX: Changed to confirmNoBtn */
             const projectionPlaceholder = document.getElementById('projectionPlaceholder');
             const projectionOutput = document.getElementById('projectionOutput');
             const calculationResultsDiv = document.getElementById('calculationResults');
@@ -584,8 +584,7 @@
 
             // --- Firebase Auth State Listener ---
             onAuthStateChanged(auth, async (user) => {
-                // Only run getRedirectResult on the very first auth state change after page load
-                // This prevents it from running on subsequent auth state changes (e.g., logout)
+                // Process redirect result first if it hasn't been done for this page load
                 if (!isInitialAuthCheckComplete) {
                     try {
                         const result = await getRedirectResult(auth);
@@ -605,25 +604,28 @@
                         showToast(`Google Sign-In failed after redirect: ${errorMessage}`, true);
                         console.error("Google redirect sign-in error:", error);
                     } finally {
-                        isInitialAuthCheckComplete = true; // Mark initial check as complete
+                        // Ensure this flag is set AFTER getRedirectResult has had a chance to run
+                        // and potentially update the auth state.
+                        isInitialAuthCheckComplete = true; 
                     }
                 }
 
                 // Now, handle the current user state, which should be definitive after getRedirectResult
                 currentUser = user;
-                if (user) {
-                    console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
-                    // Check if the user is email verified OR if they signed in with Google (Google users are implicitly verified)
-                    if (user.emailVerified || user.providerData.some(provider => provider.providerId === 'google.com')) {
-                        showPage(mainMenu);
+                if (isInitialAuthCheckComplete) { // Only navigate after initial check
+                    if (user) {
+                        console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
+                        if (user.emailVerified || user.providerData.some(provider => provider.providerId === 'google.com')) {
+                            showPage(mainMenu);
+                        } else {
+                            // For email/password users who are not verified
+                            showPage(loginPage);
+                            showToast('Please verify your email address to continue.', true);
+                        }
                     } else {
-                        // For email/password users who are not verified
+                        console.log("User signed out.");
                         showPage(loginPage);
-                        showToast('Please verify your email address to continue.', true);
                     }
-                } else {
-                    console.log("User signed out.");
-                    showPage(loginPage);
                 }
             });
 
