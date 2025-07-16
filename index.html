@@ -330,7 +330,6 @@
             height: 20px;
             vertical-align: middle;
         }
-
     </style>
 </head>
 <body>
@@ -477,7 +476,8 @@
             sendEmailVerification, 
             onAuthStateChanged, 
             GoogleAuthProvider, 
-            signInWithPopup, // <-- Original popup method
+            signInWithRedirect, // Changed from signInWithPopup
+            getRedirectResult,  // Added to handle redirect results
             signOut 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
@@ -582,7 +582,7 @@
             let currentUser = null;
 
             // --- Firebase Auth State Listener ---
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => { // Added async keyword
                 currentUser = user;
                 if (user) {
                     console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
@@ -595,6 +595,27 @@
                 } else {
                     console.log("User signed out.");
                     showPage(loginPage);
+                }
+
+                // Handle redirect result here, as the page reloads after redirect
+                try {
+                    const result = await getRedirectResult(auth);
+                    if (result) {
+                        // This is where you handle the successful sign-in after redirect
+                        const signedInUser = result.user;
+                        console.log("Google user signed in via redirect:", signedInUser.email);
+                        showToast('Signed in with Google successfully!', false);
+                        // The onAuthStateChanged listener will already handle page navigation to mainMenu
+                    }
+                } catch (error) {
+                    let errorMessage = 'Error handling Google redirect result.';
+                    if (error.code === 'auth/account-exists-with-different-credential') {
+                        errorMessage = 'An account with this email already exists with different sign-in credentials. Please log in with your original method or link accounts.';
+                    } else {
+                        errorMessage = error.message;
+                    }
+                    showToast(`Google Sign-In failed after redirect: ${errorMessage}`, true);
+                    console.error("Google redirect sign-in error:", error);
                 }
             });
 
@@ -842,31 +863,30 @@
                 }
             }
 
-            // --- Original Google Login with Popup ---
+            // --- Updated Google Login with Redirect ---
             async function handleGoogleLogin() {
                 setButtonState(googleLoginBtn, 'Signing in with Google...', true);
                 const provider = new GoogleAuthProvider();
                 try {
-                    const result = await signInWithPopup(auth, provider);
-                    const user = result.user;
-                    console.log("Google user signed in:", user.email);
-                    showToast('Signed in with Google successfully!', false);
-                    // onAuthStateChanged will handle page navigation
+                    // Use signInWithRedirect instead of signInWithPopup
+                    await signInWithRedirect(auth, provider);
+                    // The page will redirect, so no code directly after this will execute immediately.
+                    // The result will be handled by the onAuthStateChanged listener when the page reloads.
                 } catch (error) {
                     let errorMessage = 'Google Sign-In failed.';
-                    if (error.code === 'auth/popup-closed-by-user') {
-                        errorMessage = 'Sign-in window closed.';
-                    } else if (error.code === 'auth/cancelled-popup-request') {
+                    // Errors like 'auth/popup-closed-by-user' are less likely with redirect, but can still happen if the redirect is interrupted.
+                    if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/redirect-cancelled-by-user') {
                         errorMessage = 'Sign-in cancelled.';
                     } else {
                         errorMessage = error.message;
                     }
                     showToast(`Google Sign-In failed: ${errorMessage}`, true);
                 } finally {
-                    setButtonState(googleLoginBtn, 'Sign in with Google', false);
+                    // This will only execute if the redirect itself fails or is cancelled before leaving the page.
+                    // If a redirect occurs, this code will not run immediately.
+                    setButtonState(googleLoginBtn, 'Sign in with Google', false); 
                 }
             }
-
 
             async function handleRegister() {
                 setButtonState(registerBtn, 'Registering...', true);
@@ -1229,7 +1249,7 @@
 
             // Add event listeners
             loginBtn.addEventListener('click', handleLogin);
-            googleLoginBtn.addEventListener('click', handleGoogleLogin); // <-- Use original popup function
+            googleLoginBtn.addEventListener('click', handleGoogleLogin);
             registerBtn.addEventListener('click', handleRegister);
             getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
             calculatePriceBtn.addEventListener('click', calculatePrice);
