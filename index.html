@@ -333,6 +333,11 @@
     </style>
 </head>
 <body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[1001] text-white text-2xl font-bold">
+        Loading...
+    </div>
+
     <div id="mainMenu" class="main-menu hidden">
         <h2>Welcome!</h2>
         <button id="dcfCalculatorMenuBtn" class="primary-button">DCF Calculator</button>
@@ -340,7 +345,7 @@
         <button id="logoutMenuBtn" class="primary-button bg-red-600">Logout</button>
     </div>
 
-    <div id="loginPage" class="login-container">
+    <div id="loginPage" class="login-container hidden">
         <h2>Login to DCF Calculator</h2>
         <div class="input-group w-full"><label for="loginEmail">Email</label><div class="input-field-wrapper"><input type="email" id="loginEmail" placeholder="Enter your email"></div></div>
         <div class="input-group w-full"><label for="loginPassword">Password</label><div class="input-field-wrapper"><input type="password" id="loginPassword" placeholder="Enter your password"></div></div>
@@ -499,6 +504,7 @@
             const registerPage = document.getElementById('registerPage');
             const appContent = document.getElementById('appContent');
             const insightsPage = document.getElementById('insightsPage');
+            const loadingOverlay = document.getElementById('loadingOverlay'); // Get loading overlay element
 
             // --- Navigation Buttons ---
             const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
@@ -561,7 +567,7 @@
             const modalTitle = document.getElementById('modalTitle');
             const modalMessage = document.getElementById('modalMessage');
             const confirmYesBtn = document.getElementById('confirmYesBtn');
-            const confirmNoBtn = document.getElementById('confirmNoBtn'); /* FIX: Changed to confirmNoBtn */
+            const confirmNoBtn = document.getElementById('confirmNoBtn'); 
             const projectionPlaceholder = document.getElementById('projectionPlaceholder');
             const projectionOutput = document.getElementById('projectionOutput');
             const calculationResultsDiv = document.getElementById('calculationResults');
@@ -580,19 +586,46 @@
             let fullInsightsData = {};
             let currentPeriod = 'annual';
             let currentUser = null;
-            let isInitialAuthCheckComplete = false; // New flag to manage initial auth state check
+            let isAuthProcessingRedirect = false; // Flag to indicate if redirect result is being processed
+            let initialAuthCheckDone = false; // Flag to ensure initial navigation happens only once
+
+            // Initially hide all main content and show loading overlay
+            mainMenu.classList.add('hidden');
+            loginPage.classList.add('hidden');
+            registerPage.classList.add('hidden');
+            appContent.classList.add('hidden');
+            insightsPage.classList.add('hidden');
+            loadingOverlay.classList.remove('hidden'); // Show loading initially
+
+            // --- Helper for page navigation logic ---
+            function handlePageNavigation(user) {
+                if (user) {
+                    console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
+                    if (user.emailVerified || user.providerData.some(provider => provider.providerId === 'google.com')) {
+                        showPage(mainMenu);
+                    } else {
+                        showPage(loginPage);
+                        showToast('Please verify your email address to continue.', true);
+                    }
+                } else {
+                    console.log("User signed out.");
+                    showPage(loginPage);
+                }
+            }
 
             // --- Firebase Auth State Listener ---
             onAuthStateChanged(auth, async (user) => {
-                // Process redirect result first if it hasn't been done for this page load
-                if (!isInitialAuthCheckComplete) {
+                currentUser = user; // Always update currentUser
+
+                if (!initialAuthCheckDone) {
+                    // This block runs only once on the very first auth state change
+                    isAuthProcessingRedirect = true; // Indicate we are processing redirect
                     try {
                         const result = await getRedirectResult(auth);
                         if (result) {
-                            // User signed in via redirect. The 'user' object in onAuthStateChanged
-                            // will now reflect this signed-in user.
                             console.log("Google user signed in via redirect:", result.user.email);
                             showToast('Signed in with Google successfully!', false);
+                            // The 'user' object in this or a subsequent onAuthStateChanged will reflect this.
                         }
                     } catch (error) {
                         let errorMessage = 'Error handling Google redirect result.';
@@ -604,28 +637,16 @@
                         showToast(`Google Sign-In failed after redirect: ${errorMessage}`, true);
                         console.error("Google redirect sign-in error:", error);
                     } finally {
-                        // Ensure this flag is set AFTER getRedirectResult has had a chance to run
-                        // and potentially update the auth state.
-                        isInitialAuthCheckComplete = true; 
+                        isAuthProcessingRedirect = false; // Finished processing redirect
+                        initialAuthCheckDone = true; // Mark initial check as complete
+                        loadingOverlay.classList.add('hidden'); // Hide loading after initial check
+                        // Now, navigate based on the definitive user state
+                        handlePageNavigation(user);
                     }
-                }
-
-                // Now, handle the current user state, which should be definitive after getRedirectResult
-                currentUser = user;
-                if (isInitialAuthCheckComplete) { // Only navigate after initial check
-                    if (user) {
-                        console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
-                        if (user.emailVerified || user.providerData.some(provider => provider.providerId === 'google.com')) {
-                            showPage(mainMenu);
-                        } else {
-                            // For email/password users who are not verified
-                            showPage(loginPage);
-                            showToast('Please verify your email address to continue.', true);
-                        }
-                    } else {
-                        console.log("User signed out.");
-                        showPage(loginPage);
-                    }
+                } else if (!isAuthProcessingRedirect) {
+                    // For subsequent auth state changes (manual login/logout, or after initial redirect processing)
+                    loadingOverlay.classList.add('hidden'); // Ensure loading is hidden for subsequent changes
+                    handlePageNavigation(user);
                 }
             });
 
