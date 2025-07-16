@@ -7,13 +7,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Firebase SDKs -->
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-    // TODO: Replace this with your own Firebase project's configuration
-    const firebaseConfig = {
+        
+        const firebaseConfig = {
         apiKey: "AIzaSyAuu1xiRsjARyIGNZyjHna9HsCqhrbPb74",
         authDomain: "dcf123-b6cb1.firebaseapp.com",
         projectId: "dcf123-b6cb1",
@@ -21,19 +21,17 @@
         messagingSenderId: "274138479558",
         appId: "1:274138479558:web:403e8f3f3c44bd754ed0c7",
         measurementId: "G-FTJT1KSKL4"
-    };
+        };
 
-    // Initialize Firebase and make auth available globally
-    try {
-        window.firebaseApp = initializeApp(firebaseConfig);
-        window.auth = getAuth(window.firebaseApp);
-        console.log("Firebase initialized successfully.");
-    } catch (e) {
-        console.error("Error initializing Firebase:", e);
-        // Ensure auth is null if initialization fails
-        window.auth = null;
-    }
-</script>
+        try {
+            window.firebaseApp = initializeApp(firebaseConfig);
+            window.auth = getAuth(window.firebaseApp);
+            console.log("Firebase initialized successfully.");
+        } catch (e) {
+            console.error("Error initializing Firebase:", e);
+            window.auth = null;
+        }
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -244,11 +242,11 @@
             position: fixed;
             top: 20px;
             right: 20px;
-            z-index: 1002; /* Higher than all other modals */
+            z-index: 1002;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            pointer-events: none; /* Allows clicks to pass through */
+            pointer-events: none;
         }
 
         .toast {
@@ -259,23 +257,23 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
             opacity: 0;
             transform: translateX(100%);
-            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s; /* Slide in, then fade out after 2.5s delay */
+            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s;
             min-width: 250px;
             max-width: 350px;
             font-size: 1rem;
             line-height: 1.4;
-            pointer-events: auto; /* Re-enable pointer events for the toast itself */
+            pointer-events: auto;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .toast.success {
-            background-color: #28a745; /* Green */
+            background-color: #28a745;
         }
 
         .toast.error {
-            background-color: #dc3545; /* Red */
+            background-color: #dc3545;
         }
 
         .toast-icon {
@@ -297,7 +295,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: #4285f4; /* Google Blue */
+            background-color: #4285f4;
             color: white;
             padding: 0.75rem 2rem;
             border-radius: 0.75rem;
@@ -308,12 +306,12 @@
             box-shadow: 0 6px 15px rgba(66, 133, 244, 0.3);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            width: 100%; /* Make it full width like other buttons */
-            gap: 10px; /* Space between icon and text */
+            width: 100%;
+            gap: 10px;
         }
 
         .google-sign-in-button:hover {
-            background-color: #357ae8; /* Darker blue on hover */
+            background-color: #357ae8;
             transform: translateY(-3px) scale(1.02);
             box-shadow: 0 8px 20px rgba(66, 133, 244, 0.4);
         }
@@ -324,7 +322,7 @@
         }
 
         .google-icon {
-            width: 20px; /* Adjust size as needed */
+            width: 20px;
             height: 20px;
             vertical-align: middle;
         }
@@ -413,7 +411,6 @@
             <div id="projectionOutput" class="hidden">
                 <h2 class="section-title">5-Year Projection</h2>
                 <div id="calculationResults" class="p-4 bg-gray-50 rounded-lg border">
-                    <!-- These elements are now static, matching clone.html's approach -->
                     <p class="flex justify-between p-2 border-b">Return from today: <strong id="returnFromTodayDisplay" class="text-green-600">N/A</strong></p>
                     <p class="flex justify-between p-2 border-b">Entry Price for Desired Return: <strong id="entryPriceDisplay" class="text-green-600">N/A</strong></p>
                     <p class="flex justify-between p-2 border-b">Desired Return: <strong id="desiredReturnDisplay" class="text-green-600">N/A</strong></p>
@@ -464,28 +461,36 @@
         </div>
     </div>
 
-    <!-- Toast Container -->
     <div id="toast-container"></div>
 
     <script type="module">
-        // Import Firebase Auth functions directly into this module's scope
-        import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword, 
+            sendEmailVerification, 
+            onAuthStateChanged, 
+            GoogleAuthProvider, 
+            signInWithRedirect,
+            getRedirectResult,
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Wrap the entire application logic in a DOMContentLoaded listener
         window.addEventListener('DOMContentLoaded', () => {
-            // Access the globally initialized auth instance after DOM is ready
             const auth = window.auth; 
+            if (!auth) {
+                console.error("Firebase Auth is not initialized. Check your firebaseConfig.");
+                showToast("Application could not connect to authentication service.", true);
+                return;
+            }
 
             const backendBaseUrl = 'https://dcf-backend.onrender.com';
 
-            // --- Page Elements ---
             const mainMenu = document.getElementById('mainMenu');
             const loginPage = document.getElementById('loginPage');
             const registerPage = document.getElementById('registerPage');
             const appContent = document.getElementById('appContent');
             const insightsPage = document.getElementById('insightsPage');
 
-            // --- Navigation Buttons ---
             const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
             const insightsMenuBtn = document.getElementById('insightsMenuBtn');
             const logoutMenuBtn = document.getElementById('logoutMenuBtn');
@@ -494,16 +499,14 @@
             const showRegisterBtn = document.getElementById('showRegisterBtn');
             const showLoginBtn = document.getElementById('showLoginBtn');
             
-            // --- Auth Elements ---
-            const loginEmailInput = document.getElementById('loginEmail'); // Changed to Email
+            const loginEmailInput = document.getElementById('loginEmail');
             const loginPasswordInput = document.getElementById('loginPassword');
             const loginBtn = document.getElementById('loginBtn');
-            const googleLoginBtn = document.getElementById('googleLoginBtn'); // New Google Login Button
-            const registerEmailInput = document.getElementById('registerEmail'); // Changed to Email
+            const googleLoginBtn = document.getElementById('googleLoginBtn');
+            const registerEmailInput = document.getElementById('registerEmail');
             const registerPasswordInput = document.getElementById('registerPassword');
             const registerBtn = document.getElementById('registerBtn');
 
-            // --- Insights Elements ---
             const insightsTickerInput = document.getElementById('insightsTickerInput');
             const getInsightsBtn = document.getElementById('getInsightsBtn');
             const insightsGrid = document.getElementById('insightsGrid');
@@ -513,7 +516,6 @@
             const fullscreenCanvas = document.getElementById('fullscreen-canvas');
             const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
             
-            // --- DCF Elements ---
             const tickerInput = document.getElementById('tickerInput');
             const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
             const companyInfoDiv = document.getElementById('companyInfo');
@@ -550,16 +552,11 @@
             const projectionPlaceholder = document.getElementById('projectionPlaceholder');
             const projectionOutput = document.getElementById('projectionOutput');
             const calculationResultsDiv = document.getElementById('calculationResults');
-
-            // These elements are now static in HTML, so we can declare them once globally
             const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay');
             const entryPriceDisplay = document.getElementById('entryPriceDisplay');
             const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
             const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay');
-
-            // Toast Container Element
             const toastContainer = document.getElementById('toast-container');
-
 
             let activeFullscreenChart = null;
             let dcfProjectionChart = null;
@@ -567,33 +564,44 @@
             let activeTab = 'earnings';
             let currentTicker = '';
             let modalCallback = null;
-            let fullInsightsData = {}; // Store full historical data {price, annual, quarterly}
-            let currentPeriod = 'annual'; // 'annual' or 'quarterly'
-            let currentUser = null; // To store Firebase User object
+            let fullInsightsData = {};
+            let currentPeriod = 'annual';
+            let currentUser = null;
 
-            // --- Firebase Auth State Listener ---
-            // This runs whenever the user's sign-in state changes
-            onAuthStateChanged(auth, (user) => { // Use the imported 'auth' instance directly
+            onAuthStateChanged(auth, (user) => {
                 currentUser = user;
                 if (user) {
-                    // User is signed in.
                     console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
-                    // Check if email is verified for email/password users
                     if (user.emailVerified || user.providerData[0].providerId === 'google.com') {
                         showPage(mainMenu);
                     } else {
-                        showPage(loginPage); // Keep them on login page if email not verified
+                        showPage(loginPage);
                         showToast('Please verify your email address to continue.', true);
                     }
                 } else {
-                    // User is signed out.
                     console.log("User signed out.");
                     showPage(loginPage);
                 }
             });
 
+            async function checkRedirectResult() {
+                try {
+                    setButtonState(googleLoginBtn, 'Signing in...', true);
+                    const result = await getRedirectResult(auth);
+                    if (result) {
+                        const user = result.user;
+                        console.log("Google user signed in via redirect:", user.email);
+                        showToast('Signed in with Google successfully!', false);
+                    }
+                } catch (error) {
+                    console.error("Google Redirect Result Error:", error);
+                    showToast(`Sign-in failed: ${error.message}`, true);
+                } finally {
+                    setButtonState(googleLoginBtn, 'Sign in with Google', false);
+                }
+            }
+            checkRedirectResult();
 
-            // --- Navigation Logic ---
             function showPage(page) {
                 mainMenu.classList.add('hidden');
                 loginPage.classList.add('hidden');
@@ -611,7 +619,6 @@
             showRegisterBtn.addEventListener('click', () => showPage(registerPage));
             showLoginBtn.addEventListener('click', () => showPage(loginPage));
             
-            // --- Charting Logic ---
             function createChart(canvas, title, chartData, isFullscreen = false) {
                 const ctx = canvas.getContext('2d');
                 
@@ -630,42 +637,30 @@
                 
                 let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
 
-                // Specific styling for the insights price chart
-                if (title.includes('Price')) {
-                    datasetOptions.pointRadius = 0;
-                }
-                // Specific styling for the DCF projection chart
+                if (title.includes('Price')) datasetOptions.pointRadius = 0;
                 if (title === 'Projected Price Growth') {
-                    datasetOptions.pointRadius = 3; // Ensure dots are visible
-                    onClickHandler = null; // Disable fullscreen click
+                    datasetOptions.pointRadius = 3;
+                    onClickHandler = null;
                 }
 
                 const chartInstance = new Chart(ctx, {
                     type: chartData.type,
-                    data: {
-                        labels: chartData.labels,
-                        datasets: [datasetOptions]
-                    },
+                    data: { labels: chartData.labels, datasets: [datasetOptions] },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
-                        
                         scales: {
                             y: {
                                 beginAtZero: ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'].includes(title) ? true : false,
                                 grid: { color: '#e9ecef' },
                                 ticks: {
                                     color: '#6c757d',
-                                    callback: function(value, index, values) {
+                                    callback: function(value) {
                                         const chartTitlesToFormat = ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'];
                                         if (chartTitlesToFormat.includes(title)) {
-                                            if (Math.abs(value) >= 1000000000) {
-                                                return '$' + (value / 1000000000).toFixed(1) + 'B';
-                                            }
-                                            if (Math.abs(value) >= 1000000) {
-                                                return '$' + (value / 1000000).toFixed(1) + 'M';
-                                            }
+                                            if (Math.abs(value) >= 1e9) return '$' + (value / 1e9).toFixed(1) + 'B';
+                                            if (Math.abs(value) >= 1e6) return '$' + (value / 1e6).toFixed(1) + 'M';
                                             return '$' + value.toLocaleString();
                                         }
                                         return value.toLocaleString();
@@ -673,8 +668,7 @@
                                 }
                             },
                             x: { grid: { display: false }, ticks: { color: '#6c757d' } }
-                        }
-                    ,
+                        },
                         onClick: onClickHandler
                     }
                 });
@@ -685,13 +679,7 @@
                 fullscreenModal.classList.remove('hidden');
                 if (activeFullscreenChart) activeFullscreenChart.destroy();
                 
-                // Determine which dataset to use for fullscreen
-                let fullChartData;
-                if (title.includes('Price')) {
-                    fullChartData = fullInsightsData.price[title];
-                } else {
-                    fullChartData = fullInsightsData[currentPeriod][title];
-                }
+                let fullChartData = title.includes('Price') ? fullInsightsData.price[title] : fullInsightsData[currentPeriod][title];
                 
                 activeFullscreenChart = createChart(fullscreenCanvas, title, fullChartData, true);
             }
@@ -704,10 +692,8 @@
                 }
             });
 
-            // --- Insights Page Logic ---
             function renderInsightsCharts() {
                 insightsGrid.innerHTML = '';
-                
                 const priceData = fullInsightsData.price || {};
                 const financialData = fullInsightsData[currentPeriod] || {};
 
@@ -716,11 +702,7 @@
                     return;
                 }
 
-                // Define the desired order of charts
-                const chartOrder = [
-                    'Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'
-                ];
-
+                const chartOrder = ['Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'];
                 const allCharts = { ...priceData, ...financialData };
                 const remainingCharts = Object.keys(allCharts).filter(title => !chartOrder.includes(title));
                 const finalChartOrder = [...chartOrder, ...remainingCharts];
@@ -733,7 +715,7 @@
                         if (previewData.labels.length > 5 && !title.includes('Price')) {
                             previewData.labels = previewData.labels.slice(-5);
                             previewData.data = previewData.data.slice(-5);
-                        } else if (previewData.labels.length > 252 && title.includes('Price')) { // ~1 year of daily data
+                        } else if (previewData.labels.length > 252 && title.includes('Price')) {
                             previewData.labels = previewData.labels.slice(-252);
                             previewData.data = previewData.data.slice(-252);
                         }
@@ -751,8 +733,8 @@
             async function fetchInsightsData() {
                 const ticker = insightsTickerInput.value.trim().toUpperCase();
                 if (!ticker) {
-                    showToast('Please enter a ticker symbol to see financial insights.', true);
-                    insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol to see financial insights.</p>';
+                    showToast('Please enter a ticker symbol.', true);
+                    insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol.</p>';
                     return;
                 }
 
@@ -763,11 +745,9 @@
                     const response = await apiCall(`/get_insights_data?ticker=${ticker}`);
                     const fetchedData = await response.json();
 
-                    if (!response.ok) {
-                        throw new Error(fetchedData.error || 'Failed to fetch insights data.');
-                    }
+                    if (!response.ok) throw new Error(fetchedData.error || 'Failed to fetch insights data.');
                     
-                    fullInsightsData = fetchedData; // Store the full data globally {price, annual, quarterly}
+                    fullInsightsData = fetchedData;
                     renderInsightsCharts();
                     showToast('Insights data fetched successfully!', false);
 
@@ -797,40 +777,34 @@
 
             insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
 
-            // --- All original DCF Calculator JS ---
             function setButtonState(button, text, disabled) {
                 button.innerHTML = text;
                 button.disabled = disabled;
             }
             
             async function apiCall(endpoint, options = {}) {
-                // Get Firebase ID token for authenticated requests
-                const user = auth.currentUser; // Use the imported 'auth' instance
+                const user = auth.currentUser;
                 let idToken = null;
                 if (user) {
                     try {
                         idToken = await user.getIdToken();
                     } catch (error) {
                         console.error("Error getting Firebase ID token:", error);
-                        // Handle token refresh issues or user not logged in properly
-                        handleLogout(); // Force logout if token cannot be retrieved
-                        throw new Error('Authentication token expired or invalid. Please log in again.');
+                        handleLogout();
+                        throw new Error('Authentication token expired. Please log in again.');
                     }
                 }
 
                 if (idToken) {
                     options.headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
                 } else {
-                    // If no user or no token, ensure this is a public endpoint or handle accordingly
-                    // For now, if an API call requires auth and no token is present, it will fail.
-                    console.warn(`Attempted API call to ${endpoint} without a Firebase ID token.`);
-                    // You might want to throw an error or redirect to login here for protected routes.
+                    console.warn(`API call to ${endpoint} without a token.`);
                 }
 
                 try {
                     const response = await fetch(`${backendBaseUrl}${endpoint}`, options);
                     if (response.status === 401) {
-                        handleLogout(); // Force logout on 401 (unauthorized)
+                        handleLogout();
                         throw new Error('Session expired. Please log in again.');
                     }
                     return response;
@@ -846,19 +820,16 @@
                 const password = loginPasswordInput.value;
 
                 try {
-                    const userCredential = await signInWithEmailAndPassword(auth, email, password); // Use the imported function
-                    const user = userCredential.user;
-                    if (!user.emailVerified) { // This checks if the email is verified
-                        // If email is not verified, sign them out and prompt for verification
-                        await signOut(auth); // Use the imported function
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                    if (!userCredential.user.emailVerified) {
+                        await signOut(auth);
                         showToast('Please verify your email address before logging in.', true);
                         return;
                     }
                     showToast('Login successful!', false);
-                    // onAuthStateChanged will handle page navigation
                 } catch (error) {
                     let errorMessage = 'Login failed.';
-                    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                         errorMessage = 'Invalid email or password.';
                     } else if (error.code === 'auth/invalid-email') {
                         errorMessage = 'Invalid email format.';
@@ -871,31 +842,17 @@
                 }
             }
 
-            async function handleGoogleLogin() {
-                setButtonState(googleLoginBtn, 'Signing in with Google...', true);
-                const provider = new GoogleAuthProvider(); // Use the imported class
+            async function handleGoogleLoginRedirect() {
+                setButtonState(googleLoginBtn, 'Redirecting to Google...', true);
+                const provider = new GoogleAuthProvider();
                 try {
-                    const result = await signInWithPopup(auth, provider); // Use the imported function
-                    // The signed-in user info.
-                    const user = result.user;
-                    console.log("Google user signed in:", user.email);
-                    showToast('Signed in with Google successfully!', false);
-                    // onAuthStateChanged will handle page navigation
+                    await signInWithRedirect(auth, provider);
                 } catch (error) {
-                    let errorMessage = 'Google Sign-In failed.';
-                    if (error.code === 'auth/popup-closed-by-user') {
-                        errorMessage = 'Sign-in window closed.';
-                    } else if (error.code === 'auth/cancelled-popup-request') {
-                        errorMessage = 'Sign-in cancelled.';
-                    } else {
-                        errorMessage = error.message;
-                    }
-                    showToast(`Google Sign-In failed: ${errorMessage}`, true);
-                } finally {
+                    console.error("Google Sign-In Redirect Error:", error);
+                    showToast(`Google Sign-In failed: ${error.message}`, true);
                     setButtonState(googleLoginBtn, 'Sign in with Google', false);
                 }
             }
-
 
             async function handleRegister() {
                 setButtonState(registerBtn, 'Registering...', true);
@@ -903,23 +860,16 @@
                 const password = registerPasswordInput.value;
 
                 try {
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password); // Use the imported function
-                    const user = userCredential.user;
-                    await sendEmailVerification(user); // Use the imported function
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    await sendEmailVerification(userCredential.user);
                     showToast('Registration successful! Please check your email to verify your account.', false);
-                    // After registration, redirect to login page
                     setTimeout(() => showPage(loginPage), 2000);
                 } catch (error) {
                     let errorMessage = 'Registration failed.';
-                    if (error.code === 'auth/email-already-in-use') {
-                        errorMessage = 'This email is already in use.';
-                    } else if (error.code === 'auth/invalid-email') {
-                        errorMessage = 'Invalid email format.';
-                    } else if (error.code === 'auth/weak-password') {
-                        errorMessage = 'Password is too weak (min 6 characters).';
-                    } else {
-                        errorMessage = error.message;
-                    }
+                    if (error.code === 'auth/email-already-in-use') errorMessage = 'This email is already in use.';
+                    else if (error.code === 'auth/invalid-email') errorMessage = 'Invalid email format.';
+                    else if (error.code === 'auth/weak-password') errorMessage = 'Password is too weak (min 6 characters).';
+                    else errorMessage = error.message;
                     showToast(`Registration failed: ${errorMessage}`, true);
                 } finally {
                     setButtonState(registerBtn, 'Register', false);
@@ -927,56 +877,38 @@
             }
             
             function handleLogout() {
-                signOut(auth).then(() => { // Use the imported function
+                signOut(auth).then(() => {
                     showToast('You have been successfully logged out.', false);
-                    // onAuthStateChanged will handle page navigation
                 }).catch((error) => {
                     showToast(`Logout failed: ${error.message}`, true);
                 });
             }
-
-            // Initial check is handled by onAuthStateChanged listener
-            // function checkAuthAndRender() {
-            //     if (localStorage.getItem('jwt_token')) {
-            //         showPage(mainMenu);
-            //     } else {
-            //         showPage(loginPage);
-            //     }
-            // }
             
             function clearAllFields() {
                 companyInfoDiv.classList.add('hidden-state');
-                if (companyLogo) companyLogo.textContent = '';
-                if (companyNameDisplay) companyNameDisplay.textContent = '';
-                if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = '$0.00';
-
-                if (currentEpsDisplay) currentEpsDisplay.textContent = '$0.00';
-                if (currentPeDisplay) currentPeDisplay.textContent = '0.00';
-                if (epsGrowthDisplay) epsGrowthDisplay.textContent = '0.0%';
-                if (epsTtmInput) epsTtmInput.value = '0.00';
-                if (growthRateInput) growthRateInput.value = '';
-                if (peMultipleInput) peMultipleInput.value = '';
-
-                if (currentFcfShareDisplay) currentFcfShareDisplay.textContent = '$0.00';
-                if (fcfYieldDisplay) fcfYieldDisplay.textContent = '0.0%';
-                if (sbcImpactDisplay) sbcImpactDisplay.textContent = '0.0%';
-                if (fcfShareInput) fcfShareInput.value = '0.00';
-                if (fcfGrowthRateInput) fcfGrowthRateInput.value = '';
-                if (fcfYieldInput) fcfYieldInput.value = '';
-
-                if (desiredReturnInput) desiredReturnInput.value = '';
-                
-                // These elements are now static, so we just clear their text content
-                if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
-                if (entryPriceDisplay) entryPriceDisplay.textContent = 'N/A';
-                if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
-                if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = 'N/A';
-                
-                if (priceChartCanvas) {
-                    if (dcfProjectionChart) {
-                        dcfProjectionChart.destroy();
-                        dcfProjectionChart = null; // Clear the reference
-                    }
+                companyLogo.textContent = '';
+                companyNameDisplay.textContent = '';
+                currentStockPriceDisplay.textContent = '$0.00';
+                currentEpsDisplay.textContent = '$0.00';
+                currentPeDisplay.textContent = '0.00';
+                epsGrowthDisplay.textContent = '0.0%';
+                epsTtmInput.value = '0.00';
+                growthRateInput.value = '';
+                peMultipleInput.value = '';
+                currentFcfShareDisplay.textContent = '$0.00';
+                fcfYieldDisplay.textContent = '0.0%';
+                sbcImpactDisplay.textContent = '0.0%';
+                fcfShareInput.value = '0.00';
+                fcfGrowthRateInput.value = '';
+                fcfYieldInput.value = '';
+                desiredReturnInput.value = '';
+                returnFromTodayDisplay.textContent = 'N/A';
+                entryPriceDisplay.textContent = 'N/A';
+                desiredReturnDisplay.textContent = 'N/A';
+                priceAfter5YearsDisplay.textContent = 'N/A';
+                if (dcfProjectionChart) {
+                    dcfProjectionChart.destroy();
+                    dcfProjectionChart = null;
                 }
                 currentTicker = '';
             }
@@ -1029,21 +961,17 @@
             
             async function saveCalculation() {
                 if (!currentUser) {
-                    showToast('You must be logged in to save calculations.', true);
-                    showPage(loginPage);
+                    showToast('You must be logged in to save.', true);
                     return;
                 }
-
                 if (!currentUser.emailVerified && currentUser.providerData[0].providerId === 'password') {
-                    showToast('Please verify your email address to save calculations.', true);
+                    showToast('Please verify your email to save.', true);
                     return;
                 }
-
                 if (!currentTicker) {
-                    showToast('Please search for a ticker and calculate a price before saving.', true);
+                    showToast('Please search for a ticker first.', true);
                     return;
                 }
-
                 const calculationName = prompt('Enter a name for this calculation:');
                 if (!calculationName || calculationName.trim() === '') {
                     showToast('Calculation name cannot be empty.', true);
@@ -1051,61 +979,45 @@
                 }
 
                 const calculationData = captureCalculationData();
-                
                 try {
                     const response = await apiCall(`/save_calculation`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            ticker: currentTicker,
-                            name: calculationName.trim(),
-                            data: calculationData
-                        })
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticker: currentTicker, name: calculationName.trim(), data: calculationData })
                     });
-
                     const result = await response.json();
                     if (response.ok) {
                         showToast(result.message, false);
                         loadSavedCalculations();
                     } else {
-                        showToast(`Error saving calculation: ${result.message}`, true);
+                        showToast(`Error saving: ${result.message}`, true);
                     }
                 } catch (error) {
-                    console.error('Save calculation error:', error);
-                    showToast('An error occurred while saving the calculation.', true);
+                    showToast('An error occurred while saving.', true);
                 }
             }
             
             async function loadSavedCalculations() {
                 if (!currentUser) {
-                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see saved calculations.</p>';
                     return;
                 }
-
                 if (!currentUser.emailVerified && currentUser.providerData[0].providerId === 'password') {
                     savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please verify your email to load calculations.</p>';
-                    showToast('Please verify your email address to load calculations.', true);
                     return;
                 }
 
                 try {
                     const response = await apiCall(`/load_calculations`);
-
                     const data = await response.json();
-
                     if (response.ok) {
                         renderSavedCalculations(data);
                         showToast('Saved calculations loaded.', false);
                     } else {
-                        showToast(`Error loading calculations: ${data.message}`, true);
-                        savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
+                        showToast(`Error loading: ${data.message}`, true);
                     }
                 } catch (error) {
-                    console.error('Load calculations error:', error);
-                    showToast('An error occurred while loading saved calculations.', true);
-                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
+                    showToast('An error occurred while loading.', true);
                 }
             }
             
@@ -1115,7 +1027,6 @@
                     savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
                     return;
                 }
-
                 calculations.forEach(calc => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'saved-calculation-item';
@@ -1128,39 +1039,33 @@
                     `;
                     savedCalculationsContainer.appendChild(itemDiv);
                 });
-
                 savedCalculationsContainer.querySelectorAll('.load-btn').forEach(button => {
-                    button.addEventListener('click', async (event) => {
-                        const calcId = event.target.dataset.id;
-                        const selectedCalc = calculations.find(c => c.id === calcId);
-                        if (selectedCalc) {
-                            await populateFormWithCalculationData(selectedCalc.data);
-                        }
+                    button.addEventListener('click', (event) => {
+                        const selectedCalc = calculations.find(c => c.id === event.target.dataset.id);
+                        if (selectedCalc) populateFormWithCalculationData(selectedCalc.data);
                     });
                 });
-
                 savedCalculationsContainer.querySelectorAll('.delete-btn').forEach(button => {
-                    button.addEventListener('click', async (event) => {
+                    button.addEventListener('click', (event) => {
                         const calcId = event.target.dataset.id;
-                        showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, async () => {
-                            await deleteCalculation(calcId);
-                        });
+                        showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, () => deleteCalculation(calcId));
                     });
                 });
             }
+
             function calculatePrice() {
                 let currentMetric, growthRate, targetMultiple, calculationType, impliedCurrentMultiple;
                 
                 if (activeTab === 'earnings') {
                     currentMetric = parseFloat(epsTtmInput.value);
                     growthRate = parseFloat(growthRateInput.value) / 100;
-                    targetMultiple = parseFloat(peMultipleInput.value); // This is PE
+                    targetMultiple = parseFloat(peMultipleInput.value);
                     calculationType = 'EPS';
                     impliedCurrentMultiple = currentMetric > 0 ? currentStockPrice / currentMetric : targetMultiple;
                 } else {
                     currentMetric = parseFloat(fcfShareInput.value);
                     growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
-                    targetMultiple = parseFloat(fcfYieldInput.value) / 100; // This is Yield
+                    targetMultiple = parseFloat(fcfYieldInput.value) / 100;
                     calculationType = 'FCF';
                     impliedCurrentMultiple = currentStockPrice > 0 ? currentMetric / currentStockPrice : targetMultiple;
                 }
@@ -1181,17 +1086,15 @@
                 const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1/5) - 1) * 100 : 0;
                 const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
 
-                // Update the text content of the display elements (now static)
-                if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
-                if (entryPriceDisplay) entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
-                if (desiredReturnDisplay) desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`; // Ensure this always shows the input desired return
-                if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
+                returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
+                entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
+                desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`;
+                priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
 
                 const projectedPrices = [];
-                const numYears = 5;
-                for (let i = 1; i <= numYears; i++) {
+                for (let i = 1; i <= 5; i++) {
                     const futureMetric = currentMetric * Math.pow(1 + growthRate, i);
-                    const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
+                    const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / 5);
                     const futurePrice = calculationType === 'EPS' 
                         ? futureMetric * interpolatedMultiple
                         : (interpolatedMultiple > 0 ? futureMetric / interpolatedMultiple : 0);
@@ -1210,8 +1113,6 @@
             }
             
             function captureCalculationData() {
-                // Since the elements are now static and globally referenced,
-                // we can directly use the global variables.
                 return {
                     ticker: tickerInput.value.trim().toUpperCase(),
                     currentStockPrice: currentStockPrice,
@@ -1228,47 +1129,36 @@
                     },
                     desiredReturn: parseFloat(desiredReturnInput.value),
                     results: {
-                        // Safely access textContent using the globally defined variables
-                        returnFromToday: returnFromTodayDisplay ? returnFromTodayDisplay.textContent : 'N/A',
-                        entryPrice: entryPriceDisplay ? entryPriceDisplay.textContent : 'N/A',
-                        priceAfter5Years: priceAfter5YearsDisplay ? priceAfter5YearsDisplay.textContent : 'N/A'
+                        returnFromToday: returnFromTodayDisplay.textContent,
+                        entryPrice: entryPriceDisplay.textContent,
+                        priceAfter5Years: priceAfter5YearsDisplay.textContent
                     }
                 };
             }
 
-            async function populateFormWithCalculationData(data) { // Made async
+            async function populateFormWithCalculationData(data) {
                 clearAllFields();
-                tickerInput.value = data.ticker || ''; // Set ticker input first
+                tickerInput.value = data.ticker || '';
+                await fetchAndPopulateMetrics();
 
-                // Fetch and populate current metrics for the loaded ticker
-                // This will update companyInfoDiv, currentEpsDisplay, currentPeDisplay, etc.
-                await fetchAndPopulateMetrics(); // Await this call
-
-                // Now populate input fields with saved data, overriding fetched defaults
-                // Use saved stock price if available, otherwise use the one fetched by fetchAndPopulateMetrics
                 currentStockPrice = data.currentStockPrice || currentStockPrice; 
-                if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-                // companyInfoDiv, companyLogo, companyNameDisplay are already updated by fetchAndPopulateMetrics
+                currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
 
                 if (data.activeTab === 'earnings') {
-                    if (earningsTabBtn) earningsTabBtn.click();
-                    if (epsTtmInput) epsTtmInput.value = data.earnings.epsTtm !== undefined ? data.earnings.epsTtm.toFixed(2) : '0.00';
-                    if (growthRateInput) growthRateInput.value = data.earnings.growthRate !== undefined ? data.earnings.growthRate : '';
-                    if (peMultipleInput) peMultipleInput.value = data.earnings.peMultiple !== undefined ? data.earnings.peMultiple : '';
+                    earningsTabBtn.click();
+                    epsTtmInput.value = data.earnings.epsTtm?.toFixed(2) || '0.00';
+                    growthRateInput.value = data.earnings.growthRate || '';
+                    peMultipleInput.value = data.earnings.peMultiple || '';
                 } else {
-                    if (cashFlowTabBtn) cashFlowTabBtn.click();
-                    if (fcfShareInput) fcfShareInput.value = data.cashFlow.fcfShare !== undefined ? data.cashFlow.fcfShare.toFixed(2) : '0.00';
-                    if (fcfGrowthRateInput) fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate !== undefined ? data.cashFlow.fcfGrowthRate : '';
-                    if (fcfYieldInput) fcfYieldInput.value = data.cashFlow.fcfYield !== undefined ? data.cashFlow.fcfYield : '';
+                    cashFlowTabBtn.click();
+                    fcfShareInput.value = data.cashFlow.fcfShare?.toFixed(2) || '0.00';
+                    fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate || '';
+                    fcfYieldInput.value = data.cashFlow.fcfYield || '';
                 }
-                if (desiredReturnInput) desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
-
-                // Trigger calculation to update chart and ensure all fields are consistent
-                // This will also update the static result display elements.
+                desiredReturnInput.value = data.desiredReturn || '';
                 calculatePriceBtn.click(); 
-                showToast('Saved calculation loaded successfully. Click "Calculate" to re-run.', false);
+                showToast('Saved calculation loaded.', false);
             }
-
             
             function showConfirmationModal(message, callback) {
                 modalMessage.textContent = message;
@@ -1283,74 +1173,48 @@
             }
 
             confirmYesBtn.addEventListener('click', () => {
-                if (modalCallback) {
-                    modalCallback();
-                }
+                if (modalCallback) modalCallback();
                 hideConfirmationModal();
             });
 
-            confirmNoBtn.addEventListener('click', () => {
-                hideConfirmationModal();
-            });
+            confirmNoBtn.addEventListener('click', hideConfirmationModal);
 
             async function deleteCalculation(calcId) {
                 if (!currentUser) {
-                    showToast('You must be logged in to delete calculations.', true);
-                    showPage(loginPage);
+                    showToast('You must be logged in to delete.', true);
                     return;
                 }
-
                 if (!currentUser.emailVerified && currentUser.providerData[0].providerId === 'password') {
-                    showToast('Please verify your email address to delete calculations.', true);
+                    showToast('Please verify your email to delete.', true);
                     return;
                 }
-
                 try {
-                    const response = await apiCall(`/delete_calculation/${calcId}`, {
-                        method: 'DELETE',
-                    });
-
+                    const response = await apiCall(`/delete_calculation/${calcId}`, { method: 'DELETE' });
                     const result = await response.json();
                     if (response.ok) {
                         showToast(result.message, false);
                         loadSavedCalculations();
                     } else {
-                        showToast(`Error deleting calculation: ${result.message}`, true);
+                        showToast(`Error deleting: ${result.message}`, true);
                     }
                 } catch (error) {
-                    console.error('Delete calculation error:', error);
-                    showToast('An error occurred while deleting the calculation.', true);
+                    showToast('An error occurred while deleting.', true);
                 }
             }
 
-            // --- Toast Notification Function ---
             function showToast(message, isError = false, duration = 3000) {
                 const toast = document.createElement('div');
                 toast.className = `toast ${isError ? 'error' : 'success'}`;
-                // Optional: Add an icon
-                const icon = document.createElement('span');
-                icon.className = 'toast-icon';
-                icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; // Cross for error, Checkmark for success
-                toast.appendChild(icon);
-                
-                const text = document.createElement('span');
-                text.textContent = message;
-                toast.appendChild(text);
-
+                toast.innerHTML = `<span class="toast-icon">${isError ? '&#x2716;' : '&#x2714;'}</span><span>${message}</span>`;
                 toastContainer.appendChild(toast);
-
-                // Remove toast after duration
                 setTimeout(() => {
-                    toast.style.animation = 'fadeOut 0.5s forwards'; // Start fade out animation
-                    toast.addEventListener('animationend', () => {
-                        toast.remove();
-                    });
+                    toast.style.animation = 'fadeOut 0.5s forwards';
+                    toast.addEventListener('animationend', () => toast.remove());
                 }, duration);
             }
 
-            // Add event listeners
             loginBtn.addEventListener('click', handleLogin);
-            googleLoginBtn.addEventListener('click', handleGoogleLogin); // Event listener for Google login
+            googleLoginBtn.addEventListener('click', handleGoogleLoginRedirect);
             registerBtn.addEventListener('click', handleRegister);
             getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
             calculatePriceBtn.addEventListener('click', calculatePrice);
@@ -1372,9 +1236,7 @@
             });
             saveCalculationBtn.addEventListener('click', saveCalculation);
             loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
-            // Initial Load - onAuthStateChanged handles initial rendering
-            // checkAuthAndRender(); // Removed as onAuthStateChanged handles this
-        }); // End of DOMContentLoaded listener
+        });
     </script>
 </body>
 </html>
