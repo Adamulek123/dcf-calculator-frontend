@@ -476,8 +476,8 @@
             sendEmailVerification, 
             onAuthStateChanged, 
             GoogleAuthProvider, 
-            signInWithRedirect, // Changed from signInWithPopup
-            getRedirectResult,  // Added to handle redirect results
+            signInWithRedirect, 
+            getRedirectResult,  
             signOut 
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
@@ -580,42 +580,50 @@
             let fullInsightsData = {};
             let currentPeriod = 'annual';
             let currentUser = null;
+            let isInitialAuthCheckComplete = false; // New flag to manage initial auth state check
 
             // --- Firebase Auth State Listener ---
-            onAuthStateChanged(auth, async (user) => { // Added async keyword
+            onAuthStateChanged(auth, async (user) => {
+                // Only run getRedirectResult on the very first auth state change after page load
+                // This prevents it from running on subsequent auth state changes (e.g., logout)
+                if (!isInitialAuthCheckComplete) {
+                    try {
+                        const result = await getRedirectResult(auth);
+                        if (result) {
+                            // User signed in via redirect. The 'user' object in onAuthStateChanged
+                            // will now reflect this signed-in user.
+                            console.log("Google user signed in via redirect:", result.user.email);
+                            showToast('Signed in with Google successfully!', false);
+                        }
+                    } catch (error) {
+                        let errorMessage = 'Error handling Google redirect result.';
+                        if (error.code === 'auth/account-exists-with-different-credential') {
+                            errorMessage = 'An account with this email already exists with different sign-in credentials. Please log in with your original method or link accounts.';
+                        } else {
+                            errorMessage = error.message;
+                        }
+                        showToast(`Google Sign-In failed after redirect: ${errorMessage}`, true);
+                        console.error("Google redirect sign-in error:", error);
+                    } finally {
+                        isInitialAuthCheckComplete = true; // Mark initial check as complete
+                    }
+                }
+
+                // Now, handle the current user state, which should be definitive after getRedirectResult
                 currentUser = user;
                 if (user) {
                     console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
-                    if (user.emailVerified || user.providerData[0].providerId === 'google.com') {
+                    // Check if the user is email verified OR if they signed in with Google (Google users are implicitly verified)
+                    if (user.emailVerified || user.providerData.some(provider => provider.providerId === 'google.com')) {
                         showPage(mainMenu);
                     } else {
+                        // For email/password users who are not verified
                         showPage(loginPage);
                         showToast('Please verify your email address to continue.', true);
                     }
                 } else {
                     console.log("User signed out.");
                     showPage(loginPage);
-                }
-
-                // Handle redirect result here, as the page reloads after redirect
-                try {
-                    const result = await getRedirectResult(auth);
-                    if (result) {
-                        // This is where you handle the successful sign-in after redirect
-                        const signedInUser = result.user;
-                        console.log("Google user signed in via redirect:", signedInUser.email);
-                        showToast('Signed in with Google successfully!', false);
-                        // The onAuthStateChanged listener will already handle page navigation to mainMenu
-                    }
-                } catch (error) {
-                    let errorMessage = 'Error handling Google redirect result.';
-                    if (error.code === 'auth/account-exists-with-different-credential') {
-                        errorMessage = 'An account with this email already exists with different sign-in credentials. Please log in with your original method or link accounts.';
-                    } else {
-                        errorMessage = error.message;
-                    }
-                    showToast(`Google Sign-In failed after redirect: ${errorMessage}`, true);
-                    console.error("Google redirect sign-in error:", error);
                 }
             });
 
