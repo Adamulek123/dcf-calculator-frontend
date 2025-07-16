@@ -7,6 +7,33 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDKs -->
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+    // TODO: Replace this with your own Firebase project's configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyAuu1xiRsjARyIGNZyjHna9HsCqhrbPb74",
+        authDomain: "dcf123-b6cb1.firebaseapp.com",
+        projectId: "dcf123-b6cb1",
+        storageBucket: "dcf123-b6cb1.firebasestorage.app",
+        messagingSenderId: "274138479558",
+        appId: "1:274138479558:web:403e8f3f3c44bd754ed0c7",
+        measurementId: "G-FTJT1KSKL4"
+    };
+
+    // Initialize Firebase and make auth available globally
+    try {
+        window.firebaseApp = initializeApp(firebaseConfig);
+        window.auth = getAuth(window.firebaseApp);
+        console.log("Firebase initialized successfully.");
+    } catch (e) {
+        console.error("Error initializing Firebase:", e);
+        // Ensure auth is null if initialization fails
+        window.auth = null;
+    }
+</script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -264,6 +291,44 @@
             from { opacity: 1; }
             to { opacity: 0; }
         }
+
+        /* Styles for Google Sign-In button */
+        .google-sign-in-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #4285f4; /* Google Blue */
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+            border: none;
+            box-shadow: 0 6px 15px rgba(66, 133, 244, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            width: 100%; /* Make it full width like other buttons */
+            gap: 10px; /* Space between icon and text */
+        }
+
+        .google-sign-in-button:hover {
+            background-color: #357ae8; /* Darker blue on hover */
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 20px rgba(66, 133, 244, 0.4);
+        }
+
+        .google-sign-in-button:active {
+            transform: translateY(0) scale(0.98);
+            box-shadow: 0 2px 5px rgba(66, 133, 244, 0.2);
+        }
+
+        .google-icon {
+            width: 20px; /* Adjust size as needed */
+            height: 20px;
+            vertical-align: middle;
+        }
+
     </style>
 </head>
 <body>
@@ -276,20 +341,22 @@
 
     <div id="loginPage" class="login-container">
         <h2>Login to DCF Calculator</h2>
-        <div class="input-group w-full"><label for="loginUsername">Username</label><div class="input-field-wrapper"><input type="text" id="loginUsername" placeholder="Enter your username"></div></div>
+        <div class="input-group w-full"><label for="loginEmail">Email</label><div class="input-field-wrapper"><input type="email" id="loginEmail" placeholder="Enter your email"></div></div>
         <div class="input-group w-full"><label for="loginPassword">Password</label><div class="input-field-wrapper"><input type="password" id="loginPassword" placeholder="Enter your password"></div></div>
         <button id="loginBtn" class="primary-button w-full">Login</button>
+        <button id="googleLoginBtn" class="google-sign-in-button">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/4/4a/Logo_Google__G__Reverse_RGB.svg" alt="Google logo" class="google-icon">
+            Sign in with Google
+        </button>
         <p class="text-gray-600 mt-4">Don't have an account? <button id="showRegisterBtn" class="text-blue-500 hover:underline font-semibold">Register</button></p>
-        <p id="loginMessage" class="login-message hidden"></p>
     </div>
 
     <div id="registerPage" class="login-container hidden">
         <h2>Register for DCF Calculator</h2>
-        <div class="input-group w-full"><label for="registerUsername">Username</label><div class="input-field-wrapper"><input type="text" id="registerUsername" placeholder="Choose a username"></div></div>
+        <div class="input-group w-full"><label for="registerEmail">Email</label><div class="input-field-wrapper"><input type="email" id="registerEmail" placeholder="Enter your email"></div></div>
         <div class="input-group w-full"><label for="registerPassword">Password</label><div class="input-field-wrapper"><input type="password" id="registerPassword" placeholder="Choose a password"></div></div>
         <button id="registerBtn" class="primary-button w-full">Register</button>
         <p class="text-gray-600 mt-4">Already have an account? <button id="showLoginBtn" class="text-blue-500 hover:underline font-semibold">Login</button></p>
-        <p id="registerMessage" class="login-message hidden"></p>
     </div>
 
     <div id="appContent" class="container hidden">
@@ -401,825 +468,913 @@
     <div id="toast-container"></div>
 
     <script type="module">
-        const backendBaseUrl = 'https://dcf-backend.onrender.com';
+        // Import Firebase Auth functions directly into this module's scope
+        import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- Page Elements ---
-        const mainMenu = document.getElementById('mainMenu');
-        const loginPage = document.getElementById('loginPage');
-        const registerPage = document.getElementById('registerPage');
-        const appContent = document.getElementById('appContent');
-        const insightsPage = document.getElementById('insightsPage');
+        // Wrap the entire application logic in a DOMContentLoaded listener
+        window.addEventListener('DOMContentLoaded', () => {
+            // Access the globally initialized auth instance after DOM is ready
+            const auth = window.auth; 
 
-        // --- Navigation Buttons ---
-        const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
-        const insightsMenuBtn = document.getElementById('insightsMenuBtn');
-        const logoutMenuBtn = document.getElementById('logoutMenuBtn');
-        const backToMenuBtn = document.getElementById('backToMenuBtn');
-        const insightsBackToMenuBtn = document.getElementById('insightsBackToMenuBtn');
-        const showRegisterBtn = document.getElementById('showRegisterBtn');
-        const showLoginBtn = document.getElementById('showLoginBtn');
-        
-        // --- Auth Elements ---
-        const loginUsernameInput = document.getElementById('loginUsername');
-        const loginPasswordInput = document.getElementById('loginPassword');
-        const loginBtn = document.getElementById('loginBtn');
-        // const loginMessage = document.getElementById('loginMessage'); // Removed, replaced by toast
-        const registerUsernameInput = document.getElementById('registerUsername');
-        const registerPasswordInput = document.getElementById('registerPassword');
-        const registerBtn = document.getElementById('registerBtn');
-        // const registerMessage = document.getElementById('registerMessage'); // Removed, replaced by toast
+            const backendBaseUrl = 'https://dcf-backend.onrender.com';
 
-        // --- Insights Elements ---
-        const insightsTickerInput = document.getElementById('insightsTickerInput');
-        const getInsightsBtn = document.getElementById('getInsightsBtn');
-        const insightsGrid = document.getElementById('insightsGrid');
-        const annualToggleBtn = document.getElementById('annualToggleBtn');
-        const quarterlyToggleBtn = document.getElementById('quarterlyToggleBtn');
-        const fullscreenModal = document.getElementById('fullscreen-chart-modal');
-        const fullscreenCanvas = document.getElementById('fullscreen-canvas');
-        const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
-        
-        // --- DCF Elements ---
-        const tickerInput = document.getElementById('tickerInput');
-        const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
-        const companyInfoDiv = document.getElementById('companyInfo');
-        const companyLogo = document.getElementById('companyLogo');
-        const companyNameDisplay = document.getElementById('companyName');
-        const currentStockPriceDisplay = document.getElementById('currentStockPrice');
-        const earningsTabBtn = document.getElementById('earningsTabBtn');
-        const cashFlowTabBtn = document.getElementById('cashFlowTabBtn');
-        const earningsSection = document.getElementById('earningsSection');
-        const cashFlowSection = document.getElementById('cashFlowSection');
-        const currentEpsDisplay = document.getElementById('currentEps');
-        const currentPeDisplay = document.getElementById('currentPe');
-        const epsGrowthDisplay = document.getElementById('epsGrowth');
-        const epsTtmInput = document.getElementById('epsTtmInput');
-        const growthRateInput = document.getElementById('growthRateInput');
-        const peMultipleInput = document.getElementById('peMultipleInput');
-        const currentFcfShareDisplay = document.getElementById('currentFcfShare');
-        const fcfYieldDisplay = document.getElementById('fcfYield');
-        const sbcImpactDisplay = document.getElementById('sbcImpact');
-        const fcfShareInput = document.getElementById('fcfShareInput');
-        const fcfGrowthRateInput = document.getElementById('fcfGrowthRateInput');
-        const fcfYieldInput = document.getElementById('fcfYieldInput');
-        const desiredReturnInput = document.getElementById('desiredReturnInput');
-        const calculatePriceBtn = document.getElementById('calculatePriceBtn');
-        const saveCalculationBtn = document.getElementById('saveCalculationBtn');
-        const loadCalculationsBtn = document.getElementById('loadCalculationsBtn');
-        const savedCalculationsContainer = document.getElementById('savedCalculationsContainer');
-        // const calculationMessageDiv = document.getElementById('calculationMessage'); // Removed, replaced by toast
-        const priceChartCanvas = document.getElementById('priceChart');
-        const confirmationModal = document.getElementById('confirmationModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalMessage = document.getElementById('modalMessage');
-        const confirmYesBtn = document.getElementById('confirmYesBtn');
-        const confirmNoBtn = document.getElementById('confirmNoBtn');
-        const projectionPlaceholder = document.getElementById('projectionPlaceholder');
-        const projectionOutput = document.getElementById('projectionOutput');
-        const calculationResultsDiv = document.getElementById('calculationResults');
+            // --- Page Elements ---
+            const mainMenu = document.getElementById('mainMenu');
+            const loginPage = document.getElementById('loginPage');
+            const registerPage = document.getElementById('registerPage');
+            const appContent = document.getElementById('appContent');
+            const insightsPage = document.getElementById('insightsPage');
 
-        // These elements are now static in HTML, so we can declare them once globally
-        const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay');
-        const entryPriceDisplay = document.getElementById('entryPriceDisplay');
-        const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
-        const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay');
-        // const chartErrorDiv = document.getElementById('chartError'); // This element still doesn't exist in HTML. Removed its usage in clearAllFields.
-
-        // Toast Container Element
-        const toastContainer = document.getElementById('toast-container');
-
-
-        let activeFullscreenChart = null;
-        let dcfProjectionChart = null;
-        let currentStockPrice = 0;
-        let activeTab = 'earnings';
-        let currentTicker = '';
-        let modalCallback = null;
-        let fullInsightsData = {}; // Store full historical data {price, annual, quarterly}
-        let currentPeriod = 'annual'; // 'annual' or 'quarterly'
-
-        // --- Navigation Logic ---
-        function showPage(page) {
-            mainMenu.classList.add('hidden');
-            loginPage.classList.add('hidden');
-            registerPage.classList.add('hidden');
-            appContent.classList.add('hidden');
-            insightsPage.classList.add('hidden');
-            page.classList.remove('hidden');
-        }
-
-        dcfCalculatorMenuBtn.addEventListener('click', () => showPage(appContent));
-        insightsMenuBtn.addEventListener('click', () => showPage(insightsPage));
-        logoutMenuBtn.addEventListener('click', handleLogout);
-        backToMenuBtn.addEventListener('click', () => showPage(mainMenu));
-        insightsBackToMenuBtn.addEventListener('click', () => showPage(mainMenu));
-        showRegisterBtn.addEventListener('click', () => showPage(registerPage));
-        showLoginBtn.addEventListener('click', () => showPage(loginPage));
-        
-        // --- Charting Logic ---
-        function createChart(canvas, title, chartData, isFullscreen = false) {
-            const ctx = canvas.getContext('2d');
+            // --- Navigation Buttons ---
+            const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
+            const insightsMenuBtn = document.getElementById('insightsMenuBtn');
+            const logoutMenuBtn = document.getElementById('logoutMenuBtn');
+            const backToMenuBtn = document.getElementById('backToMenuBtn');
+            const insightsBackToMenuBtn = document.getElementById('insightsBackToMenuBtn');
+            const showRegisterBtn = document.getElementById('showRegisterBtn');
+            const showLoginBtn = document.getElementById('showLoginBtn');
             
-            const datasetOptions = {
-                label: title,
-                data: chartData.data,
-                backgroundColor: chartData.backgroundColor,
-                borderColor: chartData.borderColor,
-                borderWidth: chartData.type === 'bar' ? 1 : 2,
-                fill: chartData.type === 'line',
-                tension: 0.1,
-                pointBackgroundColor: chartData.borderColor,
-                pointHoverRadius: 5,
-                pointRadius: 3
-            };
+            // --- Auth Elements ---
+            const loginEmailInput = document.getElementById('loginEmail'); // Changed to Email
+            const loginPasswordInput = document.getElementById('loginPassword');
+            const loginBtn = document.getElementById('loginBtn');
+            const googleLoginBtn = document.getElementById('googleLoginBtn'); // New Google Login Button
+            const registerEmailInput = document.getElementById('registerEmail'); // Changed to Email
+            const registerPasswordInput = document.getElementById('registerPassword');
+            const registerBtn = document.getElementById('registerBtn');
+
+            // --- Insights Elements ---
+            const insightsTickerInput = document.getElementById('insightsTickerInput');
+            const getInsightsBtn = document.getElementById('getInsightsBtn');
+            const insightsGrid = document.getElementById('insightsGrid');
+            const annualToggleBtn = document.getElementById('annualToggleBtn');
+            const quarterlyToggleBtn = document.getElementById('quarterlyToggleBtn');
+            const fullscreenModal = document.getElementById('fullscreen-chart-modal');
+            const fullscreenCanvas = document.getElementById('fullscreen-canvas');
+            const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
             
-            let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
+            // --- DCF Elements ---
+            const tickerInput = document.getElementById('tickerInput');
+            const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
+            const companyInfoDiv = document.getElementById('companyInfo');
+            const companyLogo = document.getElementById('companyLogo');
+            const companyNameDisplay = document.getElementById('companyName');
+            const currentStockPriceDisplay = document.getElementById('currentStockPrice');
+            const earningsTabBtn = document.getElementById('earningsTabBtn');
+            const cashFlowTabBtn = document.getElementById('cashFlowTabBtn');
+            const earningsSection = document.getElementById('earningsSection');
+            const cashFlowSection = document.getElementById('cashFlowSection');
+            const currentEpsDisplay = document.getElementById('currentEps');
+            const currentPeDisplay = document.getElementById('currentPe');
+            const epsGrowthDisplay = document.getElementById('epsGrowth');
+            const epsTtmInput = document.getElementById('epsTtmInput');
+            const growthRateInput = document.getElementById('growthRateInput');
+            const peMultipleInput = document.getElementById('peMultipleInput');
+            const currentFcfShareDisplay = document.getElementById('currentFcfShare');
+            const fcfYieldDisplay = document.getElementById('fcfYield');
+            const sbcImpactDisplay = document.getElementById('sbcImpact');
+            const fcfShareInput = document.getElementById('fcfShareInput');
+            const fcfGrowthRateInput = document.getElementById('fcfGrowthRateInput');
+            const fcfYieldInput = document.getElementById('fcfYieldInput');
+            const desiredReturnInput = document.getElementById('desiredReturnInput');
+            const calculatePriceBtn = document.getElementById('calculatePriceBtn');
+            const saveCalculationBtn = document.getElementById('saveCalculationBtn');
+            const loadCalculationsBtn = document.getElementById('loadCalculationsBtn');
+            const savedCalculationsContainer = document.getElementById('savedCalculationsContainer');
+            const priceChartCanvas = document.getElementById('priceChart');
+            const confirmationModal = document.getElementById('confirmationModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const confirmYesBtn = document.getElementById('confirmYesBtn');
+            const confirmNoBtn = document.getElementById('confirmNoBtn');
+            const projectionPlaceholder = document.getElementById('projectionPlaceholder');
+            const projectionOutput = document.getElementById('projectionOutput');
+            const calculationResultsDiv = document.getElementById('calculationResults');
 
-            // Specific styling for the insights price chart
-            if (title.includes('Price')) {
-                datasetOptions.pointRadius = 0;
-            }
-            // Specific styling for the DCF projection chart
-            if (title === 'Projected Price Growth') {
-                datasetOptions.pointRadius = 3; // Ensure dots are visible
-                onClickHandler = null; // Disable fullscreen click
-            }
+            // These elements are now static in HTML, so we can declare them once globally
+            const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay');
+            const entryPriceDisplay = document.getElementById('entryPriceDisplay');
+            const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
+            const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay');
 
-            const chartInstance = new Chart(ctx, {
-                type: chartData.type,
-                data: {
-                    labels: chartData.labels,
-                    datasets: [datasetOptions]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
-                    
-                    scales: {
-                        y: {
-                            beginAtZero: ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'].includes(title) ? true : false,
-                            grid: { color: '#e9ecef' },
-                            ticks: {
-                                color: '#6c757d',
-                                callback: function(value, index, values) {
-                                    const chartTitlesToFormat = ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'];
-                                    if (chartTitlesToFormat.includes(title)) {
-                                        if (Math.abs(value) >= 1000000000) {
-                                            return '$' + (value / 1000000000).toFixed(1) + 'B';
-                                        }
-                                        if (Math.abs(value) >= 1000000) {
-                                            return '$' + (value / 1000000).toFixed(1) + 'M';
-                                        }
-                                        return '$' + value.toLocaleString();
-                                    }
-                                    return value.toLocaleString();
-                                }
-                            }
-                        },
-                        x: { grid: { display: false }, ticks: { color: '#6c757d' } }
+            // Toast Container Element
+            const toastContainer = document.getElementById('toast-container');
+
+
+            let activeFullscreenChart = null;
+            let dcfProjectionChart = null;
+            let currentStockPrice = 0;
+            let activeTab = 'earnings';
+            let currentTicker = '';
+            let modalCallback = null;
+            let fullInsightsData = {}; // Store full historical data {price, annual, quarterly}
+            let currentPeriod = 'annual'; // 'annual' or 'quarterly'
+            let currentUser = null; // To store Firebase User object
+
+            // --- Firebase Auth State Listener ---
+            // This runs whenever the user's sign-in state changes
+            onAuthStateChanged(auth, (user) => { // Use the imported 'auth' instance directly
+                currentUser = user;
+                if (user) {
+                    // User is signed in.
+                    console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
+                    // Check if email is verified for email/password users
+                    if (user.emailVerified || user.providerData[0].providerId === 'google.com') {
+                        showPage(mainMenu);
+                    } else {
+                        showPage(loginPage); // Keep them on login page if email not verified
+                        showToast('Please verify your email address to continue.', true);
                     }
-                ,
-                    onClick: onClickHandler
-                }
-            });
-            return chartInstance;
-        }
-
-        function openFullscreen(title) {
-            fullscreenModal.classList.remove('hidden');
-            if (activeFullscreenChart) activeFullscreenChart.destroy();
-            
-            // Determine which dataset to use for fullscreen
-            let fullChartData;
-            if (title.includes('Price')) {
-                fullChartData = fullInsightsData.price[title];
-            } else {
-                fullChartData = fullInsightsData[currentPeriod][title];
-            }
-            
-            activeFullscreenChart = createChart(fullscreenCanvas, title, fullChartData, true);
-        }
-
-        closeFullscreenBtn.addEventListener('click', () => {
-            fullscreenModal.classList.add('hidden');
-            if (activeFullscreenChart) {
-                activeFullscreenChart.destroy();
-                activeFullscreenChart = null;
-            }
-        });
-
-        // --- Insights Page Logic ---
-        function renderInsightsCharts() {
-            insightsGrid.innerHTML = '';
-            
-            const priceData = fullInsightsData.price || {};
-            const financialData = fullInsightsData[currentPeriod] || {};
-
-            if (Object.keys(priceData).length === 0 && Object.keys(financialData).length === 0) {
-                insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">No insights data found for the selected ticker.</p>`;
-                return;
-            }
-
-            // Define the desired order of charts
-            const chartOrder = [
-                'Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'
-            ];
-
-            const allCharts = { ...priceData, ...financialData };
-            const remainingCharts = Object.keys(allCharts).filter(title => !chartOrder.includes(title));
-            const finalChartOrder = [...chartOrder, ...remainingCharts];
-
-            finalChartOrder.forEach(title => {
-                const chartData = allCharts[title];
-                if (chartData && chartData.data && chartData.data.length > 0) {
-                    
-                    const previewData = { ...chartData };
-                    if (previewData.labels.length > 5 && !title.includes('Price')) {
-                         previewData.labels = previewData.labels.slice(-5);
-                         previewData.data = previewData.data.slice(-5);
-                    } else if (previewData.labels.length > 252 && title.includes('Price')) { // ~1 year of daily data
-                         previewData.labels = previewData.labels.slice(-252);
-                         previewData.data = previewData.data.slice(-252);
-                    }
-
-                    const chartCard = document.createElement('div');
-                    chartCard.className = 'chart-card';
-                    chartCard.innerHTML = `<h3>${title}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
-                    insightsGrid.appendChild(chartCard);
-                    const canvas = chartCard.querySelector('canvas');
-                    createChart(canvas, title, previewData, false);
-                }
-            });
-        }
-
-        async function fetchInsightsData() {
-            const ticker = insightsTickerInput.value.trim().toUpperCase();
-            if (!ticker) {
-                showToast('Please enter a ticker symbol to see financial insights.', true); // Changed to toast
-                insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol to see financial insights.</p>';
-                return;
-            }
-
-            setButtonState(getInsightsBtn, 'Loading...', true);
-            insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
-
-            try {
-                const response = await apiCall(`/get_insights_data?ticker=${ticker}`);
-                const fetchedData = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(fetchedData.error || 'Failed to fetch insights data.');
-                }
-                
-                fullInsightsData = fetchedData; // Store the full data globally {price, annual, quarterly}
-                renderInsightsCharts();
-                showToast('Insights data fetched successfully!', false); // Changed to toast
-
-            } catch (error) {
-                insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
-                showToast(`Failed to get insights: ${error.message}`, true); // Changed to toast
-            } finally {
-                setButtonState(getInsightsBtn, 'Get Insights', false);
-            }
-        }
-        
-        getInsightsBtn.addEventListener('click', fetchInsightsData);
-        
-        annualToggleBtn.addEventListener('click', () => {
-            currentPeriod = 'annual';
-            annualToggleBtn.classList.add('active');
-            quarterlyToggleBtn.classList.remove('active');
-            if (fullInsightsData.annual) renderInsightsCharts();
-        });
-
-        quarterlyToggleBtn.addEventListener('click', () => {
-            currentPeriod = 'quarterly';
-            quarterlyToggleBtn.classList.add('active');
-            annualToggleBtn.classList.remove('active');
-            if (fullInsightsData.quarterly) renderInsightsCharts();
-        });
-
-        insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
-
-        // --- All original DCF Calculator JS ---
-        function setButtonState(button, text, disabled) {
-            button.innerHTML = text;
-            button.disabled = disabled;
-        }
-        
-        async function apiCall(endpoint, options = {}) {
-            const token = localStorage.getItem('jwt_token');
-            if (token) {
-                options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-            }
-            try {
-                const response = await fetch(`${backendBaseUrl}${endpoint}`, options);
-                if (response.status === 401) {
-                    handleLogout();
-                    throw new Error('Session expired. Please log in again.');
-                }
-                return response;
-            } catch (error) {
-                console.error(`API call to ${endpoint} failed:`, error);
-                throw error;
-            }
-        }
-        
-        async function handleLogin() {
-            setButtonState(loginBtn, 'Logging in...', true);
-            try {
-                const response = await apiCall('/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: loginUsernameInput.value, password: loginPasswordInput.value })
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message || 'Login failed');
-                
-                localStorage.setItem('jwt_token', data.token);
-                localStorage.setItem('current_username', loginUsernameInput.value);
-                showToast('Login successful!', false); // Changed to toast
-                setTimeout(() => {
-                    showPage(mainMenu);
-                }, 1000);
-            } catch (error) {
-                showToast(`Login failed: ${error.message}`, true); // Changed to toast
-            } finally {
-                setButtonState(loginBtn, 'Login', false);
-            }
-        }
-
-        async function handleRegister() {
-            setButtonState(registerBtn, 'Registering...', true);
-            try {
-                const response = await apiCall('/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: registerUsernameInput.value, password: registerPasswordInput.value })
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message || 'Registration failed');
-
-                showToast('Registration successful! Please log in.', false); // Changed to toast
-                setTimeout(() => showPage(loginPage), 2000);
-            } catch (error) {
-                showToast(`Registration failed: ${error.message}`, true); // Changed to toast
-            } finally {
-                setButtonState(registerBtn, 'Register', false);
-            }
-        }
-        
-        function handleLogout() {
-            localStorage.removeItem('jwt_token');
-            localStorage.removeItem('current_username');
-            showPage(loginPage);
-            showToast('You have been successfully logged out.', false); // Changed to toast
-        }
-
-        function checkAuthAndRender() {
-            if (localStorage.getItem('jwt_token')) {
-                showPage(mainMenu);
-            } else {
-                showPage(loginPage);
-            }
-        }
-        
-        function clearAllFields() {
-            companyInfoDiv.classList.add('hidden-state');
-            if (companyLogo) companyLogo.textContent = '';
-            if (companyNameDisplay) companyNameDisplay.textContent = '';
-            if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = '$0.00';
-
-            if (currentEpsDisplay) currentEpsDisplay.textContent = '$0.00';
-            if (currentPeDisplay) currentPeDisplay.textContent = '0.00';
-            if (epsGrowthDisplay) epsGrowthDisplay.textContent = '0.0%';
-            if (epsTtmInput) epsTtmInput.value = '0.00';
-            if (growthRateInput) growthRateInput.value = '';
-            if (peMultipleInput) peMultipleInput.value = '';
-
-            if (currentFcfShareDisplay) currentFcfShareDisplay.textContent = '$0.00';
-            if (fcfYieldDisplay) fcfYieldDisplay.textContent = '0.0%';
-            if (sbcImpactDisplay) sbcImpactDisplay.textContent = '0.0%';
-            if (fcfShareInput) fcfShareInput.value = '0.00';
-            if (fcfGrowthRateInput) fcfGrowthRateInput.value = '';
-            if (fcfYieldInput) fcfYieldInput.value = '';
-
-            if (desiredReturnInput) desiredReturnInput.value = '';
-            
-            // These elements are now static, so we just clear their text content
-            if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
-            if (entryPriceDisplay) entryPriceDisplay.textContent = 'N/A';
-            if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
-            if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = 'N/A';
-            
-            // calculationMessageDiv is no longer used for messages, replaced by toast
-            // if (calculationMessageDiv) calculationMessageDiv.innerHTML = '<p class="text-gray-400">Estimated 5-Year Price will appear here...</p>';
-            
-            // Check if priceChartCanvas exists before trying to manipulate it
-            if (priceChartCanvas) {
-                // If you have a Chart.js instance associated with priceChartCanvas, destroy it
-                if (dcfProjectionChart) {
-                    dcfProjectionChart.destroy();
-                    dcfProjectionChart = null; // Clear the reference
-                }
-            }
-            currentTicker = '';
-        }
-
-        async function fetchAndPopulateMetrics() {
-            const ticker = tickerInput.value.trim().toUpperCase();
-            if (!ticker) {
-                showToast('Please enter a ticker symbol.', true); // Changed to toast
-                return;
-            }
-            setButtonState(getCurrentDataBtn, 'Fetching...', true);
-
-            projectionPlaceholder.classList.remove('hidden');
-            projectionOutput.classList.add('hidden');
-            if (dcfProjectionChart) dcfProjectionChart.destroy();
-
-            try {
-                const response = await apiCall(`/get_trailing_metrics?ticker=${ticker}`);
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Failed to fetch data');
-
-                companyInfoDiv.classList.remove('hidden-state');
-                companyLogo.textContent = ticker.charAt(0);
-                companyNameDisplay.textContent = data.longName || ticker;
-                currentStockPrice = data.regularMarketPrice || 0;
-                currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-                
-                const formatNum = (num, prefix = '', suffix = '') => (typeof num === 'number' && !isNaN(num)) ? `${prefix}${(num).toFixed(2)}${suffix}` : 'N/A';
-                const formatPercent = (num) => (typeof num === 'number' && !isNaN(num)) ? `${(num * 100).toFixed(2)}%` : 'N/A';
-
-                currentEpsDisplay.textContent = formatNum(data.trailing_eps, '$');
-                currentPeDisplay.textContent = formatNum(data.trailing_pe);
-                epsGrowthDisplay.textContent = formatPercent(data.trailing_eps_growth);
-                epsTtmInput.value = (data.trailing_eps || 0).toFixed(2);
-                
-                currentFcfShareDisplay.textContent = formatNum(data.fcfShare, '$');
-                fcfYieldDisplay.textContent = formatPercent(data.fcfYield);
-                sbcImpactDisplay.textContent = formatPercent(data.sbcImpact);
-                fcfShareInput.value = (data.fcfShare || 0).toFixed(2);
-
-                currentTicker = ticker;
-                showToast('Current data loaded successfully!', false); // Changed to toast
-
-            } catch (error) {
-                showToast(`Data fetch error: ${error.message}`, true); // Changed to toast
-            } finally {
-                setButtonState(getCurrentDataBtn, 'Search', false);
-            }
-        }
-        
-        async function saveCalculation() {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                showToast('You must be logged in to save calculations.', true); // Changed to toast
-                showPage(loginPage);
-                return;
-            }
-
-            if (!currentTicker) {
-                showToast('Please search for a ticker and calculate a price before saving.', true); // Changed to toast
-                return;
-            }
-
-            const calculationName = prompt('Enter a name for this calculation:');
-            if (!calculationName || calculationName.trim() === '') {
-                showToast('Calculation name cannot be empty.', true); // Changed to toast
-                return;
-            }
-
-            const calculationData = captureCalculationData();
-            
-            try {
-                const response = await fetch(`${backendBaseUrl}/save_calculation`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        ticker: currentTicker,
-                        name: calculationName.trim(),
-                        data: calculationData
-                    })
-                });
-
-                const result = await response.json();
-                if (response.ok) {
-                    showToast(result.message, false); // Changed to toast
-                    loadSavedCalculations();
                 } else {
-                    showToast(`Error saving calculation: ${result.message}`, true); // Changed to toast
+                    // User is signed out.
+                    console.log("User signed out.");
+                    showPage(loginPage);
                 }
-            } catch (error) {
-                console.error('Save calculation error:', error);
-                showToast('An error occurred while saving the calculation.', true); // Changed to toast
-            }
-        }
-        
-        async function loadSavedCalculations() {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
-                return;
+            });
+
+
+            // --- Navigation Logic ---
+            function showPage(page) {
+                mainMenu.classList.add('hidden');
+                loginPage.classList.add('hidden');
+                registerPage.classList.add('hidden');
+                appContent.classList.add('hidden');
+                insightsPage.classList.add('hidden');
+                page.classList.remove('hidden');
             }
 
-            try {
-                const response = await fetch(`${backendBaseUrl}/load_calculations`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
+            dcfCalculatorMenuBtn.addEventListener('click', () => showPage(appContent));
+            insightsMenuBtn.addEventListener('click', () => showPage(insightsPage));
+            logoutMenuBtn.addEventListener('click', handleLogout);
+            backToMenuBtn.addEventListener('click', () => showPage(mainMenu));
+            insightsBackToMenuBtn.addEventListener('click', () => showPage(mainMenu));
+            showRegisterBtn.addEventListener('click', () => showPage(registerPage));
+            showLoginBtn.addEventListener('click', () => showPage(loginPage));
+            
+            // --- Charting Logic ---
+            function createChart(canvas, title, chartData, isFullscreen = false) {
+                const ctx = canvas.getContext('2d');
+                
+                const datasetOptions = {
+                    label: title,
+                    data: chartData.data,
+                    backgroundColor: chartData.backgroundColor,
+                    borderColor: chartData.borderColor,
+                    borderWidth: chartData.type === 'bar' ? 1 : 2,
+                    fill: chartData.type === 'line',
+                    tension: 0.1,
+                    pointBackgroundColor: chartData.borderColor,
+                    pointHoverRadius: 5,
+                    pointRadius: 3
+                };
+                
+                let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
+
+                // Specific styling for the insights price chart
+                if (title.includes('Price')) {
+                    datasetOptions.pointRadius = 0;
+                }
+                // Specific styling for the DCF projection chart
+                if (title === 'Projected Price Growth') {
+                    datasetOptions.pointRadius = 3; // Ensure dots are visible
+                    onClickHandler = null; // Disable fullscreen click
+                }
+
+                const chartInstance = new Chart(ctx, {
+                    type: chartData.type,
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [datasetOptions]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
+                        
+                        scales: {
+                            y: {
+                                beginAtZero: ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'].includes(title) ? true : false,
+                                grid: { color: '#e9ecef' },
+                                ticks: {
+                                    color: '#6c757d',
+                                    callback: function(value, index, values) {
+                                        const chartTitlesToFormat = ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'];
+                                        if (chartTitlesToFormat.includes(title)) {
+                                            if (Math.abs(value) >= 1000000000) {
+                                                return '$' + (value / 1000000000).toFixed(1) + 'B';
+                                            }
+                                            if (Math.abs(value) >= 1000000) {
+                                                return '$' + (value / 1000000).toFixed(1) + 'M';
+                                            }
+                                            return '$' + value.toLocaleString();
+                                        }
+                                        return value.toLocaleString();
+                                    }
+                                }
+                            },
+                            x: { grid: { display: false }, ticks: { color: '#6c757d' } }
+                        }
+                    ,
+                        onClick: onClickHandler
                     }
                 });
+                return chartInstance;
+            }
 
-                if (response.status === 401) {
-                    showToast('Session expired or unauthorized. Please log in again to load calculations.', true); // Changed to toast
-                    handleLogout();
+            function openFullscreen(title) {
+                fullscreenModal.classList.remove('hidden');
+                if (activeFullscreenChart) activeFullscreenChart.destroy();
+                
+                // Determine which dataset to use for fullscreen
+                let fullChartData;
+                if (title.includes('Price')) {
+                    fullChartData = fullInsightsData.price[title];
+                } else {
+                    fullChartData = fullInsightsData[currentPeriod][title];
+                }
+                
+                activeFullscreenChart = createChart(fullscreenCanvas, title, fullChartData, true);
+            }
+
+            closeFullscreenBtn.addEventListener('click', () => {
+                fullscreenModal.classList.add('hidden');
+                if (activeFullscreenChart) {
+                    activeFullscreenChart.destroy();
+                    activeFullscreenChart = null;
+                }
+            });
+
+            // --- Insights Page Logic ---
+            function renderInsightsCharts() {
+                insightsGrid.innerHTML = '';
+                
+                const priceData = fullInsightsData.price || {};
+                const financialData = fullInsightsData[currentPeriod] || {};
+
+                if (Object.keys(priceData).length === 0 && Object.keys(financialData).length === 0) {
+                    insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">No insights data found for the selected ticker.</p>`;
                     return;
                 }
 
-                const data = await response.json();
+                // Define the desired order of charts
+                const chartOrder = [
+                    'Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'
+                ];
 
-                if (response.ok) {
-                    renderSavedCalculations(data);
-                    showToast('Saved calculations loaded.', false); // Changed to toast
-                } else {
-                    showToast(`Error loading calculations: ${data.message}`, true); // Changed to toast
-                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
-                }
-            } catch (error) {
-                console.error('Load calculations error:', error);
-                showToast('An error occurred while loading saved calculations.', true); // Changed to toast
-                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
-            }
-        }
-        
-        function renderSavedCalculations(calculations) {
-            savedCalculationsContainer.innerHTML = '';
-            if (calculations.length === 0) {
-                savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
-                return;
-            }
+                const allCharts = { ...priceData, ...financialData };
+                const remainingCharts = Object.keys(allCharts).filter(title => !chartOrder.includes(title));
+                const finalChartOrder = [...chartOrder, ...remainingCharts];
 
-            calculations.forEach(calc => {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'saved-calculation-item';
-                itemDiv.innerHTML = `
-                    <span>${calc.id} (${calc.ticker})</span>
-                    <div>
-                        <button data-id="${calc.id}" class="load-btn primary-button bg-orange-500 hover:bg-orange-600">Load</button>
-                        <button data-id="${calc.id}" class="delete-btn primary-button bg-red-500 hover:bg-red-600">Delete</button>
-                    </div>
-                `;
-                savedCalculationsContainer.appendChild(itemDiv);
-            });
+                finalChartOrder.forEach(title => {
+                    const chartData = allCharts[title];
+                    if (chartData && chartData.data && chartData.data.length > 0) {
+                        
+                        const previewData = { ...chartData };
+                        if (previewData.labels.length > 5 && !title.includes('Price')) {
+                            previewData.labels = previewData.labels.slice(-5);
+                            previewData.data = previewData.data.slice(-5);
+                        } else if (previewData.labels.length > 252 && title.includes('Price')) { // ~1 year of daily data
+                            previewData.labels = previewData.labels.slice(-252);
+                            previewData.data = previewData.data.slice(-252);
+                        }
 
-            savedCalculationsContainer.querySelectorAll('.load-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const calcId = event.target.dataset.id;
-                    const selectedCalc = calculations.find(c => c.id === calcId);
-                    if (selectedCalc) {
-                        await populateFormWithCalculationData(selectedCalc.data);
+                        const chartCard = document.createElement('div');
+                        chartCard.className = 'chart-card';
+                        chartCard.innerHTML = `<h3>${title}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
+                        insightsGrid.appendChild(chartCard);
+                        const canvas = chartCard.querySelector('canvas');
+                        createChart(canvas, title, previewData, false);
                     }
                 });
+            }
+
+            async function fetchInsightsData() {
+                const ticker = insightsTickerInput.value.trim().toUpperCase();
+                if (!ticker) {
+                    showToast('Please enter a ticker symbol to see financial insights.', true);
+                    insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol to see financial insights.</p>';
+                    return;
+                }
+
+                setButtonState(getInsightsBtn, 'Loading...', true);
+                insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
+
+                try {
+                    const response = await apiCall(`/get_insights_data?ticker=${ticker}`);
+                    const fetchedData = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(fetchedData.error || 'Failed to fetch insights data.');
+                    }
+                    
+                    fullInsightsData = fetchedData; // Store the full data globally {price, annual, quarterly}
+                    renderInsightsCharts();
+                    showToast('Insights data fetched successfully!', false);
+
+                } catch (error) {
+                    insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
+                    showToast(`Failed to get insights: ${error.message}`, true);
+                } finally {
+                    setButtonState(getInsightsBtn, 'Get Insights', false);
+                }
+            }
+            
+            getInsightsBtn.addEventListener('click', fetchInsightsData);
+            
+            annualToggleBtn.addEventListener('click', () => {
+                currentPeriod = 'annual';
+                annualToggleBtn.classList.add('active');
+                quarterlyToggleBtn.classList.remove('active');
+                if (fullInsightsData.annual) renderInsightsCharts();
             });
 
-            savedCalculationsContainer.querySelectorAll('.delete-btn').forEach(button => {
-                button.addEventListener('click', async (event) => {
-                    const calcId = event.target.dataset.id;
-                    showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, async () => {
-                        await deleteCalculation(calcId);
+            quarterlyToggleBtn.addEventListener('click', () => {
+                currentPeriod = 'quarterly';
+                quarterlyToggleBtn.classList.add('active');
+                annualToggleBtn.classList.remove('active');
+                if (fullInsightsData.quarterly) renderInsightsCharts();
+            });
+
+            insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
+
+            // --- All original DCF Calculator JS ---
+            function setButtonState(button, text, disabled) {
+                button.innerHTML = text;
+                button.disabled = disabled;
+            }
+            
+            async function apiCall(endpoint, options = {}) {
+                // Get Firebase ID token for authenticated requests
+                const user = auth.currentUser; // Use the imported 'auth' instance
+                let idToken = null;
+                if (user) {
+                    try {
+                        idToken = await user.getIdToken();
+                    } catch (error) {
+                        console.error("Error getting Firebase ID token:", error);
+                        // Handle token refresh issues or user not logged in properly
+                        handleLogout(); // Force logout if token cannot be retrieved
+                        throw new Error('Authentication token expired or invalid. Please log in again.');
+                    }
+                }
+
+                if (idToken) {
+                    options.headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
+                } else {
+                    // If no user or no token, ensure this is a public endpoint or handle accordingly
+                    // For now, if an API call requires auth and no token is present, it will fail.
+                    console.warn(`Attempted API call to ${endpoint} without a Firebase ID token.`);
+                    // You might want to throw an error or redirect to login here for protected routes.
+                }
+
+                try {
+                    const response = await fetch(`${backendBaseUrl}${endpoint}`, options);
+                    if (response.status === 401) {
+                        handleLogout(); // Force logout on 401 (unauthorized)
+                        throw new Error('Session expired. Please log in again.');
+                    }
+                    return response;
+                } catch (error) {
+                    console.error(`API call to ${endpoint} failed:`, error);
+                    throw error;
+                }
+            }
+            
+            async function handleLogin() {
+                setButtonState(loginBtn, 'Logging in...', true);
+                const email = loginEmailInput.value;
+                const password = loginPasswordInput.value;
+
+                try {
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password); // Use the imported function
+                    const user = userCredential.user;
+                    if (!user.emailVerified) { // This checks if the email is verified
+                        // If email is not verified, sign them out and prompt for verification
+                        await signOut(auth); // Use the imported function
+                        showToast('Please verify your email address before logging in.', true);
+                        return;
+                    }
+                    showToast('Login successful!', false);
+                    // onAuthStateChanged will handle page navigation
+                } catch (error) {
+                    let errorMessage = 'Login failed.';
+                    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                        errorMessage = 'Invalid email or password.';
+                    } else if (error.code === 'auth/invalid-email') {
+                        errorMessage = 'Invalid email format.';
+                    } else {
+                        errorMessage = error.message;
+                    }
+                    showToast(`Login failed: ${errorMessage}`, true);
+                } finally {
+                    setButtonState(loginBtn, 'Login', false);
+                }
+            }
+
+            async function handleGoogleLogin() {
+                setButtonState(googleLoginBtn, 'Signing in with Google...', true);
+                const provider = new GoogleAuthProvider(); // Use the imported class
+                try {
+                    const result = await signInWithPopup(auth, provider); // Use the imported function
+                    // The signed-in user info.
+                    const user = result.user;
+                    console.log("Google user signed in:", user.email);
+                    showToast('Signed in with Google successfully!', false);
+                    // onAuthStateChanged will handle page navigation
+                } catch (error) {
+                    let errorMessage = 'Google Sign-In failed.';
+                    if (error.code === 'auth/popup-closed-by-user') {
+                        errorMessage = 'Sign-in window closed.';
+                    } else if (error.code === 'auth/cancelled-popup-request') {
+                        errorMessage = 'Sign-in cancelled.';
+                    } else {
+                        errorMessage = error.message;
+                    }
+                    showToast(`Google Sign-In failed: ${errorMessage}`, true);
+                } finally {
+                    setButtonState(googleLoginBtn, 'Sign in with Google', false);
+                }
+            }
+
+
+            async function handleRegister() {
+                setButtonState(registerBtn, 'Registering...', true);
+                const email = registerEmailInput.value;
+                const password = registerPasswordInput.value;
+
+                try {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password); // Use the imported function
+                    const user = userCredential.user;
+                    await sendEmailVerification(user); // Use the imported function
+                    showToast('Registration successful! Please check your email to verify your account.', false);
+                    // After registration, redirect to login page
+                    setTimeout(() => showPage(loginPage), 2000);
+                } catch (error) {
+                    let errorMessage = 'Registration failed.';
+                    if (error.code === 'auth/email-already-in-use') {
+                        errorMessage = 'This email is already in use.';
+                    } else if (error.code === 'auth/invalid-email') {
+                        errorMessage = 'Invalid email format.';
+                    } else if (error.code === 'auth/weak-password') {
+                        errorMessage = 'Password is too weak (min 6 characters).';
+                    } else {
+                        errorMessage = error.message;
+                    }
+                    showToast(`Registration failed: ${errorMessage}`, true);
+                } finally {
+                    setButtonState(registerBtn, 'Register', false);
+                }
+            }
+            
+            function handleLogout() {
+                signOut(auth).then(() => { // Use the imported function
+                    showToast('You have been successfully logged out.', false);
+                    // onAuthStateChanged will handle page navigation
+                }).catch((error) => {
+                    showToast(`Logout failed: ${error.message}`, true);
+                });
+            }
+
+            // Initial check is handled by onAuthStateChanged listener
+            // function checkAuthAndRender() {
+            //     if (localStorage.getItem('jwt_token')) {
+            //         showPage(mainMenu);
+            //     } else {
+            //         showPage(loginPage);
+            //     }
+            // }
+            
+            function clearAllFields() {
+                companyInfoDiv.classList.add('hidden-state');
+                if (companyLogo) companyLogo.textContent = '';
+                if (companyNameDisplay) companyNameDisplay.textContent = '';
+                if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = '$0.00';
+
+                if (currentEpsDisplay) currentEpsDisplay.textContent = '$0.00';
+                if (currentPeDisplay) currentPeDisplay.textContent = '0.00';
+                if (epsGrowthDisplay) epsGrowthDisplay.textContent = '0.0%';
+                if (epsTtmInput) epsTtmInput.value = '0.00';
+                if (growthRateInput) growthRateInput.value = '';
+                if (peMultipleInput) peMultipleInput.value = '';
+
+                if (currentFcfShareDisplay) currentFcfShareDisplay.textContent = '$0.00';
+                if (fcfYieldDisplay) fcfYieldDisplay.textContent = '0.0%';
+                if (sbcImpactDisplay) sbcImpactDisplay.textContent = '0.0%';
+                if (fcfShareInput) fcfShareInput.value = '0.00';
+                if (fcfGrowthRateInput) fcfGrowthRateInput.value = '';
+                if (fcfYieldInput) fcfYieldInput.value = '';
+
+                if (desiredReturnInput) desiredReturnInput.value = '';
+                
+                // These elements are now static, so we just clear their text content
+                if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
+                if (entryPriceDisplay) entryPriceDisplay.textContent = 'N/A';
+                if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
+                if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = 'N/A';
+                
+                if (priceChartCanvas) {
+                    if (dcfProjectionChart) {
+                        dcfProjectionChart.destroy();
+                        dcfProjectionChart = null; // Clear the reference
+                    }
+                }
+                currentTicker = '';
+            }
+
+            async function fetchAndPopulateMetrics() {
+                const ticker = tickerInput.value.trim().toUpperCase();
+                if (!ticker) {
+                    showToast('Please enter a ticker symbol.', true);
+                    return;
+                }
+                setButtonState(getCurrentDataBtn, 'Fetching...', true);
+
+                projectionPlaceholder.classList.remove('hidden');
+                projectionOutput.classList.add('hidden');
+                if (dcfProjectionChart) dcfProjectionChart.destroy();
+
+                try {
+                    const response = await apiCall(`/get_trailing_metrics?ticker=${ticker}`);
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'Failed to fetch data');
+
+                    companyInfoDiv.classList.remove('hidden-state');
+                    companyLogo.textContent = ticker.charAt(0);
+                    companyNameDisplay.textContent = data.longName || ticker;
+                    currentStockPrice = data.regularMarketPrice || 0;
+                    currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+                    
+                    const formatNum = (num, prefix = '', suffix = '') => (typeof num === 'number' && !isNaN(num)) ? `${prefix}${(num).toFixed(2)}${suffix}` : 'N/A';
+                    const formatPercent = (num) => (typeof num === 'number' && !isNaN(num)) ? `${(num * 100).toFixed(2)}%` : 'N/A';
+
+                    currentEpsDisplay.textContent = formatNum(data.trailing_eps, '$');
+                    currentPeDisplay.textContent = formatNum(data.trailing_pe);
+                    epsGrowthDisplay.textContent = formatPercent(data.trailing_eps_growth);
+                    epsTtmInput.value = (data.trailing_eps || 0).toFixed(2);
+                    
+                    currentFcfShareDisplay.textContent = formatNum(data.fcfShare, '$');
+                    fcfYieldDisplay.textContent = formatPercent(data.fcfYield);
+                    sbcImpactDisplay.textContent = formatPercent(data.sbcImpact);
+                    fcfShareInput.value = (data.fcfShare || 0).toFixed(2);
+
+                    currentTicker = ticker;
+                    showToast('Current data loaded successfully!', false);
+
+                } catch (error) {
+                    showToast(`Data fetch error: ${error.message}`, true);
+                } finally {
+                    setButtonState(getCurrentDataBtn, 'Search', false);
+                }
+            }
+            
+            async function saveCalculation() {
+                if (!currentUser) {
+                    showToast('You must be logged in to save calculations.', true);
+                    showPage(loginPage);
+                    return;
+                }
+
+                if (!currentUser.emailVerified && currentUser.providerData[0].providerId === 'password') {
+                    showToast('Please verify your email address to save calculations.', true);
+                    return;
+                }
+
+                if (!currentTicker) {
+                    showToast('Please search for a ticker and calculate a price before saving.', true);
+                    return;
+                }
+
+                const calculationName = prompt('Enter a name for this calculation:');
+                if (!calculationName || calculationName.trim() === '') {
+                    showToast('Calculation name cannot be empty.', true);
+                    return;
+                }
+
+                const calculationData = captureCalculationData();
+                
+                try {
+                    const response = await apiCall(`/save_calculation`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            ticker: currentTicker,
+                            name: calculationName.trim(),
+                            data: calculationData
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (response.ok) {
+                        showToast(result.message, false);
+                        loadSavedCalculations();
+                    } else {
+                        showToast(`Error saving calculation: ${result.message}`, true);
+                    }
+                } catch (error) {
+                    console.error('Save calculation error:', error);
+                    showToast('An error occurred while saving the calculation.', true);
+                }
+            }
+            
+            async function loadSavedCalculations() {
+                if (!currentUser) {
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
+                    return;
+                }
+
+                if (!currentUser.emailVerified && currentUser.providerData[0].providerId === 'password') {
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please verify your email to load calculations.</p>';
+                    showToast('Please verify your email address to load calculations.', true);
+                    return;
+                }
+
+                try {
+                    const response = await apiCall(`/load_calculations`);
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        renderSavedCalculations(data);
+                        showToast('Saved calculations loaded.', false);
+                    } else {
+                        showToast(`Error loading calculations: ${data.message}`, true);
+                        savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Error loading saved calculations.</p>';
+                    }
+                } catch (error) {
+                    console.error('Load calculations error:', error);
+                    showToast('An error occurred while loading saved calculations.', true);
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
+                }
+            }
+            
+            function renderSavedCalculations(calculations) {
+                savedCalculationsContainer.innerHTML = '';
+                if (calculations.length === 0) {
+                    savedCalculationsContainer.innerHTML = '<p class="text-gray-400">No saved calculations yet.</p>';
+                    return;
+                }
+
+                calculations.forEach(calc => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'saved-calculation-item';
+                    itemDiv.innerHTML = `
+                        <span>${calc.name} (${calc.ticker})</span>
+                        <div>
+                            <button data-id="${calc.id}" class="load-btn primary-button bg-orange-500 hover:bg-orange-600">Load</button>
+                            <button data-id="${calc.id}" class="delete-btn primary-button bg-red-500 hover:bg-red-600">Delete</button>
+                        </div>
+                    `;
+                    savedCalculationsContainer.appendChild(itemDiv);
+                });
+
+                savedCalculationsContainer.querySelectorAll('.load-btn').forEach(button => {
+                    button.addEventListener('click', async (event) => {
+                        const calcId = event.target.dataset.id;
+                        const selectedCalc = calculations.find(c => c.id === calcId);
+                        if (selectedCalc) {
+                            await populateFormWithCalculationData(selectedCalc.data);
+                        }
                     });
                 });
-            });
-        }
-        function calculatePrice() {
-            let currentMetric, growthRate, targetMultiple, calculationType, impliedCurrentMultiple;
-            
-            if (activeTab === 'earnings') {
-                currentMetric = parseFloat(epsTtmInput.value);
-                growthRate = parseFloat(growthRateInput.value) / 100;
-                targetMultiple = parseFloat(peMultipleInput.value); // This is PE
-                calculationType = 'EPS';
-                impliedCurrentMultiple = currentMetric > 0 ? currentStockPrice / currentMetric : targetMultiple;
-            } else {
-                currentMetric = parseFloat(fcfShareInput.value);
-                growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
-                targetMultiple = parseFloat(fcfYieldInput.value) / 100; // This is Yield
-                calculationType = 'FCF';
-                impliedCurrentMultiple = currentStockPrice > 0 ? currentMetric / currentStockPrice : targetMultiple;
-            }
-            const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
 
-            if (isNaN(currentMetric) || isNaN(growthRate) || isNaN(targetMultiple) || isNaN(desiredReturn)) {
-                showToast('Please fill all input fields with valid numbers.', true); // Changed to toast
-                projectionOutput.classList.add('hidden');
-                projectionPlaceholder.classList.remove('hidden');
-                return;
-            }
-
-            projectionPlaceholder.classList.add('hidden');
-            projectionOutput.classList.remove('hidden');
-
-            const estimatedMetric5Yr = currentMetric * Math.pow(1 + growthRate, 5);
-            const estimatedPrice5Yr = calculationType === 'EPS' ? estimatedMetric5Yr * targetMultiple : estimatedMetric5Yr / targetMultiple;
-            const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1/5) - 1) * 100 : 0;
-            const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
-
-            // Update the text content of the display elements (now static)
-            if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
-            if (entryPriceDisplay) entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
-            if (desiredReturnDisplay) desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`; // Ensure this always shows the input desired return
-            if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
-
-            const projectedPrices = [];
-            const numYears = 5;
-            for (let i = 1; i <= numYears; i++) {
-                const futureMetric = currentMetric * Math.pow(1 + growthRate, i);
-                const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
-                const futurePrice = calculationType === 'EPS' 
-                    ? futureMetric * interpolatedMultiple
-                    : (interpolatedMultiple > 0 ? futureMetric / interpolatedMultiple : 0);
-                projectedPrices.push(futurePrice);
-            }
-            
-            if (dcfProjectionChart) dcfProjectionChart.destroy();
-            const chartData = {
-                labels: ['Today', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'],
-                data: [currentStockPrice, ...projectedPrices],
-                type: 'line',
-                backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                borderColor: 'rgba(40, 167, 69, 1)'
-            };
-            dcfProjectionChart = createChart(priceChartCanvas, 'Projected Price Growth', chartData);
-        }
-        
-        function captureCalculationData() {
-            // Since the elements are now static and globally referenced,
-            // we can directly use the global variables.
-            return {
-                ticker: tickerInput.value.trim().toUpperCase(),
-                currentStockPrice: currentStockPrice,
-                activeTab: activeTab,
-                earnings: {
-                    epsTtm: parseFloat(epsTtmInput.value),
-                    growthRate: parseFloat(growthRateInput.value),
-                    peMultiple: parseFloat(peMultipleInput.value)
-                },
-                cashFlow: {
-                    fcfShare: parseFloat(fcfShareInput.value),
-                    fcfGrowthRate: parseFloat(fcfGrowthRateInput.value),
-                    fcfYield: parseFloat(fcfYieldInput.value)
-                },
-                desiredReturn: parseFloat(desiredReturnInput.value),
-                results: {
-                    // Safely access textContent using the globally defined variables
-                    returnFromToday: returnFromTodayDisplay ? returnFromTodayDisplay.textContent : 'N/A',
-                    entryPrice: entryPriceDisplay ? entryPriceDisplay.textContent : 'N/A',
-                    priceAfter5Years: priceAfter5YearsDisplay ? priceAfter5YearsDisplay.textContent : 'N/A'
-                }
-            };
-        }
-
-        async function populateFormWithCalculationData(data) { // Made async
-            clearAllFields();
-            tickerInput.value = data.ticker || ''; // Set ticker input first
-
-            // Fetch and populate current metrics for the loaded ticker
-            // This will update companyInfoDiv, currentEpsDisplay, currentPeDisplay, etc.
-            await fetchAndPopulateMetrics(); // Await this call
-
-            // Now populate input fields with saved data, overriding fetched defaults
-            // Use saved stock price if available, otherwise use the one fetched by fetchAndPopulateMetrics
-            currentStockPrice = data.currentStockPrice || currentStockPrice; 
-            if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-            // companyInfoDiv, companyLogo, companyNameDisplay are already updated by fetchAndPopulateMetrics
-
-            if (data.activeTab === 'earnings') {
-                if (earningsTabBtn) earningsTabBtn.click();
-                if (epsTtmInput) epsTtmInput.value = data.earnings.epsTtm !== undefined ? data.earnings.epsTtm.toFixed(2) : '0.00';
-                if (growthRateInput) growthRateInput.value = data.earnings.growthRate !== undefined ? data.earnings.growthRate : '';
-                if (peMultipleInput) peMultipleInput.value = data.earnings.peMultiple !== undefined ? data.earnings.peMultiple : '';
-            } else {
-                if (cashFlowTabBtn) cashFlowTabBtn.click();
-                if (fcfShareInput) fcfShareInput.value = data.cashFlow.fcfShare !== undefined ? data.cashFlow.fcfShare.toFixed(2) : '0.00';
-                if (fcfGrowthRateInput) fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate !== undefined ? data.cashFlow.fcfGrowthRate : '';
-                if (fcfYieldInput) fcfYieldInput.value = data.cashFlow.fcfYield !== undefined ? data.cashFlow.fcfYield : '';
-            }
-            if (desiredReturnInput) desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
-
-            // Trigger calculation to update chart and ensure all fields are consistent
-            // This will also update the static result display elements.
-            calculatePriceBtn.click(); 
-            showToast('Saved calculation loaded successfully. Click "Calculate" to re-run.', false); // Changed to toast
-        }
-
-        
-        function showConfirmationModal(message, callback) {
-            modalMessage.textContent = message;
-            modalTitle.textContent = 'Confirm Deletion';
-            confirmationModal.classList.remove('hidden');
-            modalCallback = callback;
-        }
-
-        function hideConfirmationModal() {
-            confirmationModal.classList.add('hidden');
-            modalCallback = null;
-        }
-
-        confirmYesBtn.addEventListener('click', () => {
-            if (modalCallback) {
-                modalCallback();
-            }
-            hideConfirmationModal();
-        });
-
-        confirmNoBtn.addEventListener('click', () => {
-            hideConfirmationModal();
-        });
-
-        async function deleteCalculation(calcId) {
-            const token = localStorage.getItem('jwt_token');
-            if (!token) {
-                showToast('You must be logged in to delete calculations.', true); // Changed to toast
-                showPage(loginPage);
-                return;
-            }
-
-            try {
-                const response = await fetch(`${backendBaseUrl}/delete_calculation/${calcId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                savedCalculationsContainer.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', async (event) => {
+                        const calcId = event.target.dataset.id;
+                        showConfirmationModal(`Are you sure you want to delete "${calcId}"?`, async () => {
+                            await deleteCalculation(calcId);
+                        });
+                    });
                 });
-
-                const result = await response.json();
-                if (response.ok) {
-                    showToast(result.message, false); // Changed to toast
-                    loadSavedCalculations();
+            }
+            function calculatePrice() {
+                let currentMetric, growthRate, targetMultiple, calculationType, impliedCurrentMultiple;
+                
+                if (activeTab === 'earnings') {
+                    currentMetric = parseFloat(epsTtmInput.value);
+                    growthRate = parseFloat(growthRateInput.value) / 100;
+                    targetMultiple = parseFloat(peMultipleInput.value); // This is PE
+                    calculationType = 'EPS';
+                    impliedCurrentMultiple = currentMetric > 0 ? currentStockPrice / currentMetric : targetMultiple;
                 } else {
-                    showToast(`Error deleting calculation: ${result.message}`, true); // Changed to toast
+                    currentMetric = parseFloat(fcfShareInput.value);
+                    growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
+                    targetMultiple = parseFloat(fcfYieldInput.value) / 100; // This is Yield
+                    calculationType = 'FCF';
+                    impliedCurrentMultiple = currentStockPrice > 0 ? currentMetric / currentStockPrice : targetMultiple;
                 }
-            } catch (error) {
-                console.error('Delete calculation error:', error);
-                showToast('An error occurred while deleting the calculation.', true); // Changed to toast
+                const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
+
+                if (isNaN(currentMetric) || isNaN(growthRate) || isNaN(targetMultiple) || isNaN(desiredReturn)) {
+                    showToast('Please fill all input fields with valid numbers.', true);
+                    projectionOutput.classList.add('hidden');
+                    projectionPlaceholder.classList.remove('hidden');
+                    return;
+                }
+
+                projectionPlaceholder.classList.add('hidden');
+                projectionOutput.classList.remove('hidden');
+
+                const estimatedMetric5Yr = currentMetric * Math.pow(1 + growthRate, 5);
+                const estimatedPrice5Yr = calculationType === 'EPS' ? estimatedMetric5Yr * targetMultiple : estimatedMetric5Yr / targetMultiple;
+                const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1/5) - 1) * 100 : 0;
+                const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
+
+                // Update the text content of the display elements (now static)
+                if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
+                if (entryPriceDisplay) entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
+                if (desiredReturnDisplay) desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`; // Ensure this always shows the input desired return
+                if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
+
+                const projectedPrices = [];
+                const numYears = 5;
+                for (let i = 1; i <= numYears; i++) {
+                    const futureMetric = currentMetric * Math.pow(1 + growthRate, i);
+                    const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
+                    const futurePrice = calculationType === 'EPS' 
+                        ? futureMetric * interpolatedMultiple
+                        : (interpolatedMultiple > 0 ? futureMetric / interpolatedMultiple : 0);
+                    projectedPrices.push(futurePrice);
+                }
+                
+                if (dcfProjectionChart) dcfProjectionChart.destroy();
+                const chartData = {
+                    labels: ['Today', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'],
+                    data: [currentStockPrice, ...projectedPrices],
+                    type: 'line',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    borderColor: 'rgba(40, 167, 69, 1)'
+                };
+                dcfProjectionChart = createChart(priceChartCanvas, 'Projected Price Growth', chartData);
             }
-        }
-
-        // --- New Toast Notification Function ---
-        function showToast(message, isError = false, duration = 3000) {
-            const toast = document.createElement('div');
-            toast.className = `toast ${isError ? 'error' : 'success'}`;
-            // Optional: Add an icon
-            const icon = document.createElement('span');
-            icon.className = 'toast-icon';
-            icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; // Cross for error, Checkmark for success
-            toast.appendChild(icon);
             
-            const text = document.createElement('span');
-            text.textContent = message;
-            toast.appendChild(text);
+            function captureCalculationData() {
+                // Since the elements are now static and globally referenced,
+                // we can directly use the global variables.
+                return {
+                    ticker: tickerInput.value.trim().toUpperCase(),
+                    currentStockPrice: currentStockPrice,
+                    activeTab: activeTab,
+                    earnings: {
+                        epsTtm: parseFloat(epsTtmInput.value),
+                        growthRate: parseFloat(growthRateInput.value),
+                        peMultiple: parseFloat(peMultipleInput.value)
+                    },
+                    cashFlow: {
+                        fcfShare: parseFloat(fcfShareInput.value),
+                        fcfGrowthRate: parseFloat(fcfGrowthRateInput.value),
+                        fcfYield: parseFloat(fcfYieldInput.value)
+                    },
+                    desiredReturn: parseFloat(desiredReturnInput.value),
+                    results: {
+                        // Safely access textContent using the globally defined variables
+                        returnFromToday: returnFromTodayDisplay ? returnFromTodayDisplay.textContent : 'N/A',
+                        entryPrice: entryPriceDisplay ? entryPriceDisplay.textContent : 'N/A',
+                        priceAfter5Years: priceAfter5YearsDisplay ? priceAfter5YearsDisplay.textContent : 'N/A'
+                    }
+                };
+            }
 
-            toastContainer.appendChild(toast);
+            async function populateFormWithCalculationData(data) { // Made async
+                clearAllFields();
+                tickerInput.value = data.ticker || ''; // Set ticker input first
 
-            // Remove toast after duration
-            setTimeout(() => {
-                toast.style.animation = 'fadeOut 0.5s forwards'; // Start fade out animation
-                toast.addEventListener('animationend', () => {
-                    toast.remove();
-                });
-            }, duration);
-        }
+                // Fetch and populate current metrics for the loaded ticker
+                // This will update companyInfoDiv, currentEpsDisplay, currentPeDisplay, etc.
+                await fetchAndPopulateMetrics(); // Await this call
 
-        // Add event listeners
-        loginBtn.addEventListener('click', handleLogin);
-        registerBtn.addEventListener('click', handleRegister);
-        getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
-        calculatePriceBtn.addEventListener('click', calculatePrice);
-        
-        earningsTabBtn.addEventListener('click', () => {
-            activeTab = 'earnings';
-            earningsTabBtn.classList.add('active');
-            cashFlowTabBtn.classList.remove('active');
-            earningsSection.classList.remove('hidden');
-            cashFlowSection.classList.add('hidden');
-        });
+                // Now populate input fields with saved data, overriding fetched defaults
+                // Use saved stock price if available, otherwise use the one fetched by fetchAndPopulateMetrics
+                currentStockPrice = data.currentStockPrice || currentStockPrice; 
+                if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+                // companyInfoDiv, companyLogo, companyNameDisplay are already updated by fetchAndPopulateMetrics
 
-        cashFlowTabBtn.addEventListener('click', () => {
-            activeTab = 'cashFlow';
-            cashFlowTabBtn.classList.add('active');
-            earningsTabBtn.classList.remove('active');
-            cashFlowSection.classList.remove('hidden');
-            earningsSection.classList.add('hidden');
-        });
-        saveCalculationBtn.addEventListener('click', saveCalculation);
-        loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
-        // Initial Load
-        checkAuthAndRender();
+                if (data.activeTab === 'earnings') {
+                    if (earningsTabBtn) earningsTabBtn.click();
+                    if (epsTtmInput) epsTtmInput.value = data.earnings.epsTtm !== undefined ? data.earnings.epsTtm.toFixed(2) : '0.00';
+                    if (growthRateInput) growthRateInput.value = data.earnings.growthRate !== undefined ? data.earnings.growthRate : '';
+                    if (peMultipleInput) peMultipleInput.value = data.earnings.peMultiple !== undefined ? data.earnings.peMultiple : '';
+                } else {
+                    if (cashFlowTabBtn) cashFlowTabBtn.click();
+                    if (fcfShareInput) fcfShareInput.value = data.cashFlow.fcfShare !== undefined ? data.cashFlow.fcfShare.toFixed(2) : '0.00';
+                    if (fcfGrowthRateInput) fcfGrowthRateInput.value = data.cashFlow.fcfGrowthRate !== undefined ? data.cashFlow.fcfGrowthRate : '';
+                    if (fcfYieldInput) fcfYieldInput.value = data.cashFlow.fcfYield !== undefined ? data.cashFlow.fcfYield : '';
+                }
+                if (desiredReturnInput) desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
+
+                // Trigger calculation to update chart and ensure all fields are consistent
+                // This will also update the static result display elements.
+                calculatePriceBtn.click(); 
+                showToast('Saved calculation loaded successfully. Click "Calculate" to re-run.', false);
+            }
+
+            
+            function showConfirmationModal(message, callback) {
+                modalMessage.textContent = message;
+                modalTitle.textContent = 'Confirm Deletion';
+                confirmationModal.classList.remove('hidden');
+                modalCallback = callback;
+            }
+
+            function hideConfirmationModal() {
+                confirmationModal.classList.add('hidden');
+                modalCallback = null;
+            }
+
+            confirmYesBtn.addEventListener('click', () => {
+                if (modalCallback) {
+                    modalCallback();
+                }
+                hideConfirmationModal();
+            });
+
+            confirmNoBtn.addEventListener('click', () => {
+                hideConfirmationModal();
+            });
+
+            async function deleteCalculation(calcId) {
+                if (!currentUser) {
+                    showToast('You must be logged in to delete calculations.', true);
+                    showPage(loginPage);
+                    return;
+                }
+
+                if (!currentUser.emailVerified && currentUser.providerData[0].providerId === 'password') {
+                    showToast('Please verify your email address to delete calculations.', true);
+                    return;
+                }
+
+                try {
+                    const response = await apiCall(`/delete_calculation/${calcId}`, {
+                        method: 'DELETE',
+                    });
+
+                    const result = await response.json();
+                    if (response.ok) {
+                        showToast(result.message, false);
+                        loadSavedCalculations();
+                    } else {
+                        showToast(`Error deleting calculation: ${result.message}`, true);
+                    }
+                } catch (error) {
+                    console.error('Delete calculation error:', error);
+                    showToast('An error occurred while deleting the calculation.', true);
+                }
+            }
+
+            // --- Toast Notification Function ---
+            function showToast(message, isError = false, duration = 3000) {
+                const toast = document.createElement('div');
+                toast.className = `toast ${isError ? 'error' : 'success'}`;
+                // Optional: Add an icon
+                const icon = document.createElement('span');
+                icon.className = 'toast-icon';
+                icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; // Cross for error, Checkmark for success
+                toast.appendChild(icon);
+                
+                const text = document.createElement('span');
+                text.textContent = message;
+                toast.appendChild(text);
+
+                toastContainer.appendChild(toast);
+
+                // Remove toast after duration
+                setTimeout(() => {
+                    toast.style.animation = 'fadeOut 0.5s forwards'; // Start fade out animation
+                    toast.addEventListener('animationend', () => {
+                        toast.remove();
+                    });
+                }, duration);
+            }
+
+            // Add event listeners
+            loginBtn.addEventListener('click', handleLogin);
+            googleLoginBtn.addEventListener('click', handleGoogleLogin); // Event listener for Google login
+            registerBtn.addEventListener('click', handleRegister);
+            getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
+            calculatePriceBtn.addEventListener('click', calculatePrice);
+            
+            earningsTabBtn.addEventListener('click', () => {
+                activeTab = 'earnings';
+                earningsTabBtn.classList.add('active');
+                cashFlowTabBtn.classList.remove('active');
+                earningsSection.classList.remove('hidden');
+                cashFlowSection.classList.add('hidden');
+            });
+
+            cashFlowTabBtn.addEventListener('click', () => {
+                activeTab = 'cashFlow';
+                cashFlowTabBtn.classList.add('active');
+                earningsTabBtn.classList.remove('active');
+                cashFlowSection.classList.remove('hidden');
+                earningsSection.classList.add('hidden');
+            });
+            saveCalculationBtn.addEventListener('click', saveCalculation);
+            loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
+            // Initial Load - onAuthStateChanged handles initial rendering
+            // checkAuthAndRender(); // Removed as onAuthStateChanged handles this
+        }); // End of DOMContentLoaded listener
     </script>
 </body>
 </html>
