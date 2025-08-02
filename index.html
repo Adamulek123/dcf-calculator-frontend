@@ -12,7 +12,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-    // TODO: Replace this with your own Firebase project's configuration
+    
     const firebaseConfig = {
         apiKey: "AIzaSyAuu1xiRsjARyIGNZyjHna9HsCqhrbPb74",
         authDomain: "dcf123-b6cb1.firebaseapp.com",
@@ -23,14 +23,13 @@
         measurementId: "G-FTJT1KSKL4"
     };
 
-    // Initialize Firebase and make auth available globally
+    
     try {
         window.firebaseApp = initializeApp(firebaseConfig);
         window.auth = getAuth(window.firebaseApp);
         console.log("Firebase initialized successfully.");
     } catch (e) {
         console.error("Error initializing Firebase:", e);
-        // Ensure auth is null if initialization fails
         window.auth = null;
     }
 </script>
@@ -239,16 +238,16 @@
         #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
         #close-fullscreen-btn { position: absolute; top: 2rem; right: 2rem; font-size: 2rem; background: none; border: none; color: #212529; cursor: pointer; }
 
-        /* Toast Notification styles */
+        
         #toast-container {
             position: fixed;
             top: 20px;
             right: 20px;
-            z-index: 1002; /* Higher than all other modals */
+            z-index: 1002; 
             display: flex;
             flex-direction: column;
             gap: 10px;
-            pointer-events: none; /* Allows clicks to pass through */
+            pointer-events: none; 
         }
 
         .toast {
@@ -259,23 +258,23 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
             opacity: 0;
             transform: translateX(100%);
-            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s; /* Slide in, then fade out after 2.5s delay */
+            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s; 
             min-width: 250px;
             max-width: 350px;
             font-size: 1rem;
             line-height: 1.4;
-            pointer-events: auto; /* Re-enable pointer events for the toast itself */
+            pointer-events: auto; 
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .toast.success {
-            background-color: #28a745; /* Green */
+            background-color: #28a745;
         }
 
         .toast.error {
-            background-color: #dc3545; /* Red */
+            background-color: #dc3545;
         }
 
         .toast-icon {
@@ -292,12 +291,12 @@
             to { opacity: 0; }
         }
 
-        /* Styles for Google Sign-In button */
+        
         .google-sign-in-button {
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: #4285f4; /* Google Blue */
+            background-color: #4285f4; 
             color: white;
             padding: 0.75rem 2rem;
             border-radius: 0.75rem;
@@ -308,12 +307,12 @@
             box-shadow: 0 6px 15px rgba(66, 133, 244, 0.3);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            width: 100%; /* Make it full width like other buttons */
-            gap: 10px; /* Space between icon and text */
+            width: 100%; 
+            gap: 10px; 
         }
 
         .google-sign-in-button:hover {
-            background-color: #357ae8; /* Darker blue on hover */
+            background-color: #357ae8; 
             transform: translateY(-3px) scale(1.02);
             box-shadow: 0 8px 20px rgba(66, 133, 244, 0.4);
         }
@@ -324,7 +323,7 @@
         }
 
         .google-icon {
-            width: 20px; /* Adjust size as needed */
+            width: 20px; 
             height: 20px;
             vertical-align: middle;
         }
@@ -413,7 +412,6 @@
             <div id="projectionOutput" class="hidden">
                 <h2 class="section-title">5-Year Projection</h2>
                 <div id="calculationResults" class="p-4 bg-gray-50 rounded-lg border">
-                    <!-- These elements are now static, matching clone.html's approach -->
                     <p class="flex justify-between p-2 border-b">Return from today: <strong id="returnFromTodayDisplay" class="text-green-600">N/A</strong></p>
                     <p class="flex justify-between p-2 border-b">Entry Price for Desired Return: <strong id="entryPriceDisplay" class="text-green-600">N/A</strong></p>
                     <p class="flex justify-between p-2 border-b">Desired Return: <strong id="desiredReturnDisplay" class="text-green-600">N/A</strong></p>
@@ -468,24 +466,24 @@
     <div id="toast-container"></div>
 
     <script type="module">
-        // Import Firebase Auth functions directly into this module's scope
+        
         import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Wrap the entire application logic in a DOMContentLoaded listener
+        
         window.addEventListener('DOMContentLoaded', () => {
-            // Access the globally initialized auth instance after DOM is ready
+            
             const auth = window.auth; 
 
             const backendBaseUrl = 'https://dcf-backend.onrender.com';
 
-            // --- Page Elements ---
+            
             const mainMenu = document.getElementById('mainMenu');
             const loginPage = document.getElementById('loginPage');
             const registerPage = document.getElementById('registerPage');
             const appContent = document.getElementById('appContent');
             const insightsPage = document.getElementById('insightsPage');
 
-            // --- Navigation Buttons ---
+            
             const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
             const insightsMenuBtn = document.getElementById('insightsMenuBtn');
             const logoutMenuBtn = document.getElementById('logoutMenuBtn');
@@ -494,7 +492,7 @@
             const showRegisterBtn = document.getElementById('showRegisterBtn');
             const showLoginBtn = document.getElementById('showLoginBtn');
             
-            // --- Auth Elements ---
+            
             const loginEmailInput = document.getElementById('loginEmail'); // Changed to Email
             const loginPasswordInput = document.getElementById('loginPassword');
             const loginBtn = document.getElementById('loginBtn');
@@ -503,7 +501,7 @@
             const registerPasswordInput = document.getElementById('registerPassword');
             const registerBtn = document.getElementById('registerBtn');
 
-            // --- Insights Elements ---
+            
             const insightsTickerInput = document.getElementById('insightsTickerInput');
             const getInsightsBtn = document.getElementById('getInsightsBtn');
             const insightsGrid = document.getElementById('insightsGrid');
@@ -513,7 +511,7 @@
             const fullscreenCanvas = document.getElementById('fullscreen-canvas');
             const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
             
-            // --- DCF Elements ---
+            
             const tickerInput = document.getElementById('tickerInput');
             const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
             const companyInfoDiv = document.getElementById('companyInfo');
@@ -551,13 +549,13 @@
             const projectionOutput = document.getElementById('projectionOutput');
             const calculationResultsDiv = document.getElementById('calculationResults');
 
-            // These elements are now static in HTML, so we can declare them once globally
+            
             const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay');
             const entryPriceDisplay = document.getElementById('entryPriceDisplay');
             const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
             const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay');
 
-            // Toast Container Element
+            
             const toastContainer = document.getElementById('toast-container');
 
 
@@ -567,18 +565,17 @@
             let activeTab = 'earnings';
             let currentTicker = '';
             let modalCallback = null;
-            let fullInsightsData = {}; // Store full historical data {price, annual, quarterly}
-            let currentPeriod = 'annual'; // 'annual' or 'quarterly'
-            let currentUser = null; // To store Firebase User object
+            let fullInsightsData = {}; 
+            let currentPeriod = 'annual';
+            let currentUser = null; 
 
-            // --- Firebase Auth State Listener ---
-            // This runs whenever the user's sign-in state changes
-            onAuthStateChanged(auth, (user) => { // Use the imported 'auth' instance directly
+            
+            onAuthStateChanged(auth, (user) => { 
                 currentUser = user;
                 if (user) {
-                    // User is signed in.
+                    
                     console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
-                    // Check if email is verified for email/password users
+                    
                     if (user.emailVerified || user.providerData[0].providerId === 'google.com') {
                         showPage(mainMenu);
                     } else {
@@ -586,14 +583,14 @@
                         showToast('Please verify your email address to continue.', true);
                     }
                 } else {
-                    // User is signed out.
+                    
                     console.log("User signed out.");
                     showPage(loginPage);
                 }
             });
 
 
-            // --- Navigation Logic ---
+            
             function showPage(page) {
                 mainMenu.classList.add('hidden');
                 loginPage.classList.add('hidden');
@@ -611,7 +608,7 @@
             showRegisterBtn.addEventListener('click', () => showPage(registerPage));
             showLoginBtn.addEventListener('click', () => showPage(loginPage));
             
-            // --- Charting Logic ---
+            
             function createChart(canvas, title, chartData, isFullscreen = false) {
                 const ctx = canvas.getContext('2d');
                 
@@ -630,14 +627,14 @@
                 
                 let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
 
-                // Specific styling for the insights price chart
+                
                 if (title.includes('Price')) {
                     datasetOptions.pointRadius = 0;
                 }
-                // Specific styling for the DCF projection chart
+                
                 if (title === 'Projected Price Growth') {
-                    datasetOptions.pointRadius = 3; // Ensure dots are visible
-                    onClickHandler = null; // Disable fullscreen click
+                    datasetOptions.pointRadius = 3; 
+                    onClickHandler = null; 
                 }
 
                 const chartInstance = new Chart(ctx, {
@@ -685,7 +682,7 @@
                 fullscreenModal.classList.remove('hidden');
                 if (activeFullscreenChart) activeFullscreenChart.destroy();
                 
-                // Determine which dataset to use for fullscreen
+                
                 let fullChartData;
                 if (title.includes('Price')) {
                     fullChartData = fullInsightsData.price[title];
@@ -704,7 +701,7 @@
                 }
             });
 
-            // --- Insights Page Logic ---
+            
             function renderInsightsCharts() {
                 insightsGrid.innerHTML = '';
                 
@@ -716,7 +713,7 @@
                     return;
                 }
 
-                // Define the desired order of charts
+                
                 const chartOrder = [
                     'Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'
                 ];
@@ -733,7 +730,7 @@
                         if (previewData.labels.length > 5 && !title.includes('Price')) {
                             previewData.labels = previewData.labels.slice(-5);
                             previewData.data = previewData.data.slice(-5);
-                        } else if (previewData.labels.length > 252 && title.includes('Price')) { // ~1 year of daily data
+                        } else if (previewData.labels.length > 252 && title.includes('Price')) { 
                             previewData.labels = previewData.labels.slice(-252);
                             previewData.data = previewData.data.slice(-252);
                         }
@@ -767,7 +764,7 @@
                         throw new Error(fetchedData.error || 'Failed to fetch insights data.');
                     }
                     
-                    fullInsightsData = fetchedData; // Store the full data globally {price, annual, quarterly}
+                    fullInsightsData = fetchedData; 
                     renderInsightsCharts();
                     showToast('Insights data fetched successfully!', false);
 
@@ -797,23 +794,20 @@
 
             insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
 
-            // --- All original DCF Calculator JS ---
+            
             function setButtonState(button, text, disabled) {
                 button.innerHTML = text;
                 button.disabled = disabled;
             }
-            
             async function apiCall(endpoint, options = {}) {
-                // Get Firebase ID token for authenticated requests
-                const user = auth.currentUser; // Use the imported 'auth' instance
+                const user = auth.currentUser; 
                 let idToken = null;
                 if (user) {
                     try {
                         idToken = await user.getIdToken();
                     } catch (error) {
                         console.error("Error getting Firebase ID token:", error);
-                        // Handle token refresh issues or user not logged in properly
-                        handleLogout(); // Force logout if token cannot be retrieved
+                        handleLogout(); 
                         throw new Error('Authentication token expired or invalid. Please log in again.');
                     }
                 }
@@ -821,16 +815,13 @@
                 if (idToken) {
                     options.headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
                 } else {
-                    // If no user or no token, ensure this is a public endpoint or handle accordingly
-                    // For now, if an API call requires auth and no token is present, it will fail.
                     console.warn(`Attempted API call to ${endpoint} without a Firebase ID token.`);
-                    // You might want to throw an error or redirect to login here for protected routes.
                 }
 
                 try {
                     const response = await fetch(`${backendBaseUrl}${endpoint}`, options);
                     if (response.status === 401) {
-                        handleLogout(); // Force logout on 401 (unauthorized)
+                        handleLogout(); // Force logout if 401
                         throw new Error('Session expired. Please log in again.');
                     }
                     return response;
@@ -846,16 +837,14 @@
                 const password = loginPasswordInput.value;
 
                 try {
-                    const userCredential = await signInWithEmailAndPassword(auth, email, password); // Use the imported function
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password); 
                     const user = userCredential.user;
-                    if (!user.emailVerified) { // This checks if the email is verified
-                        // If email is not verified, sign them out and prompt for verification
-                        await signOut(auth); // Use the imported function
+                    if (!user.emailVerified) { 
+                        await signOut(auth); 
                         showToast('Please verify your email address before logging in.', true);
                         return;
                     }
                     showToast('Login successful!', false);
-                    // onAuthStateChanged will handle page navigation
                 } catch (error) {
                     let errorMessage = 'Login failed.';
                     if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
@@ -873,14 +862,12 @@
 
             async function handleGoogleLogin() {
                 setButtonState(googleLoginBtn, 'Signing in with Google...', true);
-                const provider = new GoogleAuthProvider(); // Use the imported class
+                const provider = new GoogleAuthProvider(); 
                 try {
-                    const result = await signInWithPopup(auth, provider); // Use the imported function
-                    // The signed-in user info.
+                    const result = await signInWithPopup(auth, provider); 
                     const user = result.user;
                     console.log("Google user signed in:", user.email);
                     showToast('Signed in with Google successfully!', false);
-                    // onAuthStateChanged will handle page navigation
                 } catch (error) {
                     let errorMessage = 'Google Sign-In failed.';
                     if (error.code === 'auth/popup-closed-by-user') {
@@ -903,11 +890,10 @@
                 const password = registerPasswordInput.value;
 
                 try {
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password); // Use the imported function
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password); 
                     const user = userCredential.user;
-                    await sendEmailVerification(user); // Use the imported function
+                    await sendEmailVerification(user); 
                     showToast('Registration successful! Please check your email to verify your account.', false);
-                    // After registration, redirect to login page
                     setTimeout(() => showPage(loginPage), 2000);
                 } catch (error) {
                     let errorMessage = 'Registration failed.';
@@ -927,22 +913,13 @@
             }
             
             function handleLogout() {
-                signOut(auth).then(() => { // Use the imported function
+                signOut(auth).then(() => { 
                     showToast('You have been successfully logged out.', false);
-                    // onAuthStateChanged will handle page navigation
                 }).catch((error) => {
                     showToast(`Logout failed: ${error.message}`, true);
                 });
             }
 
-            // Initial check is handled by onAuthStateChanged listener
-            // function checkAuthAndRender() {
-            //     if (localStorage.getItem('jwt_token')) {
-            //         showPage(mainMenu);
-            //     } else {
-            //         showPage(loginPage);
-            //     }
-            // }
             
             function clearAllFields() {
                 companyInfoDiv.classList.add('hidden-state');
@@ -966,7 +943,6 @@
 
                 if (desiredReturnInput) desiredReturnInput.value = '';
                 
-                // These elements are now static, so we just clear their text content
                 if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
                 if (entryPriceDisplay) entryPriceDisplay.textContent = 'N/A';
                 if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
@@ -975,7 +951,7 @@
                 if (priceChartCanvas) {
                     if (dcfProjectionChart) {
                         dcfProjectionChart.destroy();
-                        dcfProjectionChart = null; // Clear the reference
+                        dcfProjectionChart = null; 
                     }
                 }
                 currentTicker = '';
@@ -1181,10 +1157,9 @@
                 const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1/5) - 1) * 100 : 0;
                 const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
 
-                // Update the text content of the display elements (now static)
                 if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
                 if (entryPriceDisplay) entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
-                if (desiredReturnDisplay) desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`; // Ensure this always shows the input desired return
+                if (desiredReturnDisplay) desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`;
                 if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
 
                 const projectedPrices = [];
@@ -1210,8 +1185,6 @@
             }
             
             function captureCalculationData() {
-                // Since the elements are now static and globally referenced,
-                // we can directly use the global variables.
                 return {
                     ticker: tickerInput.value.trim().toUpperCase(),
                     currentStockPrice: currentStockPrice,
@@ -1228,7 +1201,6 @@
                     },
                     desiredReturn: parseFloat(desiredReturnInput.value),
                     results: {
-                        // Safely access textContent using the globally defined variables
                         returnFromToday: returnFromTodayDisplay ? returnFromTodayDisplay.textContent : 'N/A',
                         entryPrice: entryPriceDisplay ? entryPriceDisplay.textContent : 'N/A',
                         priceAfter5Years: priceAfter5YearsDisplay ? priceAfter5YearsDisplay.textContent : 'N/A'
@@ -1236,19 +1208,15 @@
                 };
             }
 
-            async function populateFormWithCalculationData(data) { // Made async
+            async function populateFormWithCalculationData(data) { 
                 clearAllFields();
-                tickerInput.value = data.ticker || ''; // Set ticker input first
+                tickerInput.value = data.ticker || ''; 
 
-                // Fetch and populate current metrics for the loaded ticker
-                // This will update companyInfoDiv, currentEpsDisplay, currentPeDisplay, etc.
-                await fetchAndPopulateMetrics(); // Await this call
+                await fetchAndPopulateMetrics(); 
 
-                // Now populate input fields with saved data, overriding fetched defaults
-                // Use saved stock price if available, otherwise use the one fetched by fetchAndPopulateMetrics
+
                 currentStockPrice = data.currentStockPrice || currentStockPrice; 
                 if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-                // companyInfoDiv, companyLogo, companyNameDisplay are already updated by fetchAndPopulateMetrics
 
                 if (data.activeTab === 'earnings') {
                     if (earningsTabBtn) earningsTabBtn.click();
@@ -1263,8 +1231,7 @@
                 }
                 if (desiredReturnInput) desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
 
-                // Trigger calculation to update chart and ensure all fields are consistent
-                // This will also update the static result display elements.
+
                 calculatePriceBtn.click(); 
                 showToast('Saved calculation loaded successfully. Click "Calculate" to re-run.', false);
             }
@@ -1323,14 +1290,14 @@
                 }
             }
 
-            // --- Toast Notification Function ---
+            
             function showToast(message, isError = false, duration = 3000) {
                 const toast = document.createElement('div');
                 toast.className = `toast ${isError ? 'error' : 'success'}`;
                 // Optional: Add an icon
                 const icon = document.createElement('span');
                 icon.className = 'toast-icon';
-                icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; // Cross for error, Checkmark for success
+                icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; 
                 toast.appendChild(icon);
                 
                 const text = document.createElement('span');
@@ -1339,9 +1306,9 @@
 
                 toastContainer.appendChild(toast);
 
-                // Remove toast after duration
+
                 setTimeout(() => {
-                    toast.style.animation = 'fadeOut 0.5s forwards'; // Start fade out animation
+                    toast.style.animation = 'fadeOut 0.5s forwards'; 
                     toast.addEventListener('animationend', () => {
                         toast.remove();
                     });
@@ -1350,7 +1317,7 @@
 
             // Add event listeners
             loginBtn.addEventListener('click', handleLogin);
-            googleLoginBtn.addEventListener('click', handleGoogleLogin); // Event listener for Google login
+            googleLoginBtn.addEventListener('click', handleGoogleLogin); 
             registerBtn.addEventListener('click', handleRegister);
             getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
             calculatePriceBtn.addEventListener('click', calculatePrice);
@@ -1372,9 +1339,8 @@
             });
             saveCalculationBtn.addEventListener('click', saveCalculation);
             loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
-            // Initial Load - onAuthStateChanged handles initial rendering
-            // checkAuthAndRender(); // Removed as onAuthStateChanged handles this
-        }); // End of DOMContentLoaded listener
+            
+        });
     </script>
 </body>
 </html>
