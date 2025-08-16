@@ -12,7 +12,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-    
+
     const firebaseConfig = {
         apiKey: "AIzaSyAuu1xiRsjARyIGNZyjHna9HsCqhrbPb74",
         authDomain: "dcf123-b6cb1.firebaseapp.com",
@@ -23,7 +23,7 @@
         measurementId: "G-FTJT1KSKL4"
     };
 
-    
+
     try {
         window.firebaseApp = initializeApp(firebaseConfig);
         window.auth = getAuth(window.firebaseApp);
@@ -188,7 +188,7 @@
         .tab-button:hover:not(.active) { color: #495057; }
 
         .section-title { font-size: 1.5rem; font-weight: 700; color: #212529; margin-bottom: 1.5rem; text-align: center; }
-        
+
         .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1.25rem; margin-bottom: 2.5rem; text-align: center; }
         .metric-item { background-color: #f8f9fa; padding: 1.25rem; border-radius: 0.85rem; border: 1px solid #e9ecef; }
         .metric-label { font-size: 0.95rem; color: #6c757d; margin-bottom: 0.4rem; font-weight: 500; }
@@ -204,11 +204,11 @@
         .input-field-wrapper input { color: #495057; background: none; border: none; outline: none; flex-grow: 1; padding: 0; -moz-appearance: textfield; }
         .input-field-wrapper input::-webkit-outer-spin-button, .input-field-wrapper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .input-field-wrapper .currency-symbol, .input-field-wrapper .percentage-symbol { color: #6c757d; font-size: 1.05rem; padding-right: 0.6rem; }
-        
+
         .login-container, .main-menu { background-color: #ffffff; padding: 3rem; border-radius: 1.5rem; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1); width: 100%; max-width: 450px; border: 1px solid #dee2e6; display: flex; flex-direction: column; gap: 1.75rem; align-items: center; transition: all 0.3s ease-in-out; }
         .login-container h2, .main-menu h2 { color: #212529; font-weight: 700; }
         .login-message { font-size: 1.05rem; font-weight: 500; text-align: center; margin-top: 1.25rem; }
-        
+
         .hidden { display: none !important; }
 
         .saved-calculations-list { background-color: #f8f9fa; padding: 1.5rem; border-radius: 1rem; border: 1px solid #e9ecef; }
@@ -238,16 +238,25 @@
         #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
         #close-fullscreen-btn { position: absolute; top: 2rem; right: 2rem; font-size: 2rem; background: none; border: none; color: #212529; cursor: pointer; }
 
-        
+        /* --- NEW STYLES for AI Insights --- */
+        #aiInsightsContainer { margin-top: 2.5rem; }
+        .ai-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+        .ai-kpi-card { background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 1rem; padding: 1.5rem; }
+        .ai-kpi-card .kpi-title { font-size: 1.2rem; font-weight: 700; color: #0056b3; margin-bottom: 0.75rem; }
+        .ai-kpi-card .kpi-value { font-size: 1.75rem; font-weight: 800; color: #212529; margin-bottom: 0.5rem; }
+        .ai-kpi-card .kpi-unit { font-size: 1rem; color: #6c757d; margin-bottom: 1rem; }
+        .ai-kpi-card .kpi-context { font-size: 0.9rem; color: #495057; line-height: 1.5; }
+        /* --- END NEW STYLES --- */
+
         #toast-container {
             position: fixed;
             top: 20px;
             right: 20px;
-            z-index: 1002; 
+            z-index: 1002;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            pointer-events: none; 
+            pointer-events: none;
         }
 
         .toast {
@@ -258,12 +267,12 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
             opacity: 0;
             transform: translateX(100%);
-            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s; 
+            animation: slideIn 0.3s forwards, fadeOut 0.5s forwards 2.5s;
             min-width: 250px;
             max-width: 350px;
             font-size: 1rem;
             line-height: 1.4;
-            pointer-events: auto; 
+            pointer-events: auto;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -291,12 +300,12 @@
             to { opacity: 0; }
         }
 
-        
+
         .google-sign-in-button {
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: #4285f4; 
+            background-color: #4285f4;
             color: white;
             padding: 0.75rem 2rem;
             border-radius: 0.75rem;
@@ -307,12 +316,12 @@
             box-shadow: 0 6px 15px rgba(66, 133, 244, 0.3);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            width: 100%; 
-            gap: 10px; 
+            width: 100%;
+            gap: 10px;
         }
 
         .google-sign-in-button:hover {
-            background-color: #357ae8; 
+            background-color: #357ae8;
             transform: translateY(-3px) scale(1.02);
             box-shadow: 0 8px 20px rgba(66, 133, 244, 0.4);
         }
@@ -323,7 +332,7 @@
         }
 
         .google-icon {
-            width: 20px; 
+            width: 20px;
             height: 20px;
             vertical-align: middle;
         }
@@ -408,7 +417,7 @@
                 <h3 class="text-xl font-semibold text-gray-700">5-Year Projection</h3>
                 <p class="mt-2 text-gray-500">Enter a stock ticker and your assumptions, then click "Calculate" to see the projected stock price and potential returns.</p>
             </div>
-        
+
             <div id="projectionOutput" class="hidden">
                 <h2 class="section-title">5-Year Projection</h2>
                 <div id="calculationResults" class="p-4 bg-gray-50 rounded-lg border">
@@ -422,7 +431,7 @@
                 </div>
                 <div id="calculationMessage" class="mt-4 text-center text-gray-500"></div>
             </div>
-            
+
             <div class="saved-calculations-list mt-8">
                 <h3>Saved Calculations</h3>
                 <div id="savedCalculationsContainer"><p class="text-gray-500 text-center">No saved calculations yet.</p></div>
@@ -435,13 +444,30 @@
         <div class="header-section">
             <div class="header-top-row">
                 <input type="text" id="insightsTickerInput" placeholder="Enter Ticker (e.g., MSFT)">
-                <button id="getInsightsBtn" class="primary-button">Get Insights</button>
+                <button id="getInsightsBtn" class="primary-button">Get Charts</button>
+                <!-- NEW AI Analysis Button -->
+                <button id="getAiInsightsBtn" class="primary-button bg-indigo-600">Analyze Filing (AI)</button>
                 <button id="insightsBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
             </div>
-            <div class="period-toggle">
-                <button id="annualToggleBtn" class="active">Annual</button>
-                <button id="quarterlyToggleBtn">Quarterly</button>
+            <div class="flex justify-between items-center mt-4">
+                <div class="period-toggle" id="chartPeriodToggle">
+                    <button id="annualToggleBtn" class="active">Annual</button>
+                    <button id="quarterlyToggleBtn">Quarterly</button>
+                </div>
+                <!-- NEW Filing Type Toggle for AI -->
+                <div class="period-toggle" id="filingTypeToggle">
+                    <button id="kFilingBtn" class="active">10-K</button>
+                    <button id="qFilingBtn">10-Q</button>
+                </div>
             </div>
+        </div>
+        <!-- NEW Container for AI KPI cards -->
+        <div id="aiInsightsContainer" class="hidden">
+            <h2 class="section-title">AI-Discovered KPIs</h2>
+            <div id="aiKpiGrid" class="ai-kpi-grid">
+                <!-- AI KPIs will be rendered here -->
+            </div>
+            <hr class="my-8 border-t-2 border-gray-200">
         </div>
         <div class="insights-grid" id="insightsGrid"></div>
     </div>
@@ -466,24 +492,24 @@
     <div id="toast-container"></div>
 
     <script type="module">
-        
+
         import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        
+
         window.addEventListener('DOMContentLoaded', () => {
-            
-            const auth = window.auth; 
+
+            const auth = window.auth;
 
             const backendBaseUrl = 'https://dcf-backend.onrender.com';
 
-            
+
             const mainMenu = document.getElementById('mainMenu');
             const loginPage = document.getElementById('loginPage');
             const registerPage = document.getElementById('registerPage');
             const appContent = document.getElementById('appContent');
             const insightsPage = document.getElementById('insightsPage');
 
-            
+
             const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
             const insightsMenuBtn = document.getElementById('insightsMenuBtn');
             const logoutMenuBtn = document.getElementById('logoutMenuBtn');
@@ -491,8 +517,8 @@
             const insightsBackToMenuBtn = document.getElementById('insightsBackToMenuBtn');
             const showRegisterBtn = document.getElementById('showRegisterBtn');
             const showLoginBtn = document.getElementById('showLoginBtn');
-            
-            
+
+
             const loginEmailInput = document.getElementById('loginEmail'); // Changed to Email
             const loginPasswordInput = document.getElementById('loginPassword');
             const loginBtn = document.getElementById('loginBtn');
@@ -501,7 +527,7 @@
             const registerPasswordInput = document.getElementById('registerPassword');
             const registerBtn = document.getElementById('registerBtn');
 
-            
+
             const insightsTickerInput = document.getElementById('insightsTickerInput');
             const getInsightsBtn = document.getElementById('getInsightsBtn');
             const insightsGrid = document.getElementById('insightsGrid');
@@ -510,8 +536,14 @@
             const fullscreenModal = document.getElementById('fullscreen-chart-modal');
             const fullscreenCanvas = document.getElementById('fullscreen-canvas');
             const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
-            
-            
+            // --- NEW AI INSIGHTS ELEMENTS ---
+            const getAiInsightsBtn = document.getElementById('getAiInsightsBtn');
+            const aiInsightsContainer = document.getElementById('aiInsightsContainer');
+            const aiKpiGrid = document.getElementById('aiKpiGrid');
+            const kFilingBtn = document.getElementById('kFilingBtn');
+            const qFilingBtn = document.getElementById('qFilingBtn');
+
+
             const tickerInput = document.getElementById('tickerInput');
             const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
             const companyInfoDiv = document.getElementById('companyInfo');
@@ -549,13 +581,13 @@
             const projectionOutput = document.getElementById('projectionOutput');
             const calculationResultsDiv = document.getElementById('calculationResults');
 
-            
+
             const returnFromTodayDisplay = document.getElementById('returnFromTodayDisplay');
             const entryPriceDisplay = document.getElementById('entryPriceDisplay');
             const desiredReturnDisplay = document.getElementById('desiredReturnDisplay');
             const priceAfter5YearsDisplay = document.getElementById('priceAfter5YearsDisplay');
 
-            
+
             const toastContainer = document.getElementById('toast-container');
 
 
@@ -565,32 +597,28 @@
             let activeTab = 'earnings';
             let currentTicker = '';
             let modalCallback = null;
-            let fullInsightsData = {}; 
+            let fullInsightsData = {};
             let currentPeriod = 'annual';
-            let currentUser = null; 
+            let currentFilingType = '10-K'; // New state for AI analysis
+            let currentUser = null;
 
-            
-            onAuthStateChanged(auth, (user) => { 
+            onAuthStateChanged(auth, (user) => {
                 currentUser = user;
                 if (user) {
-                    
                     console.log("User signed in:", user.email, "Email Verified:", user.emailVerified);
-                    
                     if (user.emailVerified || user.providerData[0].providerId === 'google.com') {
                         showPage(mainMenu);
                     } else {
-                        showPage(loginPage); // Keep them on login page if email not verified
+                        showPage(loginPage);
                         showToast('Please verify your email address to continue.', true);
                     }
                 } else {
-                    
                     console.log("User signed out.");
                     showPage(loginPage);
                 }
             });
 
 
-            
             function showPage(page) {
                 mainMenu.classList.add('hidden');
                 loginPage.classList.add('hidden');
@@ -607,11 +635,11 @@
             insightsBackToMenuBtn.addEventListener('click', () => showPage(mainMenu));
             showRegisterBtn.addEventListener('click', () => showPage(registerPage));
             showLoginBtn.addEventListener('click', () => showPage(loginPage));
-            
-            
+
+
             function createChart(canvas, title, chartData, isFullscreen = false) {
                 const ctx = canvas.getContext('2d');
-                
+
                 const datasetOptions = {
                     label: title,
                     data: chartData.data,
@@ -624,17 +652,16 @@
                     pointHoverRadius: 5,
                     pointRadius: 3
                 };
-                
+
                 let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
 
-                
                 if (title.includes('Price')) {
                     datasetOptions.pointRadius = 0;
                 }
-                
+
                 if (title === 'Projected Price Growth') {
-                    datasetOptions.pointRadius = 3; 
-                    onClickHandler = null; 
+                    datasetOptions.pointRadius = 3;
+                    onClickHandler = null;
                 }
 
                 const chartInstance = new Chart(ctx, {
@@ -647,7 +674,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
-                        
+
                         scales: {
                             y: {
                                 beginAtZero: ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'].includes(title) ? true : false,
@@ -656,7 +683,7 @@
                                     color: '#6c757d',
                                     callback: function(value, index, values) {
                                         const chartTitlesToFormat = ['Revenue', 'Free Cash Flow', 'Net Income', 'EBITDA'];
-                                        if (chartTitlesToFormat.includes(title)) {
+                                        if (chartTitlesToFormat.includes(title) || typeof value === 'number' && Math.abs(value) > 100000) {
                                             if (Math.abs(value) >= 1000000000) {
                                                 return '$' + (value / 1000000000).toFixed(1) + 'B';
                                             }
@@ -681,15 +708,14 @@
             function openFullscreen(title) {
                 fullscreenModal.classList.remove('hidden');
                 if (activeFullscreenChart) activeFullscreenChart.destroy();
-                
-                
+
                 let fullChartData;
                 if (title.includes('Price')) {
                     fullChartData = fullInsightsData.price[title];
                 } else {
                     fullChartData = fullInsightsData[currentPeriod][title];
                 }
-                
+
                 activeFullscreenChart = createChart(fullscreenCanvas, title, fullChartData, true);
             }
 
@@ -701,10 +727,10 @@
                 }
             });
 
-            
+
             function renderInsightsCharts() {
                 insightsGrid.innerHTML = '';
-                
+
                 const priceData = fullInsightsData.price || {};
                 const financialData = fullInsightsData[currentPeriod] || {};
 
@@ -713,7 +739,6 @@
                     return;
                 }
 
-                
                 const chartOrder = [
                     'Price (All Time)', 'Revenue', 'Free Cash Flow', 'EPS', 'Net Income', 'EBITDA', 'Dividends'
                 ];
@@ -725,12 +750,11 @@
                 finalChartOrder.forEach(title => {
                     const chartData = allCharts[title];
                     if (chartData && chartData.data && chartData.data.length > 0) {
-                        
                         const previewData = { ...chartData };
                         if (previewData.labels.length > 5 && !title.includes('Price')) {
                             previewData.labels = previewData.labels.slice(-5);
                             previewData.data = previewData.data.slice(-5);
-                        } else if (previewData.labels.length > 252 && title.includes('Price')) { 
+                        } else if (previewData.labels.length > 252 && title.includes('Price')) {
                             previewData.labels = previewData.labels.slice(-252);
                             previewData.data = previewData.data.slice(-252);
                         }
@@ -763,8 +787,8 @@
                     if (!response.ok) {
                         throw new Error(fetchedData.error || 'Failed to fetch insights data.');
                     }
-                    
-                    fullInsightsData = fetchedData; 
+
+                    fullInsightsData = fetchedData;
                     renderInsightsCharts();
                     showToast('Insights data fetched successfully!', false);
 
@@ -772,12 +796,119 @@
                     insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
                     showToast(`Failed to get insights: ${error.message}`, true);
                 } finally {
-                    setButtonState(getInsightsBtn, 'Get Insights', false);
+                    setButtonState(getInsightsBtn, 'Get Charts', false);
                 }
             }
-            
+
+            // --- NEW AI ANALYSIS FUNCTIONS ---
+
+            function renderAiKpis(kpis) {
+                aiKpiGrid.innerHTML = '';
+                if (!kpis || Object.keys(kpis).length === 0) {
+                    aiKpiGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">The AI could not identify key KPIs from the filing.</p>';
+                    return;
+                }
+
+                for (const [title, data] of Object.entries(kpis)) {
+                    const card = document.createElement('div');
+                    card.className = 'ai-kpi-card';
+                    card.innerHTML = `
+                        <h4 class="kpi-title">${title}</h4>
+                        <p class="kpi-value">${data.value.toLocaleString()}</p>
+                        <p class="kpi-unit">${data.unit}</p>
+                        <p class="kpi-context">${data.context}</p>
+                    `;
+                    aiKpiGrid.appendChild(card);
+                }
+            }
+
+            function renderAiCharts(kpis) {
+                // Clear only AI-generated charts, keeping yfinance charts if they exist
+                insightsGrid.querySelectorAll('.ai-chart').forEach(el => el.remove());
+
+                if (!kpis) return;
+
+                const colors = [
+                    { bg: 'rgba(255, 99, 132, 0.7)', border: 'rgba(255, 99, 132, 1)' },
+                    { bg: 'rgba(54, 162, 235, 0.7)', border: 'rgba(54, 162, 235, 1)' },
+                    { bg: 'rgba(255, 206, 86, 0.7)', border: 'rgba(255, 206, 86, 1)' },
+                    { bg: 'rgba(75, 192, 192, 0.7)', border: 'rgba(75, 192, 192, 1)' },
+                    { bg: 'rgba(153, 102, 255, 0.7)', border: 'rgba(153, 102, 255, 1)' }
+                ];
+                let colorIndex = 0;
+
+                for (const [title, data] of Object.entries(kpis)) {
+                    const numericValue = parseFloat(String(data.value).replace(/,/g, ''));
+                    if (!isNaN(numericValue)) {
+                        const chartCard = document.createElement('div');
+                        // Add a class to distinguish these from yfinance charts
+                        chartCard.className = 'chart-card ai-chart';
+                        chartCard.innerHTML = `<h3>${title}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
+                        insightsGrid.appendChild(chartCard);
+                        const canvas = chartCard.querySelector('canvas');
+
+                        const chartData = {
+                            labels: [data.unit],
+                            data: [numericValue],
+                            type: 'bar',
+                            backgroundColor: colors[colorIndex % colors.length].bg,
+                            borderColor: colors[colorIndex % colors.length].border
+                        };
+                        createChart(canvas, title, chartData, false);
+                        colorIndex++;
+                    }
+                }
+            }
+
+            async function fetchAndDisplayAiInsights() {
+                const ticker = insightsTickerInput.value.trim().toUpperCase();
+                if (!ticker) {
+                    showToast('Please enter a ticker symbol for AI analysis.', true);
+                    return;
+                }
+
+                setButtonState(getAiInsightsBtn, 'Analyzing...', true);
+                aiInsightsContainer.classList.remove('hidden');
+                aiKpiGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">The AI is reading the filing... this may take up to 30 seconds.</p>';
+                // Clear previous AI charts
+                insightsGrid.querySelectorAll('.ai-chart').forEach(el => el.remove());
+
+                try {
+                    const response = await apiCall(`/analyze_filing?ticker=${ticker}&form_type=${currentFilingType}`);
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to fetch AI analysis.');
+                    }
+
+                    renderAiKpis(data.discovered_kpis);
+                    renderAiCharts(data.discovered_kpis); // Also render charts from the data
+                    showToast('AI analysis complete!', false);
+
+                } catch (error) {
+                    aiKpiGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">AI Analysis Error: ${error.message}</p>`;
+                    showToast(`AI Analysis failed: ${error.message}`, true);
+                } finally {
+                    setButtonState(getAiInsightsBtn, 'Analyze Filing (AI)', false);
+                }
+            }
+
+            getAiInsightsBtn.addEventListener('click', fetchAndDisplayAiInsights);
+            kFilingBtn.addEventListener('click', () => {
+                currentFilingType = '10-K';
+                kFilingBtn.classList.add('active');
+                qFilingBtn.classList.remove('active');
+            });
+            qFilingBtn.addEventListener('click', () => {
+                currentFilingType = '10-Q';
+                qFilingBtn.classList.add('active');
+                kFilingBtn.classList.remove('active');
+            });
+            // --- END OF NEW AI FUNCTIONS ---
+
+
             getInsightsBtn.addEventListener('click', fetchInsightsData);
-            
+
             annualToggleBtn.addEventListener('click', () => {
                 currentPeriod = 'annual';
                 annualToggleBtn.classList.add('active');
@@ -794,20 +925,20 @@
 
             insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
 
-            
+
             function setButtonState(button, text, disabled) {
                 button.innerHTML = text;
                 button.disabled = disabled;
             }
             async function apiCall(endpoint, options = {}) {
-                const user = auth.currentUser; 
+                const user = auth.currentUser;
                 let idToken = null;
                 if (user) {
                     try {
                         idToken = await user.getIdToken();
                     } catch (error) {
                         console.error("Error getting Firebase ID token:", error);
-                        handleLogout(); 
+                        handleLogout();
                         throw new Error('Authentication token expired or invalid. Please log in again.');
                     }
                 }
@@ -830,17 +961,17 @@
                     throw error;
                 }
             }
-            
+
             async function handleLogin() {
                 setButtonState(loginBtn, 'Logging in...', true);
                 const email = loginEmailInput.value;
                 const password = loginPasswordInput.value;
 
                 try {
-                    const userCredential = await signInWithEmailAndPassword(auth, email, password); 
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
-                    if (!user.emailVerified) { 
-                        await signOut(auth); 
+                    if (!user.emailVerified) {
+                        await signOut(auth);
                         showToast('Please verify your email address before logging in.', true);
                         return;
                     }
@@ -862,9 +993,9 @@
 
             async function handleGoogleLogin() {
                 setButtonState(googleLoginBtn, 'Signing in with Google...', true);
-                const provider = new GoogleAuthProvider(); 
+                const provider = new GoogleAuthProvider();
                 try {
-                    const result = await signInWithPopup(auth, provider); 
+                    const result = await signInWithPopup(auth, provider);
                     const user = result.user;
                     console.log("Google user signed in:", user.email);
                     showToast('Signed in with Google successfully!', false);
@@ -890,9 +1021,9 @@
                 const password = registerPasswordInput.value;
 
                 try {
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password); 
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
-                    await sendEmailVerification(user); 
+                    await sendEmailVerification(user);
                     showToast('Registration successful! Please check your email to verify your account.', false);
                     setTimeout(() => showPage(loginPage), 2000);
                 } catch (error) {
@@ -911,16 +1042,16 @@
                     setButtonState(registerBtn, 'Register', false);
                 }
             }
-            
+
             function handleLogout() {
-                signOut(auth).then(() => { 
+                signOut(auth).then(() => {
                     showToast('You have been successfully logged out.', false);
                 }).catch((error) => {
                     showToast(`Logout failed: ${error.message}`, true);
                 });
             }
 
-            
+
             function clearAllFields() {
                 companyInfoDiv.classList.add('hidden-state');
                 if (companyLogo) companyLogo.textContent = '';
@@ -942,16 +1073,16 @@
                 if (fcfYieldInput) fcfYieldInput.value = '';
 
                 if (desiredReturnInput) desiredReturnInput.value = '';
-                
+
                 if (returnFromTodayDisplay) returnFromTodayDisplay.textContent = 'N/A';
                 if (entryPriceDisplay) entryPriceDisplay.textContent = 'N/A';
                 if (desiredReturnDisplay) desiredReturnDisplay.textContent = 'N/A';
                 if (priceAfter5YearsDisplay) priceAfter5YearsDisplay.textContent = 'N/A';
-                
+
                 if (priceChartCanvas) {
                     if (dcfProjectionChart) {
                         dcfProjectionChart.destroy();
-                        dcfProjectionChart = null; 
+                        dcfProjectionChart = null;
                     }
                 }
                 currentTicker = '';
@@ -979,7 +1110,7 @@
                     companyNameDisplay.textContent = data.longName || ticker;
                     currentStockPrice = data.regularMarketPrice || 0;
                     currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
-                    
+
                     const formatNum = (num, prefix = '', suffix = '') => (typeof num === 'number' && !isNaN(num)) ? `${prefix}${(num).toFixed(2)}${suffix}` : 'N/A';
                     const formatPercent = (num) => (typeof num === 'number' && !isNaN(num)) ? `${(num * 100).toFixed(2)}%` : 'N/A';
 
@@ -987,7 +1118,7 @@
                     currentPeDisplay.textContent = formatNum(data.trailing_pe);
                     epsGrowthDisplay.textContent = formatPercent(data.trailing_eps_growth);
                     epsTtmInput.value = (data.trailing_eps || 0).toFixed(2);
-                    
+
                     currentFcfShareDisplay.textContent = formatNum(data.fcfShare, '$');
                     fcfYieldDisplay.textContent = formatPercent(data.fcfYield);
                     sbcImpactDisplay.textContent = formatPercent(data.sbcImpact);
@@ -1002,7 +1133,7 @@
                     setButtonState(getCurrentDataBtn, 'Search', false);
                 }
             }
-            
+
             async function saveCalculation() {
                 if (!currentUser) {
                     showToast('You must be logged in to save calculations.', true);
@@ -1027,7 +1158,7 @@
                 }
 
                 const calculationData = captureCalculationData();
-                
+
                 try {
                     const response = await apiCall(`/save_calculation`, {
                         method: 'POST',
@@ -1053,7 +1184,7 @@
                     showToast('An error occurred while saving the calculation.', true);
                 }
             }
-            
+
             async function loadSavedCalculations() {
                 if (!currentUser) {
                     savedCalculationsContainer.innerHTML = '<p class="text-gray-400">Please log in to see your saved calculations.</p>';
@@ -1084,7 +1215,7 @@
                     savedCalculationsContainer.innerHTML = '<p class="text-gray-400">An error occurred while loading saved calculations.</p>';
                 }
             }
-            
+
             function renderSavedCalculations(calculations) {
                 savedCalculationsContainer.innerHTML = '';
                 if (calculations.length === 0) {
@@ -1126,7 +1257,7 @@
             }
             function calculatePrice() {
                 let currentMetric, growthRate, targetMultiple, calculationType, impliedCurrentMultiple;
-                
+
                 if (activeTab === 'earnings') {
                     currentMetric = parseFloat(epsTtmInput.value);
                     growthRate = parseFloat(growthRateInput.value) / 100;
@@ -1167,12 +1298,12 @@
                 for (let i = 1; i <= numYears; i++) {
                     const futureMetric = currentMetric * Math.pow(1 + growthRate, i);
                     const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / numYears);
-                    const futurePrice = calculationType === 'EPS' 
+                    const futurePrice = calculationType === 'EPS'
                         ? futureMetric * interpolatedMultiple
                         : (interpolatedMultiple > 0 ? futureMetric / interpolatedMultiple : 0);
                     projectedPrices.push(futurePrice);
                 }
-                
+
                 if (dcfProjectionChart) dcfProjectionChart.destroy();
                 const chartData = {
                     labels: ['Today', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5'],
@@ -1183,7 +1314,7 @@
                 };
                 dcfProjectionChart = createChart(priceChartCanvas, 'Projected Price Growth', chartData);
             }
-            
+
             function captureCalculationData() {
                 return {
                     ticker: tickerInput.value.trim().toUpperCase(),
@@ -1208,14 +1339,14 @@
                 };
             }
 
-            async function populateFormWithCalculationData(data) { 
+            async function populateFormWithCalculationData(data) {
                 clearAllFields();
-                tickerInput.value = data.ticker || ''; 
+                tickerInput.value = data.ticker || '';
 
-                await fetchAndPopulateMetrics(); 
+                await fetchAndPopulateMetrics();
 
 
-                currentStockPrice = data.currentStockPrice || currentStockPrice; 
+                currentStockPrice = data.currentStockPrice || currentStockPrice;
                 if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
 
                 if (data.activeTab === 'earnings') {
@@ -1232,11 +1363,11 @@
                 if (desiredReturnInput) desiredReturnInput.value = data.desiredReturn !== undefined ? data.desiredReturn : '';
 
 
-                calculatePriceBtn.click(); 
+                calculatePriceBtn.click();
                 showToast('Saved calculation loaded successfully. Click "Calculate" to re-run.', false);
             }
 
-            
+
             function showConfirmationModal(message, callback) {
                 modalMessage.textContent = message;
                 modalTitle.textContent = 'Confirm Deletion';
@@ -1290,16 +1421,16 @@
                 }
             }
 
-            
+
             function showToast(message, isError = false, duration = 3000) {
                 const toast = document.createElement('div');
                 toast.className = `toast ${isError ? 'error' : 'success'}`;
                 // Optional: Add an icon
                 const icon = document.createElement('span');
                 icon.className = 'toast-icon';
-                icon.innerHTML = isError ? '&#x2716;' : '&#x2714;'; 
+                icon.innerHTML = isError ? '&#x2716;' : '&#x2714;';
                 toast.appendChild(icon);
-                
+
                 const text = document.createElement('span');
                 text.textContent = message;
                 toast.appendChild(text);
@@ -1308,7 +1439,7 @@
 
 
                 setTimeout(() => {
-                    toast.style.animation = 'fadeOut 0.5s forwards'; 
+                    toast.style.animation = 'fadeOut 0.5s forwards';
                     toast.addEventListener('animationend', () => {
                         toast.remove();
                     });
@@ -1317,11 +1448,11 @@
 
             // Add event listeners
             loginBtn.addEventListener('click', handleLogin);
-            googleLoginBtn.addEventListener('click', handleGoogleLogin); 
+            googleLoginBtn.addEventListener('click', handleGoogleLogin);
             registerBtn.addEventListener('click', handleRegister);
             getCurrentDataBtn.addEventListener('click', fetchAndPopulateMetrics);
             calculatePriceBtn.addEventListener('click', calculatePrice);
-            
+
             earningsTabBtn.addEventListener('click', () => {
                 activeTab = 'earnings';
                 earningsTabBtn.classList.add('active');
@@ -1339,7 +1470,7 @@
             });
             saveCalculationBtn.addEventListener('click', saveCalculation);
             loadCalculationsBtn.addEventListener('click', loadSavedCalculations);
-            
+
         });
     </script>
 </body>
