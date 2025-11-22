@@ -338,7 +338,7 @@
     <div id="mainMenu" class="main-menu hidden">
         <h2>Welcome!</h2>
         <button id="dcfCalculatorMenuBtn" class="primary-button">DCF Calculator</button>
-        <button id="insightsMenuBtn" class="primary-button">Insights</button>
+        <button id="financialDataMenuBtn" class="primary-button">Financial Data</button>
         <button id="logoutMenuBtn" class="primary-button bg-red-600">Logout</button>
     </div>
 
@@ -435,19 +435,18 @@
         </div>
     </div>
 
-    <div id="insightsPage" class="insights-page-container hidden">
+    <div id="financialDataPage" class="insights-page-container hidden">
         <div class="header-section">
             <div class="header-top-row">
-                <input type="text" id="insightsTickerInput" placeholder="Enter Ticker (e.g., GOOGL)">
-                <button id="getInsightsBtn" class="primary-button">Get Insights</button>
-                <button id="insightsBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
-            </div>
-            <div class="period-toggle">
-                <button id="annualToggleBtn" class="active">Annual</button>
-                <button id="quarterlyToggleBtn">Quarterly</button>
+                <input type="text" id="financialTickerInput" placeholder="Enter Ticker (e.g., GOOGL)">
+                <button id="getFinancialDataBtn" class="primary-button">Load Financial Data</button>
+                <button id="financialBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
             </div>
         </div>
-        <div class="insights-grid" id="insightsGrid"></div>
+        <div class="section-title">Basic Financial Metrics</div>
+        <div class="insights-grid" id="basicDataGrid"></div>
+        <div class="section-title mt-8">Segment Data</div>
+        <div class="insights-grid" id="segmentDataGrid"></div>
     </div>
 
     <div id="fullscreen-chart-modal" class="hidden">
@@ -485,14 +484,14 @@
             const loginPage = document.getElementById('loginPage');
             const registerPage = document.getElementById('registerPage');
             const appContent = document.getElementById('appContent');
-            const insightsPage = document.getElementById('insightsPage');
+            const financialDataPage = document.getElementById('financialDataPage');
 
             
             const dcfCalculatorMenuBtn = document.getElementById('dcfCalculatorMenuBtn');
-            const insightsMenuBtn = document.getElementById('insightsMenuBtn');
+            const financialDataMenuBtn = document.getElementById('financialDataMenuBtn');
             const logoutMenuBtn = document.getElementById('logoutMenuBtn');
             const backToMenuBtn = document.getElementById('backToMenuBtn');
-            const insightsBackToMenuBtn = document.getElementById('insightsBackToMenuBtn');
+            const financialBackToMenuBtn = document.getElementById('financialBackToMenuBtn');
             const showRegisterBtn = document.getElementById('showRegisterBtn');
             const showLoginBtn = document.getElementById('showLoginBtn');
             
@@ -506,11 +505,10 @@
             const registerBtn = document.getElementById('registerBtn');
 
             
-            const insightsTickerInput = document.getElementById('insightsTickerInput');
-            const getInsightsBtn = document.getElementById('getInsightsBtn');
-            const insightsGrid = document.getElementById('insightsGrid');
-            const annualToggleBtn = document.getElementById('annualToggleBtn');
-            const quarterlyToggleBtn = document.getElementById('quarterlyToggleBtn');
+            const financialTickerInput = document.getElementById('financialTickerInput');
+            const getFinancialDataBtn = document.getElementById('getFinancialDataBtn');
+            const basicDataGrid = document.getElementById('basicDataGrid');
+            const segmentDataGrid = document.getElementById('segmentDataGrid');
             const fullscreenModal = document.getElementById('fullscreen-chart-modal');
             const fullscreenCanvas = document.getElementById('fullscreen-canvas');
             const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
@@ -569,8 +567,6 @@
             let activeTab = 'earnings';
             let currentTicker = '';
             let modalCallback = null;
-            let fullInsightsData = {}; 
-            let currentPeriod = 'quarterly'; // Default to quarterly
             let currentUser = null; 
 
             
@@ -600,7 +596,7 @@
                 loginPage.classList.add('hidden');
                 registerPage.classList.add('hidden');
                 appContent.classList.add('hidden');
-                insightsPage.classList.add('hidden');
+                financialDataPage.classList.add('hidden');
                 page.classList.remove('hidden');
             }
 
@@ -701,163 +697,161 @@
             });
 
             
-            function renderInsightsCharts() {
-                insightsGrid.innerHTML = '';
+            function renderBasicDataCharts(basicData) {
+                basicDataGrid.innerHTML = '';
                 
-                const financialData = fullInsightsData[currentPeriod] || {};
-
-                if (Object.keys(financialData).length === 0) {
-                    insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">No ${currentPeriod} insights data found for the selected ticker.</p>`;
+                if (!basicData || basicData.length === 0) {
+                    basicDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No basic financial data found.</p>';
                     return;
                 }
 
-                // Define a more logical order for financial charts
-                const chartOrder = [
-                    'Revenue (Total)', 'Operating Income (EBIT)', 'Net Income', 'Earnings per Share (EPS)',
-                    'Free Cash Flow', 'Operating Cash Flow', 'Capital Expenditures',
-                    'Assets', 'Liabilities', 'Stockholders\' Equity', 'Shares Outstanding'
-                ];
+                // Sort by filing date
+                const sortedData = basicData.sort((a, b) => new Date(a.filing_date) - new Date(b.filing_date));
+                
+                // Extract all fact names
+                const factNames = new Set();
+                sortedData.forEach(filing => {
+                    if (filing.facts) {
+                        Object.keys(filing.facts).forEach(fact => factNames.add(fact));
+                    }
+                });
 
-                const allCharts = { ...financialData };
-                const remainingCharts = Object.keys(allCharts).filter(title => !chartOrder.includes(title));
-                const finalChartOrder = [...chartOrder, ...remainingCharts];
-
-                finalChartOrder.forEach(title => {
-                    const chartData = allCharts[title];
-                    if (chartData && chartData.data && chartData.data.length > 0) {
-                        
-                        const previewData = { ...chartData };
-                        // New requirement: show last 4 years of quarterly data (16 quarters)
-                        if (currentPeriod === 'quarterly' && previewData.labels.length > 16) {
-                            previewData.labels = previewData.labels.slice(-16);
-                            previewData.data = previewData.data.slice(-16);
+                // Create a chart for each fact
+                factNames.forEach(factName => {
+                    const labels = [];
+                    const values = [];
+                    
+                    sortedData.forEach(filing => {
+                        if (filing.facts && filing.facts[factName]) {
+                            labels.push(filing.filing_date);
+                            values.push(parseFloat(filing.facts[factName].value) || 0);
                         }
+                    });
+
+                    if (values.length > 0) {
+                        const chartData = {
+                            labels: labels,
+                            data: values,
+                            type: 'line',
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)'
+                        };
 
                         const chartCard = document.createElement('div');
                         chartCard.className = 'chart-card';
-                        chartCard.innerHTML = `<h3>${title}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
-                        insightsGrid.appendChild(chartCard);
+                        chartCard.innerHTML = `<h3>${factName.replace('us-gaap:', '').replace(/([A-Z])/g, ' $1').trim()}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
+                        basicDataGrid.appendChild(chartCard);
                         const canvas = chartCard.querySelector('canvas');
-                        createChart(canvas, title, previewData, false);
+                        createChart(canvas, factName, chartData, false);
                     }
                 });
             }
 
-            async function fetchInsightsData() {
-                const ticker = insightsTickerInput.value.trim().toUpperCase();
-                if (!ticker) {
-                    showToast('Please enter a ticker symbol to see financial insights.', true);
-                    insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Please enter a ticker symbol to see financial insights.</p>';
+            function renderSegmentDataCharts(segmentData) {
+                segmentDataGrid.innerHTML = '';
+                
+                if (!segmentData || Object.keys(segmentData).length === 0) {
+                    segmentDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No segment data found.</p>';
                     return;
                 }
 
-                setButtonState(getInsightsBtn, 'Loading...', true);
-                insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching and processing data...</p>';
+                // Process each segment type (geographic, product, business)
+                Object.keys(segmentData).forEach(segmentType => {
+                    const typeData = segmentData[segmentType];
+                    
+                    if (!typeData || Object.keys(typeData).length === 0) return;
+
+                    // Get all dates and segment names
+                    const dates = Object.keys(typeData).sort();
+                    const segmentNames = new Set();
+                    
+                    dates.forEach(date => {
+                        Object.keys(typeData[date]).forEach(segmentName => {
+                            if (segmentName !== 'Total') {
+                                segmentNames.add(segmentName);
+                            }
+                        });
+                    });
+
+                    // Create a chart for each segment name
+                    segmentNames.forEach(segmentName => {
+                        const labels = [];
+                        const values = [];
+                        
+                        dates.forEach(date => {
+                            if (typeData[date][segmentName]) {
+                                labels.push(date);
+                                values.push(parseFloat(typeData[date][segmentName]) || 0);
+                            }
+                        });
+
+                        if (values.length > 0) {
+                            const chartData = {
+                                labels: labels,
+                                data: values,
+                                type: 'bar',
+                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                                borderColor: 'rgba(75, 192, 192, 1)'
+                            };
+
+                            const chartCard = document.createElement('div');
+                            chartCard.className = 'chart-card';
+                            chartCard.innerHTML = `<h3>${segmentType.charAt(0).toUpperCase() + segmentType.slice(1)}: ${segmentName}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
+                            segmentDataGrid.appendChild(chartCard);
+                            const canvas = chartCard.querySelector('canvas');
+                            createChart(canvas, `${segmentType}: ${segmentName}`, chartData, false);
+                        }
+                    });
+                });
+            }
+
+            async function fetchFinancialData() {
+                const ticker = financialTickerInput.value.trim().toUpperCase();
+                if (!ticker) {
+                    showToast('Please enter a ticker symbol.', true);
+                    return;
+                }
+
+                setButtonState(getFinancialDataBtn, 'Loading...', true);
+                basicDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching basic data...</p>';
+                segmentDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching segment data...</p>';
 
                 try {
-                    const response = await apiCall(`/get_insights_data?ticker=${ticker}`);
-                    const rawData = await response.json();
+                    // Fetch basic data
+                    const basicResponse = await apiCall(`/get_basic_data?ticker=${ticker}`);
+                    const basicData = await basicResponse.json();
 
-                    if (!response.ok) {
-                        throw new Error(rawData.error || 'Failed to fetch insights data');
-                    }
-                    
-                    if (!rawData || rawData.length === 0) {
-                        throw new Error("No data returned from the server.");
+                    if (!basicResponse.ok) {
+                        throw new Error(basicData.error || 'Failed to fetch basic data');
                     }
 
-                    // Separate data into quarterly and annual
-                    const quarterlyRaw = rawData.filter(d => d.filing_date.startsWith('Q'));
-                    const annualRaw = rawData.filter(d => d.filing_date.startsWith('FY'));
+                    // Fetch segment data
+                    const segmentResponse = await apiCall(`/get_segment_data?ticker=${ticker}`);
+                    const segmentData = await segmentResponse.json();
 
-                    const sortFinancialData = (data) => {
-                        return data.sort((a, b) => {
-                            const [aPeriod, aYear] = a.filing_date.split(' ');
-                            const [bPeriod, bYear] = b.filing_date.split(' ');
-                            if (aYear !== bYear) return parseInt(aYear) - parseInt(bYear);
-                            if (aPeriod.startsWith('Q') && bPeriod.startsWith('Q')) {
-                                return parseInt(aPeriod.substring(1)) - parseInt(bPeriod.substring(1));
-                            }
-                            return 0; // For annual data, year is enough
-                        });
-                    };
-
-                    const sortedQuarterly = sortFinancialData(quarterlyRaw);
-                    const sortedAnnual = sortFinancialData(annualRaw);
-
-                    const processData = (data, metrics) => {
-                        const processed = {};
-                        const lineChartMetrics = ['Earnings per Share (EPS)', 'Shares Outstanding'];
-                        const colors = [
-                            'rgba(54, 162, 235, 0.6)', 'rgba(255, 99, 132, 0.6)', 'rgba(75, 192, 192, 0.6)',
-                            'rgba(255, 206, 86, 0.6)', 'rgba(153, 102, 255, 0.6)', 'rgba(255, 159, 64, 0.6)'
-                        ];
-                        const borderColors = [
-                            'rgba(54, 162, 235, 1)', 'rgba(255, 99, 132, 1)', 'rgba(75, 192, 192, 1)',
-                            'rgba(255, 206, 86, 1)', 'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'
-                        ];
-
-                        metrics.forEach((metric, index) => {
-                            processed[metric] = {
-                                labels: data.map(item => item.filing_date),
-                                data: data.map(item => parseFloat(item.data[metric] || 0)),
-                                type: lineChartMetrics.includes(metric) ? 'line' : 'bar',
-                                backgroundColor: colors[index % colors.length],
-                                borderColor: borderColors[index % borderColors.length]
-                            };
-                        });
-                        return processed;
-                    };
-                    
-                    const allMetrics = [...new Set(rawData.flatMap(item => Object.keys(item.data)))];
-
-                    const quarterlyData = processData(sortedQuarterly, allMetrics);
-                    const annualData = processData(sortedAnnual, allMetrics);
-
-                    fullInsightsData = { quarterly: quarterlyData, annual: annualData };
-                    
-                    annualToggleBtn.disabled = annualRaw.length === 0;
-                    quarterlyToggleBtn.disabled = quarterlyRaw.length === 0;
-
-                    // Default to quarterly view if available, otherwise annual
-                    if(quarterlyRaw.length > 0) {
-                        currentPeriod = 'quarterly';
-                        quarterlyToggleBtn.classList.add('active');
-                        annualToggleBtn.classList.remove('active');
-                    } else {
-                        currentPeriod = 'annual';
-                        annualToggleBtn.classList.add('active');
-                        quarterlyToggleBtn.classList.remove('active');
+                    if (!segmentResponse.ok) {
+                        console.warn('Segment data not available:', segmentData.error);
                     }
+
+                    // Render charts
+                    renderBasicDataCharts(basicData);
+                    renderSegmentDataCharts(segmentResponse.ok ? segmentData : null);
                     
-                    renderInsightsCharts();
-                    showToast('Insights data loaded successfully!', false);
+                    showToast('Financial data loaded successfully!', false);
 
                 } catch (error) {
-                    insightsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
-                    showToast(`Failed to get insights: ${error.message}`, true);
+                    basicDataGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
+                    segmentDataGrid.innerHTML = '';
+                    showToast(`Failed to load financial data: ${error.message}`, true);
                 } finally {
-                    setButtonState(getInsightsBtn, 'Get Insights', false);
+                    setButtonState(getFinancialDataBtn, 'Load Financial Data', false);
                 }
             }
             
-            getInsightsBtn.addEventListener('click', fetchInsightsData);
+            getFinancialDataBtn.addEventListener('click', fetchFinancialData);
             
-            annualToggleBtn.addEventListener('click', () => {
-                currentPeriod = 'annual';
-                annualToggleBtn.classList.add('active');
-                quarterlyToggleBtn.classList.remove('active');
-                if (fullInsightsData.annual) renderInsightsCharts();
-            });
-
-            quarterlyToggleBtn.addEventListener('click', () => {
-                currentPeriod = 'quarterly';
-                quarterlyToggleBtn.classList.add('active');
-                annualToggleBtn.classList.remove('active');
-                if (fullInsightsData.quarterly) renderInsightsCharts();
-            });
-
-            insightsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
+            basicDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
+            segmentDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
 
             
             function setButtonState(button, text, disabled) {
