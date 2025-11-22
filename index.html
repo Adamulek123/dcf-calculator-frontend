@@ -443,10 +443,7 @@
                 <button id="financialBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
             </div>
         </div>
-        <div class="section-title">Basic Financial Metrics</div>
-        <div class="insights-grid" id="basicDataGrid"></div>
-        <div class="section-title mt-8">Segment Data</div>
-        <div class="insights-grid" id="segmentDataGrid"></div>
+        <div class="insights-grid" id="chartsGrid"></div>
     </div>
 
     <div id="fullscreen-chart-modal" class="hidden">
@@ -507,8 +504,7 @@
             
             const financialTickerInput = document.getElementById('financialTickerInput');
             const getFinancialDataBtn = document.getElementById('getFinancialDataBtn');
-            const basicDataGrid = document.getElementById('basicDataGrid');
-            const segmentDataGrid = document.getElementById('segmentDataGrid');
+            const chartsGrid = document.getElementById('chartsGrid');
             const fullscreenModal = document.getElementById('fullscreen-chart-modal');
             const fullscreenCanvas = document.getElementById('fullscreen-canvas');
             const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
@@ -567,7 +563,8 @@
             let activeTab = 'earnings';
             let currentTicker = '';
             let modalCallback = null;
-            let currentUser = null; 
+            let currentUser = null;
+            let fullscreenChartData = null; // Store data for fullscreen charts 
 
             
             onAuthStateChanged(auth, (user) => { 
@@ -612,7 +609,8 @@
             function createChart(canvas, title, chartData, isFullscreen = false) {
                 const ctx = canvas.getContext('2d');
                 
-                const datasetOptions = {
+                // Handle multiple datasets (for stacked/clustered charts)
+                const datasets = Array.isArray(chartData.datasets) ? chartData.datasets : [{
                     label: title,
                     data: chartData.data,
                     backgroundColor: chartData.backgroundColor,
@@ -623,40 +621,44 @@
                     pointBackgroundColor: chartData.borderColor,
                     pointHoverRadius: 5,
                     pointRadius: 3
-                };
+                }];
                 
-                let onClickHandler = isFullscreen ? null : () => openFullscreen(title);
+                let onClickHandler = isFullscreen ? null : () => openFullscreen(title, chartData);
 
-                
                 if (title.includes('Price')) {
-                    datasetOptions.pointRadius = 0;
+                    datasets.forEach(ds => ds.pointRadius = 0);
                 }
                 
                 if (title === 'Projected Price Growth') {
-                    datasetOptions.pointRadius = 3; 
-                    onClickHandler = null; 
+                    datasets.forEach(ds => ds.pointRadius = 3);
+                    onClickHandler = null;
                 }
 
                 const chartInstance = new Chart(ctx, {
                     type: chartData.type,
                     data: {
                         labels: chartData.labels,
-                        datasets: [datasetOptions]
+                        datasets: datasets
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: { legend: { display: isFullscreen, labels: { color: '#212529' } } },
-                        
+                        plugins: { 
+                            legend: { 
+                                display: datasets.length > 1 || isFullscreen, 
+                                labels: { color: '#212529' } 
+                            } 
+                        },
                         scales: {
                             y: {
                                 beginAtZero: false,
+                                stacked: chartData.stacked || false,
                                 grid: { color: '#e9ecef' },
                                 ticks: {
                                     color: '#6c757d',
                                     callback: function(value, index, values) {
-                                        const chartTitlesToFormat = ['Revenue (Total)', 'Free Cash Flow', 'Net Income', 'Operating Income (EBIT)', 'Assets', 'Liabilities', 'Capital Expenditures', 'Cash', 'Goodwill', 'Property, Plant and Equipment, Net', 'Retained Earnings', 'Stockholders\' Equity', 'Operating Cash Flow', 'Current Assets', 'Current Liabilities'];
-                                        if (chartTitlesToFormat.includes(title)) {
+                                        const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Net Income', 'Cash & Debt'];
+                                        if (moneyCharts.some(c => title.includes(c))) {
                                             if (Math.abs(value) >= 1000000000) {
                                                 return '$' + (value / 1000000000).toFixed(1) + 'B';
                                             }
@@ -669,23 +671,23 @@
                                     }
                                 }
                             },
-                            x: { grid: { display: false }, ticks: { color: '#6c757d' } }
-                        }
-                    ,
+                            x: { 
+                                stacked: chartData.stacked || false,
+                                grid: { display: false }, 
+                                ticks: { color: '#6c757d' } 
+                            }
+                        },
                         onClick: onClickHandler
                     }
                 });
                 return chartInstance;
             }
 
-            function openFullscreen(title) {
+            function openFullscreen(title, chartData) {
                 fullscreenModal.classList.remove('hidden');
                 if (activeFullscreenChart) activeFullscreenChart.destroy();
                 
-                // Get the full data for the selected chart from the current period
-                const fullChartData = fullInsightsData[currentPeriod][title];
-                
-                activeFullscreenChart = createChart(fullscreenCanvas, title, fullChartData, true);
+                activeFullscreenChart = createChart(fullscreenCanvas, title, chartData, true);
             }
 
             closeFullscreenBtn.addEventListener('click', () => {
@@ -697,114 +699,6 @@
             });
 
             
-            function renderBasicDataCharts(basicData) {
-                basicDataGrid.innerHTML = '';
-                
-                if (!basicData || basicData.length === 0) {
-                    basicDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No basic financial data found.</p>';
-                    return;
-                }
-
-                // Sort by filing date
-                const sortedData = basicData.sort((a, b) => new Date(a.filing_date) - new Date(b.filing_date));
-                
-                // Extract all fact names
-                const factNames = new Set();
-                sortedData.forEach(filing => {
-                    if (filing.facts) {
-                        Object.keys(filing.facts).forEach(fact => factNames.add(fact));
-                    }
-                });
-
-                // Create a chart for each fact
-                factNames.forEach(factName => {
-                    const labels = [];
-                    const values = [];
-                    
-                    sortedData.forEach(filing => {
-                        if (filing.facts && filing.facts[factName]) {
-                            labels.push(filing.filing_date);
-                            values.push(parseFloat(filing.facts[factName].value) || 0);
-                        }
-                    });
-
-                    if (values.length > 0) {
-                        const chartData = {
-                            labels: labels,
-                            data: values,
-                            type: 'line',
-                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                            borderColor: 'rgba(54, 162, 235, 1)'
-                        };
-
-                        const chartCard = document.createElement('div');
-                        chartCard.className = 'chart-card';
-                        chartCard.innerHTML = `<h3>${factName.replace('us-gaap:', '').replace(/([A-Z])/g, ' $1').trim()}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
-                        basicDataGrid.appendChild(chartCard);
-                        const canvas = chartCard.querySelector('canvas');
-                        createChart(canvas, factName, chartData, false);
-                    }
-                });
-            }
-
-            function renderSegmentDataCharts(segmentData) {
-                segmentDataGrid.innerHTML = '';
-                
-                if (!segmentData || Object.keys(segmentData).length === 0) {
-                    segmentDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No segment data found.</p>';
-                    return;
-                }
-
-                // Process each segment type (geographic, product, business)
-                Object.keys(segmentData).forEach(segmentType => {
-                    const typeData = segmentData[segmentType];
-                    
-                    if (!typeData || Object.keys(typeData).length === 0) return;
-
-                    // Get all dates and segment names
-                    const dates = Object.keys(typeData).sort();
-                    const segmentNames = new Set();
-                    
-                    dates.forEach(date => {
-                        Object.keys(typeData[date]).forEach(segmentName => {
-                            if (segmentName !== 'Total') {
-                                segmentNames.add(segmentName);
-                            }
-                        });
-                    });
-
-                    // Create a chart for each segment name
-                    segmentNames.forEach(segmentName => {
-                        const labels = [];
-                        const values = [];
-                        
-                        dates.forEach(date => {
-                            if (typeData[date][segmentName]) {
-                                labels.push(date);
-                                values.push(parseFloat(typeData[date][segmentName]) || 0);
-                            }
-                        });
-
-                        if (values.length > 0) {
-                            const chartData = {
-                                labels: labels,
-                                data: values,
-                                type: 'bar',
-                                backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                                borderColor: 'rgba(75, 192, 192, 1)'
-                            };
-
-                            const chartCard = document.createElement('div');
-                            chartCard.className = 'chart-card';
-                            chartCard.innerHTML = `<h3>${segmentType.charAt(0).toUpperCase() + segmentType.slice(1)}: ${segmentName}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
-                            segmentDataGrid.appendChild(chartCard);
-                            const canvas = chartCard.querySelector('canvas');
-                            createChart(canvas, `${segmentType}: ${segmentName}`, chartData, false);
-                        }
-                    });
-                });
-            }
-
             async function fetchFinancialData() {
                 const ticker = financialTickerInput.value.trim().toUpperCase();
                 if (!ticker) {
@@ -813,45 +707,226 @@
                 }
 
                 setButtonState(getFinancialDataBtn, 'Loading...', true);
-                basicDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching basic data...</p>';
-                segmentDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching segment data...</p>';
+                chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
 
                 try {
-                    // Fetch basic data
-                    const basicResponse = await apiCall(`/get_basic_data?ticker=${ticker}`);
-                    const basicData = await basicResponse.json();
+                    // Fetch both basic and segment data
+                    const [basicResponse, segmentResponse] = await Promise.all([
+                        apiCall(`/get_basic_data?ticker=${ticker}`),
+                        apiCall(`/get_segment_data?ticker=${ticker}`)
+                    ]);
 
+                    const basicData = await basicResponse.json();
                     if (!basicResponse.ok) {
                         throw new Error(basicData.error || 'Failed to fetch basic data');
                     }
 
-                    // Fetch segment data
-                    const segmentResponse = await apiCall(`/get_segment_data?ticker=${ticker}`);
-                    const segmentData = await segmentResponse.json();
+                    const segmentData = segmentResponse.ok ? await segmentResponse.json() : null;
 
-                    if (!segmentResponse.ok) {
-                        console.warn('Segment data not available:', segmentData.error);
-                    }
-
-                    // Render charts
-                    renderBasicDataCharts(basicData);
-                    renderSegmentDataCharts(segmentResponse.ok ? segmentData : null);
+                    // Render combined charts
+                    renderCombinedCharts(basicData, segmentData);
                     
                     showToast('Financial data loaded successfully!', false);
 
                 } catch (error) {
-                    basicDataGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
-                    segmentDataGrid.innerHTML = '';
+                    chartsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
                     showToast(`Failed to load financial data: ${error.message}`, true);
                 } finally {
                     setButtonState(getFinancialDataBtn, 'Load Financial Data', false);
                 }
             }
+
+            function renderCombinedCharts(basicData, segmentData) {
+                chartsGrid.innerHTML = '';
+                
+                if (!basicData || basicData.length === 0) {
+                    chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No financial data found.</p>';
+                    return;
+                }
+
+                const sortedData = basicData.sort((a, b) => new Date(a.filing_date) - new Date(b.filing_date));
+                const labels = sortedData.map(d => d.filing_date);
+
+                const colors = [
+                    'rgba(54, 162, 235, 0.8)', 'rgba(255, 99, 132, 0.8)', 'rgba(75, 192, 192, 0.8)',
+                    'rgba(255, 206, 86, 0.8)', 'rgba(153, 102, 255, 0.8)', 'rgba(255, 159, 64, 0.8)',
+                    'rgba(46, 204, 113, 0.8)', 'rgba(155, 89, 182, 0.8)', 'rgba(52, 152, 219, 0.8)',
+                    'rgba(230, 126, 34, 0.8)', 'rgba(231, 76, 60, 0.8)', 'rgba(149, 165, 166, 0.8)'
+                ];
+
+                // Chart order as requested
+                const chartOrder = [];
+
+                // 1. Revenue by Product (stacked bar)
+                if (segmentData && segmentData.product) {
+                    chartOrder.push(createSegmentChart('Revenue by Product', segmentData.product, colors, true));
+                }
+
+                // 2. Revenue by Geography (stacked bar)
+                if (segmentData && segmentData.geographic) {
+                    chartOrder.push(createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true));
+                }
+
+                // 3. Revenue by Business (stacked bar)
+                if (segmentData && segmentData.business) {
+                    chartOrder.push(createSegmentChart('Revenue by Business', segmentData.business, colors, true));
+                }
+
+                // 4. EPS (both Basic and Diluted in one chart) - LINE CHART for usdPerShare
+                const epsBasic = sortedData.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null).filter(v => v !== null);
+                const epsDiluted = sortedData.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null).filter(v => v !== null);
+                
+                if (epsBasic.length > 0 || epsDiluted.length > 0) {
+                    const epsLabels = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted).map(d => d.filing_date);
+                    chartOrder.push({
+                        title: 'Earnings Per Share',
+                        data: {
+                            labels: epsLabels,
+                            datasets: [
+                                {
+                                    label: 'EPS Basic',
+                                    data: epsBasic,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 2,
+                                    type: 'line',
+                                    fill: false,
+                                    tension: 0.1,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6
+                                },
+                                {
+                                    label: 'EPS Diluted',
+                                    data: epsDiluted,
+                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                    borderColor: 'rgba(255, 99, 132, 1)',
+                                    borderWidth: 2,
+                                    type: 'line',
+                                    fill: false,
+                                    tension: 0.1,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6
+                                }
+                            ],
+                            type: 'line'
+                        }
+                    });
+                }
+
+                // 5. Net Income - BAR CHART for usd
+                const netIncome = sortedData.map(d => d.facts?.NetIncomeLoss ? parseFloat(d.facts.NetIncomeLoss.value) : null).filter(v => v !== null);
+                if (netIncome.length > 0) {
+                    const netIncomeLabels = sortedData.filter(d => d.facts?.NetIncomeLoss).map(d => d.filing_date);
+                    chartOrder.push({
+                        title: 'Net Income',
+                        data: {
+                            labels: netIncomeLabels,
+                            data: netIncome,
+                            type: 'bar',
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                            borderColor: 'rgba(75, 192, 192, 1)'
+                        }
+                    });
+                }
+
+                // 6. Free Cash Flow - BAR CHART for usd
+                const fcf = sortedData.map(d => d.facts?.NetCashProvidedByUsedInOperatingActivities ? parseFloat(d.facts.NetCashProvidedByUsedInOperatingActivities.value) : null).filter(v => v !== null);
+                if (fcf.length > 0) {
+                    const fcfLabels = sortedData.filter(d => d.facts?.NetCashProvidedByUsedInOperatingActivities).map(d => d.filing_date);
+                    chartOrder.push({
+                        title: 'Free Cash Flow',
+                        data: {
+                            labels: fcfLabels,
+                            data: fcf,
+                            type: 'bar',
+                            backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                            borderColor: 'rgba(153, 102, 255, 1)'
+                        }
+                    });
+                }
+
+                // 7. Cash & Debt - BAR CHART for usd (clustered)
+                const cash = sortedData.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null).filter(v => v !== null);
+                const debt = sortedData.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null).filter(v => v !== null);
+                
+                if (cash.length > 0 || debt.length > 0) {
+                    const cashDebtLabels = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent).map(d => d.filing_date);
+                    chartOrder.push({
+                        title: 'Cash & Debt',
+                        data: {
+                            labels: cashDebtLabels,
+                            datasets: [
+                                {
+                                    label: 'Cash',
+                                    data: cash,
+                                    backgroundColor: 'rgba(46, 204, 113, 0.6)',
+                                    borderColor: 'rgba(46, 204, 113, 1)',
+                                    borderWidth: 1
+                                },
+                                {
+                                    label: 'Debt',
+                                    data: debt,
+                                    backgroundColor: 'rgba(231, 76, 60, 0.6)',
+                                    borderColor: 'rgba(231, 76, 60, 1)',
+                                    borderWidth: 1
+                                }
+                            ],
+                            type: 'bar'
+                        }
+                    });
+                }
+
+                // Render all charts
+                chartOrder.forEach(chart => {
+                    const chartCard = document.createElement('div');
+                    chartCard.className = 'chart-card';
+                    chartCard.innerHTML = `<h3>${chart.title}</h3><div style="position: relative; height: 250px;"><canvas></canvas></div>`;
+                    chartsGrid.appendChild(chartCard);
+                    const canvas = chartCard.querySelector('canvas');
+                    createChart(canvas, chart.title, chart.data, false);
+                });
+            }
+
+            function createSegmentChart(title, typeData, colors, stacked) {
+                const dates = Object.keys(typeData).sort();
+                const segmentNames = new Set();
+                
+                dates.forEach(date => {
+                    Object.keys(typeData[date]).forEach(segmentName => {
+                        if (segmentName !== 'Total') {
+                            segmentNames.add(segmentName);
+                        }
+                    });
+                });
+
+                const datasets = Array.from(segmentNames).map((segmentName, index) => {
+                    const data = dates.map(date => {
+                        return typeData[date][segmentName] ? parseFloat(typeData[date][segmentName]) : 0;
+                    });
+
+                    return {
+                        label: segmentName,
+                        data: data,
+                        backgroundColor: colors[index % colors.length],
+                        borderColor: colors[index % colors.length].replace('0.8', '1'),
+                        borderWidth: 1
+                    };
+                });
+
+                return {
+                    title: title,
+                    data: {
+                        labels: dates,
+                        datasets: datasets,
+                        type: 'bar',
+                        stacked: stacked
+                    }
+                };
+            }
             
             getFinancialDataBtn.addEventListener('click', fetchFinancialData);
             
-            basicDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
-            segmentDataGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
+            chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Enter a ticker to begin.</p>';
 
             
             function setButtonState(button, text, disabled) {
