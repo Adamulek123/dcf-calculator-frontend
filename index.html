@@ -766,17 +766,10 @@
                                     color: '#212529',
                                     font: { size: 14, weight: '600' },
                                     padding: 15
-                                },
-                                onClick: (e, legendItem, legend) => {
-                                    const index = legendItem.datasetIndex;
-                                    const chart = legend.chart;
-                                    const meta = chart.getDatasetMeta(index);
-                                    
-                                    meta.hidden = !meta.hidden;
-                                    chart.update('active');
                                 }
                             },
                             tooltip: {
+                                enabled: isFullscreen,
                                 callbacks: {
                                     label: function(context) {
                                         let label = context.dataset.label || '';
@@ -822,6 +815,30 @@
                                         }
                                         return value.toLocaleString();
                                     }
+                                },
+                                afterDataLimits: function(axis) {
+                                    // Get the current max value
+                                    const max = axis.max;
+                                    
+                                    // Calculate the step size (distance between ticks)
+                                    const range = max - axis.min;
+                                    const tickCount = 10; // approximate number of ticks
+                                    const roughStep = range / tickCount;
+                                    
+                                    // Calculate nice step size (round to nearest power of 10)
+                                    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+                                    let niceStep = magnitude;
+                                    
+                                    if (roughStep / magnitude >= 5) {
+                                        niceStep = magnitude * 10;
+                                    } else if (roughStep / magnitude >= 2) {
+                                        niceStep = magnitude * 5;
+                                    } else if (roughStep / magnitude >= 1) {
+                                        niceStep = magnitude * 2;
+                                    }
+                                    
+                                    // Round max up to next step
+                                    axis.max = Math.ceil(max / niceStep) * niceStep;
                                 }
                             },
                             x: { 
