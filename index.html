@@ -1052,16 +1052,45 @@
                     });
                 });
 
-                const datasets = Array.from(segmentNames).map((segmentName, index) => {
+                // Calculate average revenue for each segment to determine sorting order
+                const segmentAverages = Array.from(segmentNames).map(segmentName => {
+                    const values = dates.map(date => {
+                        return typeData[date][segmentName] ? parseFloat(typeData[date][segmentName]) : 0;
+                    });
+                    const sum = values.reduce((acc, val) => acc + val, 0);
+                    const avg = sum / values.length;
+                    return { name: segmentName, average: avg };
+                });
+
+                // Sort segments by average revenue (biggest to smallest)
+                segmentAverages.sort((a, b) => b.average - a.average);
+                const sortedSegmentNames = segmentAverages.map(s => s.name);
+
+                // Define color palette (from biggest to smallest revenue)
+                const colorPalette = [
+                    'rgba(223, 114, 66, 0.85)',
+                    'rgba(232, 162, 113, 0.85)',
+                    'rgba(236, 217, 177, 0.85)',
+                    'rgba(145, 175, 166, 0.85)',
+                    'rgba(145, 175, 166, 0.85)',
+                    'rgba(47, 88, 149, 0.85)'
+                ];
+
+                const datasets = sortedSegmentNames.map((segmentName, index) => {
                     const data = dates.map(date => {
                         return typeData[date][segmentName] ? parseFloat(typeData[date][segmentName]) : 0;
                     });
 
+                    // Use colors from palette, cycling if there are more segments than colors
+                    const colorIndex = index % colorPalette.length;
+                    const backgroundColor = colorPalette[colorIndex];
+                    const borderColor = backgroundColor.replace('0.85', '1');
+
                     return {
                         label: segmentName,
                         data: data,
-                        backgroundColor: colors[index % colors.length],
-                        borderColor: colors[index % colors.length].replace('0.8', '1'),
+                        backgroundColor: backgroundColor,
+                        borderColor: borderColor,
                         borderWidth: 1
                     };
                 });
