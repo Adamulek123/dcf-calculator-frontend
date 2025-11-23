@@ -705,22 +705,28 @@
                     pointRadius: 3
                 }];
                 
+                // Filter out datasets where all values are 0 or null
+                const filteredDatasets = datasets.filter(dataset => {
+                    if (!dataset.data || !Array.isArray(dataset.data)) return false;
+                    return dataset.data.some(value => value !== null && value !== 0 && value !== undefined);
+                });
+                
                 let onClickHandler = isFullscreen ? null : () => openFullscreen(title, chartData);
 
                 if (title.includes('Price')) {
-                    datasets.forEach(ds => ds.pointRadius = 0);
+                    filteredDatasets.forEach(ds => ds.pointRadius = 0);
                 }
                 
                 if (title === 'Projected Price Growth') {
-                    datasets.forEach(ds => ds.pointRadius = 3);
+                    filteredDatasets.forEach(ds => ds.pointRadius = 3);
                     onClickHandler = null;
                 }
 
                 // Calculate min value across all datasets to set appropriate y-axis min
                 let allValues = [];
-                datasets.forEach(dataset => {
+                filteredDatasets.forEach(dataset => {
                     if (dataset.data && Array.isArray(dataset.data)) {
-                        allValues = allValues.concat(dataset.data.filter(v => v !== null && v !== undefined));
+                        allValues = allValues.concat(dataset.data.filter(v => v !== null && v !== undefined && v !== 0));
                     }
                 });
                 const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
@@ -730,11 +736,29 @@
                     type: chartData.type,
                     data: {
                         labels: chartData.labels,
-                        datasets: datasets
+                        datasets: filteredDatasets
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: {
+                            duration: 800,
+                            easing: 'easeInOutQuart'
+                        },
+                        transitions: {
+                            show: {
+                                animations: {
+                                    x: { from: 0 },
+                                    y: { from: 0 }
+                                }
+                            },
+                            hide: {
+                                animations: {
+                                    x: { to: 0 },
+                                    y: { to: 0 }
+                                }
+                            }
+                        },
                         plugins: { 
                             legend: { 
                                 display: isFullscreen, 
@@ -742,8 +766,40 @@
                                     color: '#212529',
                                     font: { size: 14, weight: '600' },
                                     padding: 15
-                                } 
-                            } 
+                                },
+                                onClick: (e, legendItem, legend) => {
+                                    const index = legendItem.datasetIndex;
+                                    const chart = legend.chart;
+                                    const meta = chart.getDatasetMeta(index);
+                                    
+                                    meta.hidden = !meta.hidden;
+                                    chart.update('active');
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) label += ': ';
+                                        const value = context.parsed.y;
+                                        if (value !== null && value !== 0) {
+                                            const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Net Income', 'Cash & Debt'];
+                                            if (moneyCharts.some(c => title.includes(c))) {
+                                                if (Math.abs(value) >= 1000000000) {
+                                                    label += '$' + (value / 1000000000).toFixed(2) + 'B';
+                                                } else if (Math.abs(value) >= 1000000) {
+                                                    label += '$' + (value / 1000000).toFixed(2) + 'M';
+                                                } else {
+                                                    label += '$' + value.toLocaleString();
+                                                }
+                                            } else {
+                                                label += value.toLocaleString();
+                                            }
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
                         },
                         scales: {
                             y: {
