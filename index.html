@@ -711,7 +711,8 @@
                     return dataset.data.some(value => value !== null && value !== 0 && value !== undefined);
                 });
                 
-                let onClickHandler = isFullscreen ? null : () => openFullscreen(title, chartData);
+                // Don't add click handler to canvas since we handle it on the card div
+                let onClickHandler = null;
 
                 if (title.includes('Price')) {
                     filteredDatasets.forEach(ds => ds.pointRadius = 0);
@@ -719,7 +720,6 @@
                 
                 if (title === 'Projected Price Growth') {
                     filteredDatasets.forEach(ds => ds.pointRadius = 3);
-                    onClickHandler = null;
                 }
 
                 // Calculate min value across all datasets to set appropriate y-axis min
@@ -786,8 +786,10 @@
                                 display: isFullscreen, 
                                 labels: { 
                                     color: '#212529',
-                                    font: { size: 14, weight: '600' },
-                                    padding: 15
+                                    font: { size: isFullscreen ? 18 : 14, weight: '600' },
+                                    padding: isFullscreen ? 20 : 15,
+                                    boxWidth: isFullscreen ? 50 : 40,
+                                    boxHeight: isFullscreen ? 20 : 15
                                 }
                             },
                             tooltip: {
@@ -823,7 +825,8 @@
                                 stacked: chartData.stacked || false,
                                 grid: { color: '#e9ecef' },
                                 ticks: {
-                                    color: '#6c757d',
+                                    color: '#212529',
+                                    font: { weight: '600' },
                                     callback: function(value, index, values) {
                                         const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Net Income', 'Cash & Debt'];
                                         if (moneyCharts.some(c => title.includes(c))) {
@@ -1080,6 +1083,16 @@
                     chartsGrid.appendChild(chartCard);
                     const canvas = chartCard.querySelector('canvas');
                     createChart(canvas, chart.title, chart.data, false);
+                    
+                    // Make entire chart card clickable (except for Projected Price Growth)
+                    if (chart.title !== 'Projected Price Growth') {
+                        chartCard.style.cursor = 'pointer';
+                        chartCard.addEventListener('click', (e) => {
+                            openFullscreen(chart.title, chart.data);
+                        });
+                    } else {
+                        chartCard.style.cursor = 'default';
+                    }
                 });
             }
 
