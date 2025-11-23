@@ -743,17 +743,16 @@
                         maintainAspectRatio: false,
                         animation: {
                             duration: 600,
-                            easing: 'easeInOutQuart',
-                            onComplete: () => {
-                                // Force immediate render after animation
-                                if (chartInstance) chartInstance.update('none');
-                            }
+                            easing: 'easeInOutQuart'
                         },
                         transitions: {
                             show: {
                                 animations: {
                                     y: {
-                                        from: (ctx) => ctx.chart.scales.y.getPixelForValue(ctx.chart.scales.y.min),
+                                        from: (ctx) => {
+                                            const scale = ctx.chart.scales.y;
+                                            return scale ? scale.getPixelForValue(scale.min) : ctx.chart.height;
+                                        },
                                         duration: 600,
                                         easing: 'easeOutQuart'
                                     },
@@ -767,7 +766,10 @@
                             hide: {
                                 animations: {
                                     y: {
-                                        to: (ctx) => ctx.chart.scales.y.getPixelForValue(ctx.chart.scales.y.min),
+                                        to: (ctx) => {
+                                            const scale = ctx.chart.scales.y;
+                                            return scale ? scale.getPixelForValue(scale.min) : ctx.chart.height;
+                                        },
                                         duration: 400,
                                         easing: 'easeInQuart'
                                     },
@@ -831,7 +833,7 @@
                                             if (Math.abs(value) >= 1000000) {
                                                 return '$' + (value / 1000000).toFixed(1) + 'M';
                                             }
-                                            return '$' + value.toLocaleString();
+                                            return '$' + value.toLocaleString();    
                                         }
                                         return value.toLocaleString();
                                     }
