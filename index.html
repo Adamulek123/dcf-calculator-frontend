@@ -742,20 +742,40 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         animation: {
-                            duration: 800,
-                            easing: 'easeInOutQuart'
+                            duration: 600,
+                            easing: 'easeInOutQuart',
+                            onComplete: () => {
+                                // Force immediate render after animation
+                                if (chartInstance) chartInstance.update('none');
+                            }
                         },
                         transitions: {
                             show: {
                                 animations: {
-                                    x: { from: 0 },
-                                    y: { from: 0 }
+                                    y: {
+                                        from: (ctx) => ctx.chart.scales.y.getPixelForValue(ctx.chart.scales.y.min),
+                                        duration: 600,
+                                        easing: 'easeOutQuart'
+                                    },
+                                    opacity: {
+                                        from: 0,
+                                        to: 1,
+                                        duration: 600
+                                    }
                                 }
                             },
                             hide: {
                                 animations: {
-                                    x: { to: 0 },
-                                    y: { to: 0 }
+                                    y: {
+                                        to: (ctx) => ctx.chart.scales.y.getPixelForValue(ctx.chart.scales.y.min),
+                                        duration: 400,
+                                        easing: 'easeInQuart'
+                                    },
+                                    opacity: {
+                                        from: 1,
+                                        to: 0,
+                                        duration: 400
+                                    }
                                 }
                             }
                         },
@@ -839,6 +859,10 @@
                                     
                                     // Round max up to next step
                                     axis.max = Math.ceil(max / niceStep) * niceStep;
+                                },
+                                afterBuildTicks: function(axis) {
+                                    // Skip recalculation during transitions to prevent freeze
+                                    return;
                                 }
                             },
                             x: { 
