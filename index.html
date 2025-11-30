@@ -1390,51 +1390,83 @@
                     return date;
                 });
                 
-                // Collect segments in order of first appearance (oldest date first)
-                // This ensures consistent ordering and colors across the chart
-                const segmentOrderMap = new Map(); // segmentName -> firstAppearanceIndex
+                // Get the oldest date to determine segment ordering
+                // First, find the oldest date that has segment data
+                const oldestDate = dates[0];
                 
-                dates.forEach((date, dateIndex) => {
+                // Collect all segment names from ALL dates first
+                const allSegmentNames = new Set();
+                dates.forEach(date => {
                     Object.keys(typeData[date]).forEach(segmentName => {
                         // Skip 'Total' and metadata keys (starting with underscore)
                         if (segmentName !== 'Total' && !segmentName.startsWith('_')) {
-                            if (!segmentOrderMap.has(segmentName)) {
-                                segmentOrderMap.set(segmentName, dateIndex);
-                            }
+                            allSegmentNames.add(segmentName);
                         }
                     });
                 });
 
-                // Sort segments by their first appearance order (oldest first)
-                const sortedSegmentNames = Array.from(segmentOrderMap.keys()).sort((a, b) => {
-                    return segmentOrderMap.get(a) - segmentOrderMap.get(b);
+                // Find the first date where we have ALL segments (or the most segments)
+                // This ensures we sort based on a complete picture
+                let sortingDate = oldestDate;
+                let maxSegmentsFound = 0;
+                
+                for (const date of dates) {
+                    const segmentsInDate = Object.keys(typeData[date]).filter(s => 
+                        s !== 'Total' && !s.startsWith('_') && allSegmentNames.has(s)
+                    );
+                    if (segmentsInDate.length > maxSegmentsFound) {
+                        maxSegmentsFound = segmentsInDate.length;
+                        sortingDate = date;
+                        // If we found all segments, use this date
+                        if (segmentsInDate.length === allSegmentNames.size) {
+                            break;
+                        }
+                    }
+                }
+                
+                console.log('Sorting segments based on date:', sortingDate);
+                console.log('All segments:', Array.from(allSegmentNames));
+
+                // Sort segments by their value at the sorting date (biggest to smallest)
+                const sortedSegmentNames = Array.from(allSegmentNames).sort((a, b) => {
+                    const valueA = typeData[sortingDate]?.[a] ? parseFloat(typeData[sortingDate][a]) : 0;
+                    const valueB = typeData[sortingDate]?.[b] ? parseFloat(typeData[sortingDate][b]) : 0;
+                    return valueB - valueA; // Descending order (biggest first)
                 });
+                
+                console.log('Sorted segment order:', sortedSegmentNames);
 
                 // Define color palette (from biggest to smallest revenue)
                 const colorPalette = [
-                    'rgba(223, 114, 66, 1)',    
-                    'rgba(232, 162, 113, 1)',   
-                    'rgba(236, 217, 177, 1)',   
-                    'rgba(145, 175, 166, 1)',   
-                    'rgba(74, 143, 153, 1)',   
-                    'rgba(47, 88, 149, 1)'      
+                    'rgba(223, 114, 66, 1)',    // Orange-red (biggest)
+                    'rgba(232, 162, 113, 1)',   // Light orange
+                    'rgba(236, 217, 177, 1)',   // Beige/tan
+                    'rgba(145, 175, 166, 1)',   // Sage green
+                    'rgba(74, 143, 153, 1)',    // Teal
+                    'rgba(47, 88, 149, 1)'      // Blue (smallest)
                 ];
 
+                // Create datasets - sortedSegmentNames is already ordered biggest to smallest
+                // Chart.js stacks from bottom to top in array order, so first = bottom = biggest
                 const datasets = sortedSegmentNames.map((segmentName, index) => {
                     const data = dates.map(date => {
-                        return typeData[date][segmentName] ? parseFloat(typeData[date][segmentName]) : 0;
+                        const value = typeData[date]?.[segmentName];
+                        if (value === undefined || value === null) return 0;
+                        const parsed = parseFloat(value);
+                        return isNaN(parsed) ? 0 : parsed;
                     });
 
                     // Use colors from palette, cycling if there are more segments than colors
                     const colorIndex = index % colorPalette.length;
                     const backgroundColor = colorPalette[colorIndex];
-                    const borderColor = backgroundColor.replace('0.85', '1');
+
+                    console.log(`Segment "${segmentName}" at index ${index} gets color ${colorIndex}: ${backgroundColor}`);
 
                     return {
                         label: segmentName,
                         data: data,
                         backgroundColor: backgroundColor,
-                        borderColor: borderColor,
+                        borderColor: backgroundColor,
                         borderWidth: 1
                     };
                 });
