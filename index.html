@@ -1124,11 +1124,6 @@
             function renderCombinedCharts(basicData, segmentData) {
                 chartsGrid.innerHTML = '';
                 
-                // Debug logging
-                console.log('renderCombinedCharts called');
-                console.log('basicData:', basicData);
-                console.log('segmentData:', segmentData);
-                
                 if (!basicData || basicData.length === 0) {
                     chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No financial data found.</p>';
                     return;
@@ -1164,32 +1159,18 @@
                 // Chart order as requested
                 const chartOrder = [];
 
-                // Debug segment data
-                console.log('Segment data check:');
-                console.log('  Has segmentData:', !!segmentData);
-                if (segmentData) {
-                    console.log('  segmentData keys:', Object.keys(segmentData));
-                    console.log('  Has product:', !!segmentData.product);
-                    console.log('  Has geographic:', !!segmentData.geographic);
-                    if (segmentData.product) console.log('  Product keys:', Object.keys(segmentData.product));
-                    if (segmentData.geographic) console.log('  Geographic keys:', Object.keys(segmentData.geographic));
-                }
-
                 // 1. Revenue by Product (stacked bar)
                 if (segmentData && segmentData.product && Object.keys(segmentData.product).length > 0) {
-                    console.log('Creating Revenue by Product chart');
                     chartOrder.push(createSegmentChart('Revenue by Product', segmentData.product, colors, true));
                 }
 
                 // 2. Revenue by Geography (stacked bar)
                 if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
-                    console.log('Creating Revenue by Geography chart');
                     chartOrder.push(createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true));
                 }
 
                 // 3. Revenue by Business (stacked bar)
                 if (segmentData && segmentData.business && Object.keys(segmentData.business).length > 0) {
-                    console.log('Creating Revenue by Business chart');
                     chartOrder.push(createSegmentChart('Revenue by Business', segmentData.business, colors, true));
                 }
 
@@ -1328,7 +1309,7 @@
 
             function createSegmentChart(title, typeData, colors, stacked) {
                 // Sort dates by year and quarter/FY or date string
-                const dates = Object.keys(typeData).sort((a, b) => {
+                const allDates = Object.keys(typeData).sort((a, b) => {
                     // First check if it's a period-based key like "Q1_2024" or "FY_2024"
                     const parseKey = (key) => {
                         const periodMatch = key.match(/^(Q[1-4]|FY)_(\d{4})$/);
@@ -1364,6 +1345,31 @@
                     
                     return 0;
                 });
+                
+                // Filter out dates that have no actual segment data (only metadata or empty)
+                const dates = allDates.filter(date => {
+                    const dateData = typeData[date];
+                    if (!dateData) return false;
+                    
+                    // Check if there's at least one non-metadata, non-Total key with a value
+                    const hasData = Object.keys(dateData).some(key => {
+                        if (key === 'Total' || key.startsWith('_')) return false;
+                        const value = dateData[key];
+                        if (value === undefined || value === null) return false;
+                        const parsed = parseFloat(value);
+                        return !isNaN(parsed) && parsed !== 0;
+                    });
+                    
+                    return hasData;
+                });
+                
+                // If no dates have data, return empty chart
+                if (dates.length === 0) {
+                    return {
+                        title: title,
+                        data: { labels: [], datasets: [], type: 'bar', stacked: stacked }
+                    };
+                }
                 
                 // Format labels nicely - use fiscal_period and fiscal_year if available
                 const formattedLabels = dates.map(date => {
@@ -1424,17 +1430,12 @@
                     }
                 }
                 
-                console.log('Sorting segments based on date:', sortingDate);
-                console.log('All segments:', Array.from(allSegmentNames));
-
                 // Sort segments by their value at the sorting date (biggest to smallest)
                 const sortedSegmentNames = Array.from(allSegmentNames).sort((a, b) => {
                     const valueA = typeData[sortingDate]?.[a] ? parseFloat(typeData[sortingDate][a]) : 0;
                     const valueB = typeData[sortingDate]?.[b] ? parseFloat(typeData[sortingDate][b]) : 0;
                     return valueB - valueA; // Descending order (biggest first)
                 });
-                
-                console.log('Sorted segment order:', sortedSegmentNames);
 
                 // Define color palette (from biggest to smallest revenue)
                 const colorPalette = [
@@ -1459,8 +1460,6 @@
                     // Use colors from palette, cycling if there are more segments than colors
                     const colorIndex = index % colorPalette.length;
                     const backgroundColor = colorPalette[colorIndex];
-
-                    console.log(`Segment "${segmentName}" at index ${index} gets color ${colorIndex}: ${backgroundColor}`);
 
                     return {
                         label: segmentName,
