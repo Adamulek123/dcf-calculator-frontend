@@ -285,12 +285,14 @@
             background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
             border: 1px solid #e3e6e8; 
             border-radius: 1.25rem; 
-            padding: 2rem; 
+            padding: 1.75rem; 
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); 
             cursor: pointer; 
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         .chart-card::before {
             content: '';
@@ -312,12 +314,38 @@
             opacity: 1;
         }
         .chart-card h3 { 
-            text-align: center; 
+            text-align: left; 
             font-weight: 700; 
-            margin-bottom: 1.25rem; 
+            margin-bottom: 0.5rem; 
             color: #2c3e50;
-            font-size: 1.15rem;
+            font-size: 1rem;
             letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .chart-card .kpi-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            background: #ffe6e6;
+            color: #dc3545;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .chart-card .kpi-badge.positive {
+            background: #d4edda;
+            color: #28a745;
+        }
+        .period-filter-btn:hover {
+            background: #0056b3 !important;
+            color: white !important;
+        }
+        .period-filter-btn.active {
+            background: #007bff !important;
+            color: white !important;
+            box-shadow: 0 2px 8px rgba(0,123,255,0.3);
         }
 
         #fullscreen-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 2rem; backdrop-filter: blur(5px); }
@@ -518,14 +546,40 @@
     </div>
 
     <div id="financialDataPage" class="insights-page-container hidden">
-        <div class="header-section">
+        <!-- Search Header -->
+        <div class="header-section" style="margin-bottom: 0;">
             <div class="header-top-row">
-                <input type="text" id="financialTickerInput" placeholder="Enter Ticker (e.g., GOOGL)">
-                <button id="getFinancialDataBtn" class="primary-button">Load Financial Data</button>
+                <input type="text" id="financialTickerInput" placeholder="Enter Ticker (e.g., AMZN)" style="flex: 0 0 300px;">
+                <button id="getFinancialDataBtn" class="primary-button">Search</button>
                 <button id="financialBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
             </div>
         </div>
-        <div class="insights-grid" id="chartsGrid"></div>
+
+        <!-- Company Info Header (hidden by default) -->
+        <div id="financialCompanyHeader" class="hidden" style="background: white; padding: 2rem; border-radius: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; gap: 2rem; margin-bottom: 1.5rem;">
+                <div id="finCompanyLogo" style="font-size: 3rem; width: 80px; height: 80px; background: #f0f2f5; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #007bff;"></div>
+                <div style="flex: 1;">
+                    <h1 id="finCompanyName" style="font-size: 1.75rem; font-weight: 700; margin: 0; color: #212529;"></h1>
+                    <p id="finCompanyTicker" style="margin: 0.25rem 0 0 0; color: #6c757d; font-size: 1rem;"></p>
+                </div>
+                <div style="text-align: right;">
+                    <div id="finStockPrice" style="font-size: 2rem; font-weight: 800; color: #28a745; margin: 0;"></div>
+                    <div id="finPriceChange" style="font-size: 1rem; font-weight: 600; margin-top: 0.25rem;"></div>
+                    <p id="finEarningsDate" style="margin: 0.5rem 0 0 0; color: #6c757d; font-size: 0.9rem;"></p>
+                </div>
+            </div>
+            
+            <!-- Period Toggle Buttons -->
+            <div style="display: flex; justify-content: center; gap: 0.5rem;">
+                <button class="period-filter-btn active" data-period="quarterly" style="padding: 0.75rem 2rem; background: #007bff; color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">Quarterly</button>
+                <button class="period-filter-btn" data-period="ttm" style="padding: 0.75rem 2rem; background: #e9ecef; color: #495057; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">Quarterly (TTM)</button>
+                <button class="period-filter-btn" data-period="annually" style="padding: 0.75rem 2rem; background: #e9ecef; color: #495057; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">Annually</button>
+            </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="insights-grid" id="chartsGrid" style="grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));"></div>
     </div>
 
     <div id="fullscreen-chart-modal" class="hidden">
@@ -907,6 +961,9 @@
 
                 setButtonState(getFinancialDataBtn, 'Loading...', true);
                 chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
+                
+                // Hide company header while loading
+                document.getElementById('financialCompanyHeader').classList.add('hidden');
 
                 try {
                     // Fetch both basic and segment data
@@ -922,6 +979,9 @@
 
                     const segmentData = segmentResponse.ok ? await segmentResponse.json() : null;
 
+                    // Display company header
+                    displayCompanyHeader(ticker, basicData);
+                    
                     // Render combined charts
                     renderCombinedCharts(basicData, segmentData);
                     
@@ -931,8 +991,39 @@
                     chartsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
                     showToast(`Failed to load financial data: ${error.message}`, true);
                 } finally {
-                    setButtonState(getFinancialDataBtn, 'Load Financial Data', false);
+                    setButtonState(getFinancialDataBtn, 'Search', false);
                 }
+            }
+
+            function displayCompanyHeader(ticker, basicData) {
+                const header = document.getElementById('financialCompanyHeader');
+                const logo = document.getElementById('finCompanyLogo');
+                const name = document.getElementById('finCompanyName');
+                const tickerDisplay = document.getElementById('finCompanyTicker');
+                const price = document.getElementById('finStockPrice');
+                const priceChange = document.getElementById('finPriceChange');
+                const earnings = document.getElementById('finEarningsDate');
+
+                // Get latest data
+                const latest = basicData[basicData.length - 1];
+                
+                // Display company info
+                logo.textContent = ticker.substring(0, 2).toUpperCase();
+                name.textContent = latest.company_name || ticker;
+                tickerDisplay.textContent = `${ticker} | NASDAQ`;
+                
+                // Mock price data (you can replace this with real data from API)
+                const mockPrice = (Math.random() * 200 + 100).toFixed(2);
+                const mockChange = (Math.random() * 10 - 5).toFixed(2);
+                const mockPercent = ((mockChange / mockPrice) * 100).toFixed(2);
+                
+                price.textContent = `$${mockPrice}`;
+                priceChange.textContent = `${mockChange > 0 ? '+' : ''}$${mockChange} | ${mockChange > 0 ? '+' : ''}${mockPercent}%`;
+                priceChange.style.color = mockChange > 0 ? '#28a745' : '#dc3545';
+                
+                earnings.textContent = `Earnings: ${latest.filing_date || 'N/A'}`;
+                
+                header.classList.remove('hidden');
             }
 
             function renderCombinedCharts(basicData, segmentData) {
@@ -945,6 +1036,24 @@
 
                 const sortedData = basicData.sort((a, b) => new Date(a.filing_date) - new Date(b.filing_date));
                 const labels = sortedData.map(d => d.filing_date);
+                
+                // Helper function to calculate KPI (Year-over-Year growth or most recent change)
+                function calculateKPI(dataArray) {
+                    if (!dataArray || dataArray.length < 2) return null;
+                    
+                    const latest = dataArray[dataArray.length - 1];
+                    const previous = dataArray[dataArray.length - 2];
+                    
+                    if (latest === null || previous === null || previous === 0) return null;
+                    
+                    const change = ((latest - previous) / Math.abs(previous)) * 100;
+                    const positive = change >= 0;
+                    
+                    return {
+                        text: `${positive ? '+' : ''}${change.toFixed(1)}%`,
+                        positive: positive
+                    };
+                }
 
                 const colors = [
                     'rgba(54, 162, 235, 0.8)', 'rgba(255, 99, 132, 0.8)', 'rgba(75, 192, 192, 0.8)',
@@ -979,6 +1088,7 @@
                     const epsLabels = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted).map(d => d.filing_date);
                     chartOrder.push({
                         title: 'Earnings Per Share',
+                        kpi: calculateKPI(epsBasic.length > 0 ? epsBasic : epsDiluted),
                         data: {
                             labels: epsLabels,
                             datasets: [
@@ -1019,6 +1129,7 @@
                     const netIncomeLabels = sortedData.filter(d => d.facts?.NetIncomeLoss).map(d => d.filing_date);
                     chartOrder.push({
                         title: 'Net Income',
+                        kpi: calculateKPI(netIncome),
                         data: {
                             labels: netIncomeLabels,
                             data: netIncome,
@@ -1035,6 +1146,7 @@
                     const fcfLabels = sortedData.filter(d => d.facts?.NetCashProvidedByUsedInOperatingActivities).map(d => d.filing_date);
                     chartOrder.push({
                         title: 'Free Cash Flow',
+                        kpi: calculateKPI(fcf),
                         data: {
                             labels: fcfLabels,
                             data: fcf,
@@ -1076,16 +1188,29 @@
                     });
                 }
 
-                // Render all charts
+                // Render all charts with KPI badges
                 chartOrder.forEach(chart => {
                     const chartCard = document.createElement('div');
                     chartCard.className = 'chart-card';
-                    chartCard.innerHTML = `<h3>${chart.title}</h3><div style="position: relative; height: 320px;"><canvas></canvas></div>`;
+                    
+                    // Add KPI badge if available
+                    let kpiBadge = '';
+                    if (chart.kpi) {
+                        const kpiClass = chart.kpi.positive ? 'positive' : '';
+                        kpiBadge = `<span class="kpi-badge ${kpiClass}">${chart.kpi.text}</span>`;
+                    }
+                    
+                    chartCard.innerHTML = `
+                        <h3>${chart.title} ${kpiBadge}</h3>
+                        <div style="position: relative; height: 280px; flex: 1;">
+                            <canvas></canvas>
+                        </div>
+                    `;
                     chartsGrid.appendChild(chartCard);
                     const canvas = chartCard.querySelector('canvas');
                     createChart(canvas, chart.title, chart.data, false);
                     
-                    // Make entire chart card clickable (except for Projected Price Growth)
+                    // Make entire chart card clickable
                     if (chart.title !== 'Projected Price Growth') {
                         chartCard.style.cursor = 'pointer';
                         chartCard.addEventListener('click', (e) => {
@@ -1094,6 +1219,18 @@
                     } else {
                         chartCard.style.cursor = 'default';
                     }
+                });
+                
+                // Add period filter functionality
+                document.querySelectorAll('.period-filter-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        document.querySelectorAll('.period-filter-btn').forEach(b => b.classList.remove('active'));
+                        this.classList.add('active');
+                        // Filter logic can be added here
+                        const period = this.dataset.period;
+                        console.log('Period filter:', period);
+                        // TODO: Implement filtering based on period
+                    });
                 });
             }
 
@@ -1152,8 +1289,31 @@
                     };
                 });
 
+                // Calculate KPI for total revenue (sum of all segments)
+                let kpi = null;
+                if (dates.length >= 2) {
+                    const totals = dates.map(date => {
+                        return sortedSegmentNames.reduce((sum, segmentName) => {
+                            return sum + (typeData[date][segmentName] ? parseFloat(typeData[date][segmentName]) : 0);
+                        }, 0);
+                    });
+                    
+                    if (totals.length >= 2) {
+                        const latest = totals[totals.length - 1];
+                        const previous = totals[totals.length - 2];
+                        if (previous !== 0) {
+                            const change = ((latest - previous) / Math.abs(previous)) * 100;
+                            kpi = {
+                                text: `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
+                                positive: change >= 0
+                            };
+                        }
+                    }
+                }
+
                 return {
                     title: title,
+                    kpi: kpi,
                     data: {
                         labels: dates,
                         datasets: datasets,
