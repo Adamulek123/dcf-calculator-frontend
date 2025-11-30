@@ -1042,13 +1042,11 @@
                             }
                         }
                         
-                        // Filter based on period view
+                        // Filter based on period view - strictly separate quarterly and annually
                         const shouldInclude = (periodView === 'annually' && !isQuarterlyData) ||
                                             ((periodView === 'quarterly' || periodView === 'quarterlyTTM') && isQuarterlyData);
                         
-                        if (!shouldInclude && periodView !== 'quarterly') {
-                            // For initial load with quarterly view, include all data
-                            // Only filter when explicitly set
+                        if (!shouldInclude) {
                             return; // Skip this entry
                         }
                         
@@ -1089,6 +1087,16 @@
             
             // Handle period toggle button clicks
             function updatePeriodView(newView) {
+                // QuarterlyTTM does nothing for now
+                if (newView === 'quarterlyTTM') {
+                    return;
+                }
+                
+                // Prevent jitter - don't re-render if view hasn't changed
+                if (currentPeriodView === newView) {
+                    return;
+                }
+                
                 currentPeriodView = newView;
                 
                 // Update button states
@@ -1186,11 +1194,14 @@
                 }
 
                 // 4. EPS (both Basic and Diluted in one chart) - LINE CHART for usdPerShare
-                const epsBasic = sortedData.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null).filter(v => v !== null);
-                const epsDiluted = sortedData.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null).filter(v => v !== null);
+                // Filter data to only include entries that have EPS data
+                const epsData = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
                 
-                if (epsBasic.length > 0 || epsDiluted.length > 0) {
-                    const epsLabels = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted).map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                if (epsData.length > 0) {
+                    const epsLabels = epsData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const epsBasic = epsData.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null);
+                    const epsDiluted = epsData.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null);
+                    
                     chartOrder.push({
                         title: 'Earnings Per Share',
                         data: {
@@ -1228,9 +1239,10 @@
                 }
 
                 // 5. Net Income - BAR CHART for usd
-                const netIncome = sortedData.map(d => d.facts?.NetIncomeLoss ? parseFloat(d.facts.NetIncomeLoss.value) : null).filter(v => v !== null);
-                if (netIncome.length > 0) {
-                    const netIncomeLabels = sortedData.filter(d => d.facts?.NetIncomeLoss).map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                const netIncomeData = sortedData.filter(d => d.facts?.NetIncomeLoss);
+                if (netIncomeData.length > 0) {
+                    const netIncomeLabels = netIncomeData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const netIncome = netIncomeData.map(d => parseFloat(d.facts.NetIncomeLoss.value));
                     chartOrder.push({
                         title: 'Net Income',
                         data: {
@@ -1244,9 +1256,10 @@
                 }
 
                 // 6. Free Cash Flow - BAR CHART for usd
-                const fcf = sortedData.map(d => d.facts?.NetCashProvidedByUsedInOperatingActivities ? parseFloat(d.facts.NetCashProvidedByUsedInOperatingActivities.value) : null).filter(v => v !== null);
-                if (fcf.length > 0) {
-                    const fcfLabels = sortedData.filter(d => d.facts?.NetCashProvidedByUsedInOperatingActivities).map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                const fcfData = sortedData.filter(d => d.facts?.NetCashProvidedByUsedInOperatingActivities);
+                if (fcfData.length > 0) {
+                    const fcfLabels = fcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const fcf = fcfData.map(d => parseFloat(d.facts.NetCashProvidedByUsedInOperatingActivities.value));
                     chartOrder.push({
                         title: 'Free Cash Flow',
                         data: {
@@ -1260,11 +1273,13 @@
                 }
 
                 // 7. Cash & Debt - BAR CHART for usd (clustered)
-                const cash = sortedData.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null).filter(v => v !== null);
-                const debt = sortedData.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null).filter(v => v !== null);
+                const cashDebtData = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
                 
-                if (cash.length > 0 || debt.length > 0) {
-                    const cashDebtLabels = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent).map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                if (cashDebtData.length > 0) {
+                    const cashDebtLabels = cashDebtData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const cash = cashDebtData.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null);
+                    const debt = cashDebtData.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null);
+                    
                     chartOrder.push({
                         title: 'Cash & Debt',
                         data: {
@@ -1375,30 +1390,25 @@
                     return date;
                 });
                 
-                const segmentNames = new Set();
+                // Collect segments in order of first appearance (oldest date first)
+                // This ensures consistent ordering and colors across the chart
+                const segmentOrderMap = new Map(); // segmentName -> firstAppearanceIndex
                 
-                dates.forEach(date => {
+                dates.forEach((date, dateIndex) => {
                     Object.keys(typeData[date]).forEach(segmentName => {
                         // Skip 'Total' and metadata keys (starting with underscore)
                         if (segmentName !== 'Total' && !segmentName.startsWith('_')) {
-                            segmentNames.add(segmentName);
+                            if (!segmentOrderMap.has(segmentName)) {
+                                segmentOrderMap.set(segmentName, dateIndex);
+                            }
                         }
                     });
                 });
 
-                // Calculate average revenue for each segment to determine sorting order
-                const segmentAverages = Array.from(segmentNames).map(segmentName => {
-                    const values = dates.map(date => {
-                        return typeData[date][segmentName] ? parseFloat(typeData[date][segmentName]) : 0;
-                    });
-                    const sum = values.reduce((acc, val) => acc + val, 0);
-                    const avg = sum / values.length;
-                    return { name: segmentName, average: avg };
+                // Sort segments by their first appearance order (oldest first)
+                const sortedSegmentNames = Array.from(segmentOrderMap.keys()).sort((a, b) => {
+                    return segmentOrderMap.get(a) - segmentOrderMap.get(b);
                 });
-
-                // Sort segments by average revenue (biggest to smallest)
-                segmentAverages.sort((a, b) => b.average - a.average);
-                const sortedSegmentNames = segmentAverages.map(s => s.name);
 
                 // Define color palette (from biggest to smallest revenue)
                 const colorPalette = [
