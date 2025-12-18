@@ -759,44 +759,17 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        animation: {
-                            duration: 600,
-                            easing: 'easeInOutQuart'
-                        },
+                        animation: isFullscreen ? { duration: 300 } : false,
                         transitions: {
-                            show: {
-                                animations: {
-                                    y: {
-                                        from: (ctx) => {
-                                            const scale = ctx.chart.scales.y;
-                                            return scale ? scale.getPixelForValue(scale.min) : ctx.chart.height;
-                                        },
-                                        duration: 600,
-                                        easing: 'easeOutQuart'
-                                    },
-                                    opacity: {
-                                        from: 0,
-                                        to: 1,
-                                        duration: 600
-                                    }
+                            active: {
+                                animation: {
+                                    duration: isFullscreen ? 200 : 0
                                 }
-                            },
-                            hide: {
-                                animations: {
-                                    y: {
-                                        to: (ctx) => {
-                                            const scale = ctx.chart.scales.y;
-                                            return scale ? scale.getPixelForValue(scale.min) : ctx.chart.height;
-                                        },
-                                        duration: 400,
-                                        easing: 'easeInQuart'
-                                    },
-                                    opacity: {
-                                        from: 1,
-                                        to: 0,
-                                        duration: 400
-                                    }
-                                }
+                            }
+                        },
+                        elements: {
+                            bar: {
+                                borderSkipped: 'start'
                             }
                         },
                         plugins: { 
@@ -812,6 +785,7 @@
                             },
                             tooltip: {
                                 enabled: isFullscreen,
+                                animation: isFullscreen ? { duration: 100 } : false,
                                 callbacks: {
                                     label: function(context) {
                                         let label = context.dataset.label || '';
@@ -884,34 +858,6 @@
                                         }
                                         return value.toLocaleString();
                                     }
-                                },
-                                afterDataLimits: function(axis) {
-                                    // Get the current max value
-                                    const max = axis.max;
-                                    
-                                    // Calculate the step size (distance between ticks)
-                                    const range = max - axis.min;
-                                    const tickCount = 10; // approximate number of ticks
-                                    const roughStep = range / tickCount;
-                                    
-                                    // Calculate nice step size (round to nearest power of 10)
-                                    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-                                    let niceStep = magnitude;
-                                    
-                                    if (roughStep / magnitude >= 5) {
-                                        niceStep = magnitude * 10;
-                                    } else if (roughStep / magnitude >= 2) {
-                                        niceStep = magnitude * 5;
-                                    } else if (roughStep / magnitude >= 1) {
-                                        niceStep = magnitude * 2;
-                                    }
-                                    
-                                    // Round max up to next step
-                                    axis.max = Math.ceil(max / niceStep) * niceStep;
-                                },
-                                afterBuildTicks: function(axis) {
-                                    // Skip recalculation during transitions to prevent freeze
-                                    return;
                                 }
                             },
                             x: { 
@@ -932,13 +878,27 @@
             let showingAdjustedFCF = false;
             let storedFCFData = null;
             let storedAdjustedFCFData = null;
+            let storedFullFCFData = null;
+            let storedFullAdjustedFCFData = null;
+            
+            // Store full chart data for fullscreen (keyed by title)
+            let fullChartDataStore = {};
 
             function openFullscreen(title, chartData) {
+                // Show modal first
                 fullscreenModal.classList.remove('hidden');
-                if (activeFullscreenChart) activeFullscreenChart.destroy();
+                
+                // Destroy existing chart
+                if (activeFullscreenChart) {
+                    activeFullscreenChart.destroy();
+                    activeFullscreenChart = null;
+                }
                 
                 currentFullscreenTitle = title;
-                currentFullscreenData = chartData;
+                
+                // Use full data from store if available, otherwise use provided data
+                const fullData = fullChartDataStore[title] || chartData;
+                currentFullscreenData = fullData;
                 
                 // Remove existing toggle button if any
                 if (fcfToggleBtn) {
@@ -947,7 +907,7 @@
                 }
                 
                 // Add FCF toggle button if this is a Free Cash Flow chart
-                if (title === 'Free Cash Flow' && storedAdjustedFCFData) {
+                if (title === 'Free Cash Flow' && storedFullAdjustedFCFData) {
                     showingAdjustedFCF = false;
                     fcfToggleBtn = document.createElement('button');
                     fcfToggleBtn.className = 'primary-button';
@@ -959,7 +919,10 @@
                     fullscreenModal.appendChild(fcfToggleBtn);
                 }
                 
-                activeFullscreenChart = createChart(fullscreenCanvas, title, chartData, true);
+                // Use requestAnimationFrame to defer chart creation for smoother modal opening
+                requestAnimationFrame(() => {
+                    activeFullscreenChart = createChart(fullscreenCanvas, title, fullData, true);
+                });
             }
             
             function toggleFCFView() {
@@ -967,15 +930,22 @@
                 
                 showingAdjustedFCF = !showingAdjustedFCF;
                 
-                if (activeFullscreenChart) activeFullscreenChart.destroy();
-                
-                if (showingAdjustedFCF) {
-                    fcfToggleBtn.textContent = 'Show Free Cash Flow';
-                    activeFullscreenChart = createChart(fullscreenCanvas, 'Adjusted Free Cash Flow', storedAdjustedFCFData, true);
-                } else {
-                    fcfToggleBtn.textContent = 'Show Adjusted FCF';
-                    activeFullscreenChart = createChart(fullscreenCanvas, 'Free Cash Flow', storedFCFData, true);
+                if (activeFullscreenChart) {
+                    activeFullscreenChart.destroy();
+                    activeFullscreenChart = null;
                 }
+                
+                // Update button text immediately
+                fcfToggleBtn.textContent = showingAdjustedFCF ? 'Show Free Cash Flow' : 'Show Adjusted FCF';
+                
+                // Defer chart creation
+                requestAnimationFrame(() => {
+                    if (showingAdjustedFCF) {
+                        activeFullscreenChart = createChart(fullscreenCanvas, 'Adjusted Free Cash Flow', storedFullAdjustedFCFData, true);
+                    } else {
+                        activeFullscreenChart = createChart(fullscreenCanvas, 'Free Cash Flow', storedFullFCFData, true);
+                    }
+                });
             }
 
             closeFullscreenBtn.addEventListener('click', () => {
@@ -1201,9 +1171,12 @@
             function renderCombinedCharts(basicData, segmentData) {
                 chartsGrid.innerHTML = '';
                 
-                // Reset stored FCF data
+                // Reset stored FCF data and full chart data store
                 storedFCFData = null;
                 storedAdjustedFCFData = null;
+                storedFullFCFData = null;
+                storedFullAdjustedFCFData = null;
+                fullChartDataStore = {};
                 
                 if (!basicData || basicData.length === 0) {
                     chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No financial data found.</p>';
@@ -1224,9 +1197,10 @@
                 });
                 
                 // Determine max bars based on period view (16 for quarterly, 10 for annually)
-                const maxBars = currentPeriodView === 'annually' ? 10 : 16;
+                // For annually, show all data (no limit) since there's usually less data
+                const maxBars = currentPeriodView === 'annually' ? 9999 : 16;
                 
-                // Limit sorted data to most recent entries
+                // Limit sorted data to most recent entries (for thumbnail view)
                 const limitedData = sortedData.slice(-maxBars);
                 
                 // Create labels based on fiscal period (e.g., "Q1 2024" or "FY 2024")
@@ -1249,29 +1223,35 @@
                 // 0. Revenue (from geographic Total)
                 if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
                     const revenueChart = createRevenueChart(segmentData.geographic, maxBars);
+                    const revenueChartFull = createRevenueChart(segmentData.geographic, 9999);
                     if (revenueChart) {
                         chartOrder.push(revenueChart);
+                        if (revenueChartFull) fullChartDataStore['Revenue'] = revenueChartFull.data;
                     }
                 }
 
                 // 1. Revenue by Product (stacked bar)
                 if (segmentData && segmentData.product && Object.keys(segmentData.product).length > 0) {
                     chartOrder.push(createSegmentChart('Revenue by Product', segmentData.product, colors, true, maxBars));
+                    fullChartDataStore['Revenue by Product'] = createSegmentChart('Revenue by Product', segmentData.product, colors, true, 9999).data;
                 }
 
                 // 2. Revenue by Geography (stacked bar)
                 if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
                     chartOrder.push(createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true, maxBars));
+                    fullChartDataStore['Revenue by Geography'] = createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true, 9999).data;
                 }
 
                 // 3. Revenue by Business (stacked bar)
                 if (segmentData && segmentData.business && Object.keys(segmentData.business).length > 0) {
                     chartOrder.push(createSegmentChart('Revenue by Business', segmentData.business, colors, true, maxBars));
+                    fullChartDataStore['Revenue by Business'] = createSegmentChart('Revenue by Business', segmentData.business, colors, true, 9999).data;
                 }
 
                 // 4. EPS (both Basic and Diluted in one chart) - BAR CHART for usdPerShare
                 // Filter data to only include entries that have EPS data
                 const epsData = limitedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
+                const epsDataFull = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
                 
                 if (epsData.length > 0) {
                     const epsLabels = epsData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
@@ -1302,10 +1282,24 @@
                             type: 'bar'
                         }
                     });
+                    
+                    // Store full EPS data
+                    const epsLabelsFull = epsDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const epsBasicFull = epsDataFull.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null);
+                    const epsDilutedFull = epsDataFull.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null);
+                    fullChartDataStore['Earnings Per Share'] = {
+                        labels: epsLabelsFull,
+                        datasets: [
+                            { label: 'EPS Basic', data: epsBasicFull, backgroundColor: 'rgba(240, 206, 99, 1)', borderColor: 'rgba(240, 206, 99, 1)', borderWidth: 1 },
+                            { label: 'EPS Diluted', data: epsDilutedFull, backgroundColor: 'rgba(255, 99, 132, 1)', borderColor: 'rgba(255, 99, 132, 1)', borderWidth: 1, hidden: true }
+                        ],
+                        type: 'bar'
+                    };
                 }
 
                 // 5. Net Income - BAR CHART for usd
                 const netIncomeData = limitedData.filter(d => d.facts?.NetIncomeLoss);
+                const netIncomeDataFull = sortedData.filter(d => d.facts?.NetIncomeLoss);
                 if (netIncomeData.length > 0) {
                     const netIncomeLabels = netIncomeData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
                     const netIncome = netIncomeData.map(d => parseFloat(d.facts.NetIncomeLoss.value));
@@ -1319,15 +1313,25 @@
                             borderColor: 'rgba(242, 207, 98, 1)'
                         }
                     });
+                    
+                    // Store full Net Income data
+                    fullChartDataStore['Net Income'] = {
+                        labels: netIncomeDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        data: netIncomeDataFull.map(d => parseFloat(d.facts.NetIncomeLoss.value)),
+                        type: 'bar',
+                        backgroundColor: 'rgba(242, 207, 98, 1)',
+                        borderColor: 'rgba(242, 207, 98, 1)'
+                    };
                 }
 
                 // 6. Free Cash Flow - BAR CHART for usd
                 const fcfData = limitedData.filter(d => d.facts?.FreeCashFlow);
+                const fcfDataFull = sortedData.filter(d => d.facts?.FreeCashFlow);
                 if (fcfData.length > 0) {
                     const fcfLabels = fcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
                     const fcf = fcfData.map(d => parseFloat(d.facts.FreeCashFlow.value));
                     
-                    // Store FCF data for toggle
+                    // Store FCF data for toggle (limited)
                     storedFCFData = {
                         labels: fcfLabels,
                         data: fcf,
@@ -1335,6 +1339,16 @@
                         backgroundColor: 'rgba(243, 143, 42, 1)',
                         borderColor: 'rgba(243, 143, 42, 1)' 
                     };
+                    
+                    // Store full FCF data
+                    storedFullFCFData = {
+                        labels: fcfDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        data: fcfDataFull.map(d => parseFloat(d.facts.FreeCashFlow.value)),
+                        type: 'bar',
+                        backgroundColor: 'rgba(243, 143, 42, 1)',
+                        borderColor: 'rgba(243, 143, 42, 1)'
+                    };
+                    fullChartDataStore['Free Cash Flow'] = storedFullFCFData;
                     
                     chartOrder.push({
                         title: 'Free Cash Flow',
@@ -1344,6 +1358,7 @@
                 
                 // Store Adjusted Free Cash Flow data for toggle (if available)
                 const adjFcfData = limitedData.filter(d => d.facts?.AdjustedFreeCashFlow);
+                const adjFcfDataFull = sortedData.filter(d => d.facts?.AdjustedFreeCashFlow);
                 if (adjFcfData.length > 0) {
                     const adjFcfLabels = adjFcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
                     const adjFcf = adjFcfData.map(d => parseFloat(d.facts.AdjustedFreeCashFlow.value));
@@ -1355,10 +1370,20 @@
                         backgroundColor: 'rgba(160, 203, 232, 1)',
                         borderColor: 'rgba(160, 203, 232, 1)'
                     };
+                    
+                    // Store full Adjusted FCF data
+                    storedFullAdjustedFCFData = {
+                        labels: adjFcfDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        data: adjFcfDataFull.map(d => parseFloat(d.facts.AdjustedFreeCashFlow.value)),
+                        type: 'bar',
+                        backgroundColor: 'rgba(160, 203, 232, 1)',
+                        borderColor: 'rgba(160, 203, 232, 1)'
+                    };
                 }
 
                 // 7. Cash & Debt - BAR CHART for usd (clustered)
                 const cashDebtData = limitedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
+                const cashDebtDataFull = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
                 
                 if (cashDebtData.length > 0) {
                     const cashDebtLabels = cashDebtData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
@@ -1388,10 +1413,21 @@
                             type: 'bar'
                         }
                     });
+                    
+                    // Store full Cash & Debt data
+                    fullChartDataStore['Cash & Debt'] = {
+                        labels: cashDebtDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        datasets: [
+                            { label: 'Cash', data: cashDebtDataFull.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null), backgroundColor: 'rgba(85, 158, 56, 1)', borderColor: 'rgba(85, 158, 56, 1)', borderWidth: 1 },
+                            { label: 'Debt', data: cashDebtDataFull.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null), backgroundColor: 'rgb(250, 86, 78, 1)', borderColor: 'rgb(250, 86, 78, 1)', borderWidth: 1 }
+                        ],
+                        type: 'bar'
+                    };
                 }
                 
                 // 8. Shares Outstanding - BAR CHART
                 const sharesData = limitedData.filter(d => d.facts?.SharesOutstanding);
+                const sharesDataFull = sortedData.filter(d => d.facts?.SharesOutstanding);
                 if (sharesData.length > 0) {
                     const sharesLabels = sharesData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
                     const shares = sharesData.map(d => parseFloat(d.facts.SharesOutstanding.value));
@@ -1405,6 +1441,15 @@
                             borderColor: 'rgba(94, 150, 146, 1)'
                         }
                     });
+                    
+                    // Store full Shares Outstanding data
+                    fullChartDataStore['Shares Outstanding'] = {
+                        labels: sharesDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        data: sharesDataFull.map(d => parseFloat(d.facts.SharesOutstanding.value)),
+                        type: 'bar',
+                        backgroundColor: 'rgba(94, 150, 146, 1)',
+                        borderColor: 'rgba(94, 150, 146, 1)'
+                    };
                 }
 
                 // Render all charts
