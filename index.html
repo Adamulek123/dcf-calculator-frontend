@@ -818,8 +818,17 @@
                                         if (label) label += ': ';
                                         const value = context.parsed.y;
                                         if (value !== null && value !== 0) {
-                                            const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Net Income', 'Cash & Debt'];
-                                            if (moneyCharts.some(c => title.includes(c))) {
+                                            const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue'];
+                                            const shareCharts = ['Shares Outstanding'];
+                                            if (shareCharts.some(c => title.includes(c))) {
+                                                if (Math.abs(value) >= 1000000000) {
+                                                    label += (value / 1000000000).toFixed(2) + 'B';
+                                                } else if (Math.abs(value) >= 1000000) {
+                                                    label += (value / 1000000).toFixed(2) + 'M';
+                                                } else {
+                                                    label += value.toLocaleString();
+                                                }
+                                            } else if (moneyCharts.some(c => title.includes(c))) {
                                                 if (Math.abs(value) >= 1000000000) {
                                                     label += '$' + (value / 1000000000).toFixed(2) + 'B';
                                                 } else if (Math.abs(value) >= 1000000) {
@@ -836,6 +845,13 @@
                                 }
                             }
                         },
+                        interaction: {
+                            mode: isFullscreen ? 'index' : null,
+                            intersect: false
+                        },
+                        hover: {
+                            mode: isFullscreen ? 'index' : null
+                        },
                         scales: {
                             y: {
                                 beginAtZero: false,
@@ -846,7 +862,17 @@
                                     color: '#212529',
                                     font: { weight: '500' },
                                     callback: function(value, index, values) {
-                                        const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Net Income', 'Cash & Debt'];
+                                        const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue'];
+                                        const shareCharts = ['Shares Outstanding'];
+                                        if (shareCharts.some(c => title.includes(c))) {
+                                            if (Math.abs(value) >= 1000000000) {
+                                                return (value / 1000000000).toFixed(1) + 'B';
+                                            }
+                                            if (Math.abs(value) >= 1000000) {
+                                                return (value / 1000000).toFixed(1) + 'M';
+                                            }
+                                            return value.toLocaleString();    
+                                        }
                                         if (moneyCharts.some(c => title.includes(c))) {
                                             if (Math.abs(value) >= 1000000000) {
                                                 return '$' + (value / 1000000000).toFixed(1) + 'B';
@@ -900,11 +926,56 @@
                 return chartInstance;
             }
 
+            let currentFullscreenTitle = '';
+            let currentFullscreenData = null;
+            let fcfToggleBtn = null;
+            let showingAdjustedFCF = false;
+            let storedFCFData = null;
+            let storedAdjustedFCFData = null;
+
             function openFullscreen(title, chartData) {
                 fullscreenModal.classList.remove('hidden');
                 if (activeFullscreenChart) activeFullscreenChart.destroy();
                 
+                currentFullscreenTitle = title;
+                currentFullscreenData = chartData;
+                
+                // Remove existing toggle button if any
+                if (fcfToggleBtn) {
+                    fcfToggleBtn.remove();
+                    fcfToggleBtn = null;
+                }
+                
+                // Add FCF toggle button if this is a Free Cash Flow chart
+                if (title === 'Free Cash Flow' && storedAdjustedFCFData) {
+                    showingAdjustedFCF = false;
+                    fcfToggleBtn = document.createElement('button');
+                    fcfToggleBtn.className = 'primary-button';
+                    fcfToggleBtn.style.position = 'absolute';
+                    fcfToggleBtn.style.top = '2rem';
+                    fcfToggleBtn.style.left = '2rem';
+                    fcfToggleBtn.textContent = 'Show Adjusted FCF';
+                    fcfToggleBtn.addEventListener('click', toggleFCFView);
+                    fullscreenModal.appendChild(fcfToggleBtn);
+                }
+                
                 activeFullscreenChart = createChart(fullscreenCanvas, title, chartData, true);
+            }
+            
+            function toggleFCFView() {
+                if (!fcfToggleBtn) return;
+                
+                showingAdjustedFCF = !showingAdjustedFCF;
+                
+                if (activeFullscreenChart) activeFullscreenChart.destroy();
+                
+                if (showingAdjustedFCF) {
+                    fcfToggleBtn.textContent = 'Show Free Cash Flow';
+                    activeFullscreenChart = createChart(fullscreenCanvas, 'Adjusted Free Cash Flow', storedAdjustedFCFData, true);
+                } else {
+                    fcfToggleBtn.textContent = 'Show Adjusted FCF';
+                    activeFullscreenChart = createChart(fullscreenCanvas, 'Free Cash Flow', storedFCFData, true);
+                }
             }
 
             closeFullscreenBtn.addEventListener('click', () => {
@@ -913,6 +984,12 @@
                     activeFullscreenChart.destroy();
                     activeFullscreenChart = null;
                 }
+                if (fcfToggleBtn) {
+                    fcfToggleBtn.remove();
+                    fcfToggleBtn = null;
+                }
+                currentFullscreenTitle = '';
+                currentFullscreenData = null;
             });
 
             
@@ -1124,6 +1201,10 @@
             function renderCombinedCharts(basicData, segmentData) {
                 chartsGrid.innerHTML = '';
                 
+                // Reset stored FCF data
+                storedFCFData = null;
+                storedAdjustedFCFData = null;
+                
                 if (!basicData || basicData.length === 0) {
                     chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">No financial data found.</p>';
                     return;
@@ -1142,8 +1223,14 @@
                     return periodA - periodB;
                 });
                 
+                // Determine max bars based on period view (16 for quarterly, 10 for annually)
+                const maxBars = currentPeriodView === 'annually' ? 10 : 16;
+                
+                // Limit sorted data to most recent entries
+                const limitedData = sortedData.slice(-maxBars);
+                
                 // Create labels based on fiscal period (e.g., "Q1 2024" or "FY 2024")
-                const labels = sortedData.map(d => {
+                const labels = limitedData.map(d => {
                     const period = d.fiscal_period || '';
                     const year = d.fiscal_year || '';
                     return `${period} ${year}`;
@@ -1158,25 +1245,33 @@
 
                 // Chart order as requested
                 const chartOrder = [];
+                
+                // 0. Revenue (from geographic Total)
+                if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
+                    const revenueChart = createRevenueChart(segmentData.geographic, maxBars);
+                    if (revenueChart) {
+                        chartOrder.push(revenueChart);
+                    }
+                }
 
                 // 1. Revenue by Product (stacked bar)
                 if (segmentData && segmentData.product && Object.keys(segmentData.product).length > 0) {
-                    chartOrder.push(createSegmentChart('Revenue by Product', segmentData.product, colors, true));
+                    chartOrder.push(createSegmentChart('Revenue by Product', segmentData.product, colors, true, maxBars));
                 }
 
                 // 2. Revenue by Geography (stacked bar)
                 if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
-                    chartOrder.push(createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true));
+                    chartOrder.push(createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true, maxBars));
                 }
 
                 // 3. Revenue by Business (stacked bar)
                 if (segmentData && segmentData.business && Object.keys(segmentData.business).length > 0) {
-                    chartOrder.push(createSegmentChart('Revenue by Business', segmentData.business, colors, true));
+                    chartOrder.push(createSegmentChart('Revenue by Business', segmentData.business, colors, true, maxBars));
                 }
 
-                // 4. EPS (both Basic and Diluted in one chart) - LINE CHART for usdPerShare
+                // 4. EPS (both Basic and Diluted in one chart) - BAR CHART for usdPerShare
                 // Filter data to only include entries that have EPS data
-                const epsData = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
+                const epsData = limitedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
                 
                 if (epsData.length > 0) {
                     const epsLabels = epsData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
@@ -1191,36 +1286,26 @@
                                 {
                                     label: 'EPS Basic',
                                     data: epsBasic,
-                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                                    borderColor: 'rgba(54, 162, 235, 1)',
-                                    borderWidth: 2,
-                                    type: 'line',
-                                    fill: false,
-                                    tension: 0.1,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6
+                                    backgroundColor: 'rgba(240, 206, 99, 1)',
+                                    borderColor: 'rgba(240, 206, 99, 1)',
+                                    borderWidth: 1
                                 },
                                 {
                                     label: 'EPS Diluted',
                                     data: epsDiluted,
-                                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                    backgroundColor: 'rgba(255, 99, 132, 1)',
                                     borderColor: 'rgba(255, 99, 132, 1)',
-                                    borderWidth: 2,
-                                    type: 'line',
-                                    fill: false,
-                                    tension: 0.1,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6,
+                                    borderWidth: 1,
                                     hidden: true  
                                 }
                             ],
-                            type: 'line'
+                            type: 'bar'
                         }
                     });
                 }
 
                 // 5. Net Income - BAR CHART for usd
-                const netIncomeData = sortedData.filter(d => d.facts?.NetIncomeLoss);
+                const netIncomeData = limitedData.filter(d => d.facts?.NetIncomeLoss);
                 if (netIncomeData.length > 0) {
                     const netIncomeLabels = netIncomeData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
                     const netIncome = netIncomeData.map(d => parseFloat(d.facts.NetIncomeLoss.value));
@@ -1237,24 +1322,43 @@
                 }
 
                 // 6. Free Cash Flow - BAR CHART for usd
-                const fcfData = sortedData.filter(d => d.facts?.NetCashProvidedByUsedInOperatingActivities);
+                const fcfData = limitedData.filter(d => d.facts?.FreeCashFlow);
                 if (fcfData.length > 0) {
                     const fcfLabels = fcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
-                    const fcf = fcfData.map(d => parseFloat(d.facts.NetCashProvidedByUsedInOperatingActivities.value));
+                    const fcf = fcfData.map(d => parseFloat(d.facts.FreeCashFlow.value));
+                    
+                    // Store FCF data for toggle
+                    storedFCFData = {
+                        labels: fcfLabels,
+                        data: fcf,
+                        type: 'bar',
+                        backgroundColor: 'rgba(243, 143, 42, 1)',
+                        borderColor: 'rgba(243, 143, 42, 1)' 
+                    };
+                    
                     chartOrder.push({
                         title: 'Free Cash Flow',
-                        data: {
-                            labels: fcfLabels,
-                            data: fcf,
-                            type: 'bar',
-                            backgroundColor: 'rgba(243, 143, 42, 1)',
-                            borderColor: 'rgba(243, 143, 42, 1)'
-                        }
+                        data: storedFCFData
                     });
+                }
+                
+                // Store Adjusted Free Cash Flow data for toggle (if available)
+                const adjFcfData = limitedData.filter(d => d.facts?.AdjustedFreeCashFlow);
+                if (adjFcfData.length > 0) {
+                    const adjFcfLabels = adjFcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const adjFcf = adjFcfData.map(d => parseFloat(d.facts.AdjustedFreeCashFlow.value));
+                    
+                    storedAdjustedFCFData = {
+                        labels: adjFcfLabels,
+                        data: adjFcf,
+                        type: 'bar',
+                        backgroundColor: 'rgba(160, 203, 232, 1)',
+                        borderColor: 'rgba(160, 203, 232, 1)'
+                    };
                 }
 
                 // 7. Cash & Debt - BAR CHART for usd (clustered)
-                const cashDebtData = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
+                const cashDebtData = limitedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
                 
                 if (cashDebtData.length > 0) {
                     const cashDebtLabels = cashDebtData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
@@ -1285,6 +1389,23 @@
                         }
                     });
                 }
+                
+                // 8. Shares Outstanding - BAR CHART
+                const sharesData = limitedData.filter(d => d.facts?.SharesOutstanding);
+                if (sharesData.length > 0) {
+                    const sharesLabels = sharesData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const shares = sharesData.map(d => parseFloat(d.facts.SharesOutstanding.value));
+                    chartOrder.push({
+                        title: 'Shares Outstanding',
+                        data: {
+                            labels: sharesLabels,
+                            data: shares,
+                            type: 'bar',
+                            backgroundColor: 'rgba(94, 150, 146, 1)',
+                            borderColor: 'rgba(94, 150, 146, 1)'
+                        }
+                    });
+                }
 
                 // Render all charts
                 chartOrder.forEach(chart => {
@@ -1307,7 +1428,89 @@
                 });
             }
 
-            function createSegmentChart(title, typeData, colors, stacked) {
+            // Helper function to create Revenue chart from geographic Total
+            function createRevenueChart(geoData, maxBars) {
+                // Sort dates
+                const allDates = Object.keys(geoData).sort((a, b) => {
+                    const parseKey = (key) => {
+                        const periodMatch = key.match(/^(Q[1-4]|FY)_(\d{4})$/);
+                        if (periodMatch) {
+                            const period = periodMatch[1];
+                            const year = parseInt(periodMatch[2]);
+                            const periodOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4, 'FY': 5 };
+                            return { type: 'period', year, order: periodOrder[period] || 0 };
+                        }
+                        const dateMatch = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                        if (dateMatch) {
+                            return { type: 'date', date: new Date(key) };
+                        }
+                        return { type: 'unknown' };
+                    };
+                    
+                    const aParsed = parseKey(a);
+                    const bParsed = parseKey(b);
+                    
+                    if (aParsed.type === 'period' && bParsed.type === 'period') {
+                        if (aParsed.year !== bParsed.year) return aParsed.year - bParsed.year;
+                        return aParsed.order - bParsed.order;
+                    }
+                    if (aParsed.type === 'date' && bParsed.type === 'date') {
+                        return aParsed.date - bParsed.date;
+                    }
+                    return 0;
+                });
+                
+                // Filter dates that have Total revenue
+                const datesWithTotal = allDates.filter(date => {
+                    const dateData = geoData[date];
+                    return dateData && dateData.Total !== undefined && dateData.Total !== null;
+                });
+                
+                if (datesWithTotal.length === 0) return null;
+                
+                // Limit to maxBars
+                const limitedDates = datesWithTotal.slice(-maxBars);
+                
+                // Format labels
+                const labels = limitedDates.map(date => {
+                    if (/^(Q[1-4]|FY)_\d{4}$/.test(date)) {
+                        return date.replace('_', ' ');
+                    }
+                    const dateMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                    if (dateMatch) {
+                        const segmentInfo = geoData[date];
+                        if (segmentInfo && segmentInfo._fiscal_period && segmentInfo._fiscal_year) {
+                            return `${segmentInfo._fiscal_period} ${segmentInfo._fiscal_year}`;
+                        }
+                        const year = dateMatch[1];
+                        const month = parseInt(dateMatch[2]);
+                        const quarterMap = { 3: 'Q1', 6: 'Q2', 9: 'Q3', 12: 'Q4' };
+                        const quarter = quarterMap[month] || `M${month}`;
+                        return `${quarter} ${year}`;
+                    }
+                    return date;
+                });
+                
+                const data = limitedDates.map(date => {
+                    const value = geoData[date]?.Total;
+                    if (value === undefined || value === null) return 0;
+                    const parsed = parseFloat(value);
+                    return isNaN(parsed) ? 0 : parsed;
+                });
+                
+                return {
+                    title: 'Revenue',
+                    data: {
+                        labels: labels,
+                        data: data,
+                        type: 'bar',
+                        backgroundColor: 'rgba(230, 174, 85, 1)',
+                        borderColor: 'rgba(230, 174, 85, 1)'
+                    }
+                };
+            }
+
+            function createSegmentChart(title, typeData, colors, stacked, maxBars = 16) {
                 // Sort dates by year and quarter/FY or date string
                 const allDates = Object.keys(typeData).sort((a, b) => {
                     // First check if it's a period-based key like "Q1_2024" or "FY_2024"
@@ -1347,7 +1550,7 @@
                 });
                 
                 // Filter out dates that have no actual segment data (only metadata or empty)
-                const dates = allDates.filter(date => {
+                const filteredDates = allDates.filter(date => {
                     const dateData = typeData[date];
                     if (!dateData) return false;
                     
@@ -1362,6 +1565,9 @@
                     
                     return hasData;
                 });
+                
+                // Limit to maxBars (most recent)
+                const dates = filteredDates.slice(-maxBars);
                 
                 // If no dates have data, return empty chart
                 if (dates.length === 0) {
