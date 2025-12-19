@@ -759,6 +759,7 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        events: isFullscreen ?  ['click'] : ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
                         animation: isFullscreen ? { duration: 300 } : false,
                         transitions: {
                             active: {
