@@ -60,7 +60,7 @@
             display: flex;
             flex-direction: column;
             gap: 2.5rem;
-            transition: all 0.3s ease-in-out;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
         }
 
         .insights-page-container {
@@ -74,7 +74,7 @@
             display: flex;
             flex-direction: column;
             gap: 2.5rem;
-            transition: all 0.3s ease-in-out;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
         }
 
         @media (min-width: 1024px) {
@@ -320,7 +320,7 @@
             letter-spacing: -0.02em;
         }
 
-        #fullscreen-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.95); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 2rem; backdrop-filter: blur(5px); }
+        #fullscreen-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.98); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 2rem;}
         #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
         #close-fullscreen-btn { position: absolute; top: 2rem; right: 2rem; font-size: 2rem; background: none; border: none; color: #212529; cursor: pointer; }
 
