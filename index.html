@@ -820,11 +820,13 @@
                             }
                         },
                         interaction: {
-                            mode: isFullscreen ? 'index' : null,
-                            intersect: false
+                            mode: isFullscreen ? 'nearest' : null,
+                            intersect: true,
+                            axis: 'x'
                         },
                         hover: {
-                            mode: isFullscreen ? 'index' : null
+                            mode: isFullscreen ? 'nearest' : null,
+                            animationDuration: 0
                         },
                         scales: {
                             y: {
@@ -1196,9 +1198,12 @@
                     return periodA - periodB;
                 });
                 
-                // Determine max bars based on period view (16 for quarterly, 10 for annually)
-                // For annually, show all data (no limit) since there's usually less data
-                const maxBars = currentPeriodView === 'annually' ? 9999 : 16;
+                // Determine max bars based on period view (16 for quarterly, all for annually)
+                // For annually, show all data since there's usually less data
+                const maxBars = currentPeriodView === 'annually' ? sortedData.length : 16;
+                
+                // For fullscreen, use actual data length instead of arbitrary large number
+                const maxBarsFull = sortedData.length;
                 
                 // Limit sorted data to most recent entries (for thumbnail view)
                 const limitedData = sortedData.slice(-maxBars);
@@ -1222,8 +1227,9 @@
                 
                 // 0. Revenue (from geographic Total)
                 if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
+                    const geoKeyCount = Object.keys(segmentData.geographic).length;
                     const revenueChart = createRevenueChart(segmentData.geographic, maxBars);
-                    const revenueChartFull = createRevenueChart(segmentData.geographic, 9999);
+                    const revenueChartFull = createRevenueChart(segmentData.geographic, geoKeyCount);
                     if (revenueChart) {
                         chartOrder.push(revenueChart);
                         if (revenueChartFull) fullChartDataStore['Revenue'] = revenueChartFull.data;
@@ -1232,20 +1238,23 @@
 
                 // 1. Revenue by Product (stacked bar)
                 if (segmentData && segmentData.product && Object.keys(segmentData.product).length > 0) {
+                    const productKeyCount = Object.keys(segmentData.product).length;
                     chartOrder.push(createSegmentChart('Revenue by Product', segmentData.product, colors, true, maxBars));
-                    fullChartDataStore['Revenue by Product'] = createSegmentChart('Revenue by Product', segmentData.product, colors, true, 9999).data;
+                    fullChartDataStore['Revenue by Product'] = createSegmentChart('Revenue by Product', segmentData.product, colors, true, productKeyCount).data;
                 }
 
                 // 2. Revenue by Geography (stacked bar)
                 if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
+                    const geoSegKeyCount = Object.keys(segmentData.geographic).length;
                     chartOrder.push(createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true, maxBars));
-                    fullChartDataStore['Revenue by Geography'] = createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true, 9999).data;
+                    fullChartDataStore['Revenue by Geography'] = createSegmentChart('Revenue by Geography', segmentData.geographic, colors, true, geoSegKeyCount).data;
                 }
 
                 // 3. Revenue by Business (stacked bar)
                 if (segmentData && segmentData.business && Object.keys(segmentData.business).length > 0) {
+                    const businessKeyCount = Object.keys(segmentData.business).length;
                     chartOrder.push(createSegmentChart('Revenue by Business', segmentData.business, colors, true, maxBars));
-                    fullChartDataStore['Revenue by Business'] = createSegmentChart('Revenue by Business', segmentData.business, colors, true, 9999).data;
+                    fullChartDataStore['Revenue by Business'] = createSegmentChart('Revenue by Business', segmentData.business, colors, true, businessKeyCount).data;
                 }
 
                 // 4. EPS (both Basic and Diluted in one chart) - BAR CHART for usdPerShare
