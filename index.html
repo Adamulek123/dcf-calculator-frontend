@@ -1004,7 +1004,35 @@
                     }
                 });
                 const minValue = allValues.length > 0 ? Math.min(...allValues) : 0;
+                const maxValue = allValues.length > 0 ? Math.max(...allValues) : 0;
                 const yAxisMin = minValue < 0 ? minValue * 1.25 : 0;
+                
+                // Calculate nice step size based on data range
+                // This ensures clean intervals like 1B, 10B, 20B based on the range
+                const calculateStepSize = (max, min) => {
+                    const range = Math.abs(max - min);
+                    if (range === 0) return 1;
+                    
+                    // Find the order of magnitude
+                    const magnitude = Math.pow(10, Math.floor(Math.log10(range)));
+                    const normalizedRange = range / magnitude;
+                    
+                    // Choose a nice step multiplier based on normalized range
+                    let stepMultiplier;
+                    if (normalizedRange <= 1.5) {
+                        stepMultiplier = 0.2;  // For range ~1: steps of 0.2 (5 ticks)
+                    } else if (normalizedRange <= 3) {
+                        stepMultiplier = 0.5;  // For range ~2-3: steps of 0.5 (4-6 ticks)
+                    } else if (normalizedRange <= 7) {
+                        stepMultiplier = 1;    // For range ~4-7: steps of 1 (4-7 ticks)
+                    } else {
+                        stepMultiplier = 2;    // For range ~8-10: steps of 2 (4-5 ticks)
+                    }
+                    
+                    return stepMultiplier * magnitude;
+                };
+                
+                const yAxisStepSize = calculateStepSize(maxValue, yAxisMin);
 
                 const chartInstance = new Chart(ctx, {
                     type: chartData.type,
@@ -1092,8 +1120,9 @@
                                 stacked: chartData.stacked || false,
                                 grid: { color: '#e9ecef' },
                                 ticks: {
-                                    color: '#6c757d',
-                                    font: { size: isFullscreen ? 12 : 10, weight: '500' },
+                                    color: '#3c4145',
+                                    font: { size: isFullscreen ? 14 : 11, weight: '500' },
+                                    stepSize: yAxisStepSize,
                                     callback: function(value, index, values) {
                                         const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue'];
                                         const shareCharts = ['Shares Outstanding'];
@@ -1123,9 +1152,9 @@
                                 stacked: chartData.stacked || false,
                                 grid: { display: false }, 
                                 ticks: { 
-                                    color: '#6c757d',
+                                    color: '#3c4145',
                                     display: true,
-                                    font: { size: isFullscreen ? 12 : 9 },
+                                    font: { size: isFullscreen ? 14 : 11 },
                                     maxRotation: 45,
                                     minRotation: 0
                                 } 
@@ -1480,6 +1509,14 @@
                     return periodA - periodB;
                 });
                 
+                // Helper function to format period labels (removes FY prefix for annual data)
+                const formatPeriodLabel = (d) => {
+                    const period = d.fiscal_period || '';
+                    const year = d.fiscal_year || '';
+                    if (period === 'FY') return year.toString();
+                    return `${period} ${year}`;
+                };
+                
                 // Determine max bars based on period view (16 for quarterly, 10 for annually)
                 const maxBars = currentPeriodView === 'annually' ? 10 : 16;
                 
@@ -1489,12 +1526,8 @@
                 // Limit sorted data to most recent entries (for thumbnail view)
                 const limitedData = sortedData.slice(-maxBars);
                 
-                // Create labels based on fiscal period (e.g., "Q1 2024" or "FY 2024")
-                const labels = limitedData.map(d => {
-                    const period = d.fiscal_period || '';
-                    const year = d.fiscal_year || '';
-                    return `${period} ${year}`;
-                });
+                // Create labels based on fiscal period (e.g., "Q1 2024" or just "2024" for annual)
+                const labels = limitedData.map(formatPeriodLabel);
 
                 const colors = [
                     'rgba(54, 162, 235, 0.8)', 'rgba(255, 99, 132, 0.8)', 'rgba(75, 192, 192, 0.8)',
@@ -1544,7 +1577,7 @@
                 const epsDataFull = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
                 
                 if (epsData.length > 0) {
-                    const epsLabels = epsData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const epsLabels = epsData.map(formatPeriodLabel);
                     const epsBasic = epsData.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null);
                     const epsDiluted = epsData.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null);
                     
@@ -1574,7 +1607,7 @@
                     });
                     
                     // Store full EPS data
-                    const epsLabelsFull = epsDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const epsLabelsFull = epsDataFull.map(formatPeriodLabel);
                     const epsBasicFull = epsDataFull.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null);
                     const epsDilutedFull = epsDataFull.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null);
                     fullChartDataStore['Earnings Per Share'] = {
@@ -1591,7 +1624,7 @@
                 const netIncomeData = limitedData.filter(d => d.facts?.NetIncomeLoss);
                 const netIncomeDataFull = sortedData.filter(d => d.facts?.NetIncomeLoss);
                 if (netIncomeData.length > 0) {
-                    const netIncomeLabels = netIncomeData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const netIncomeLabels = netIncomeData.map(formatPeriodLabel);
                     const netIncome = netIncomeData.map(d => parseFloat(d.facts.NetIncomeLoss.value));
                     chartOrder.push({
                         title: 'Net Income',
@@ -1606,7 +1639,7 @@
                     
                     // Store full Net Income data
                     fullChartDataStore['Net Income'] = {
-                        labels: netIncomeDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        labels: netIncomeDataFull.map(formatPeriodLabel),
                         data: netIncomeDataFull.map(d => parseFloat(d.facts.NetIncomeLoss.value)),
                         type: 'bar',
                         backgroundColor: 'rgba(242, 207, 98, 1)',
@@ -1618,7 +1651,7 @@
                 const fcfData = limitedData.filter(d => d.facts?.FreeCashFlow);
                 const fcfDataFull = sortedData.filter(d => d.facts?.FreeCashFlow);
                 if (fcfData.length > 0) {
-                    const fcfLabels = fcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const fcfLabels = fcfData.map(formatPeriodLabel);
                     const fcf = fcfData.map(d => parseFloat(d.facts.FreeCashFlow.value));
                     
                     // Store FCF data for toggle (limited)
@@ -1632,7 +1665,7 @@
                     
                     // Store full FCF data
                     storedFullFCFData = {
-                        labels: fcfDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        labels: fcfDataFull.map(formatPeriodLabel),
                         data: fcfDataFull.map(d => parseFloat(d.facts.FreeCashFlow.value)),
                         type: 'bar',
                         backgroundColor: 'rgba(243, 143, 42, 1)',
@@ -1650,7 +1683,7 @@
                 const adjFcfData = limitedData.filter(d => d.facts?.AdjustedFreeCashFlow);
                 const adjFcfDataFull = sortedData.filter(d => d.facts?.AdjustedFreeCashFlow);
                 if (adjFcfData.length > 0) {
-                    const adjFcfLabels = adjFcfData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const adjFcfLabels = adjFcfData.map(formatPeriodLabel);
                     const adjFcf = adjFcfData.map(d => parseFloat(d.facts.AdjustedFreeCashFlow.value));
                     
                     storedAdjustedFCFData = {
@@ -1663,7 +1696,7 @@
                     
                     // Store full Adjusted FCF data
                     storedFullAdjustedFCFData = {
-                        labels: adjFcfDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        labels: adjFcfDataFull.map(formatPeriodLabel),
                         data: adjFcfDataFull.map(d => parseFloat(d.facts.AdjustedFreeCashFlow.value)),
                         type: 'bar',
                         backgroundColor: 'rgba(160, 203, 232, 1)',
@@ -1676,7 +1709,7 @@
                 const cashDebtDataFull = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
                 
                 if (cashDebtData.length > 0) {
-                    const cashDebtLabels = cashDebtData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const cashDebtLabels = cashDebtData.map(formatPeriodLabel);
                     const cash = cashDebtData.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null);
                     const debt = cashDebtData.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null);
                     
@@ -1706,7 +1739,7 @@
                     
                     // Store full Cash & Debt data
                     fullChartDataStore['Cash & Debt'] = {
-                        labels: cashDebtDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        labels: cashDebtDataFull.map(formatPeriodLabel),
                         datasets: [
                             { label: 'Cash', data: cashDebtDataFull.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null), backgroundColor: 'rgba(85, 158, 56, 1)', borderColor: 'rgba(85, 158, 56, 1)', borderWidth: 1 },
                             { label: 'Debt', data: cashDebtDataFull.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null), backgroundColor: 'rgb(250, 86, 78, 1)', borderColor: 'rgb(250, 86, 78, 1)', borderWidth: 1 }
@@ -1719,7 +1752,7 @@
                 const sharesData = limitedData.filter(d => d.facts?.SharesOutstanding);
                 const sharesDataFull = sortedData.filter(d => d.facts?.SharesOutstanding);
                 if (sharesData.length > 0) {
-                    const sharesLabels = sharesData.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`);
+                    const sharesLabels = sharesData.map(formatPeriodLabel);
                     const shares = sharesData.map(d => parseFloat(d.facts.SharesOutstanding.value));
                     chartOrder.push({
                         title: 'Shares Outstanding',
@@ -1734,7 +1767,7 @@
                     
                     // Store full Shares Outstanding data
                     fullChartDataStore['Shares Outstanding'] = {
-                        labels: sharesDataFull.map(d => `${d.fiscal_period || ''} ${d.fiscal_year || ''}`),
+                        labels: sharesDataFull.map(formatPeriodLabel),
                         data: sharesDataFull.map(d => parseFloat(d.facts.SharesOutstanding.value)),
                         type: 'bar',
                         backgroundColor: 'rgba(94, 150, 146, 1)',
@@ -1819,14 +1852,21 @@
                 
                 // Format labels
                 const labels = limitedDates.map(date => {
-                    if (/^(Q[1-4]|FY)_\d{4}$/.test(date)) {
-                        return date.replace('_', ' ');
+                    const periodMatch = date.match(/^(Q[1-4]|FY)_(\d{4})$/);
+                    if (periodMatch) {
+                        const period = periodMatch[1];
+                        const year = periodMatch[2];
+                        if (period === 'FY') return year;
+                        return `${period} ${year}`;
                     }
                     const dateMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
                     if (dateMatch) {
                         const segmentInfo = geoData[date];
                         if (segmentInfo && segmentInfo._fiscal_period && segmentInfo._fiscal_year) {
-                            return `${segmentInfo._fiscal_period} ${segmentInfo._fiscal_year}`;
+                            const period = segmentInfo._fiscal_period;
+                            const year = segmentInfo._fiscal_year;
+                            if (period === 'FY') return year.toString();
+                            return `${period} ${year}`;
                         }
                         const year = dateMatch[1];
                         const month = parseInt(dateMatch[2]);
@@ -1925,9 +1965,14 @@
                 
                 // Format labels nicely - use fiscal_period and fiscal_year if available
                 const formattedLabels = dates.map(date => {
-                    // Check if it's a period key like "Q1_2024"
-                    if (/^(Q[1-4]|FY)_\d{4}$/.test(date)) {
-                        return date.replace('_', ' ');
+                    // Check if it's a period key like "Q1_2024" or "FY_2024"
+                    const periodMatch = date.match(/^(Q[1-4]|FY)_(\d{4})$/);
+                    if (periodMatch) {
+                        const period = periodMatch[1];
+                        const year = periodMatch[2];
+                        // For FY (annual), just show the year
+                        if (period === 'FY') return year;
+                        return `${period} ${year}`;
                     }
                     // Check if it's a date string like "2024-06-30"
                     const dateMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -1935,7 +1980,11 @@
                         // Try to get fiscal_period and fiscal_year from the segment data (stored with underscore prefix)
                         const segmentInfo = typeData[date];
                         if (segmentInfo && segmentInfo._fiscal_period && segmentInfo._fiscal_year) {
-                            return `${segmentInfo._fiscal_period} ${segmentInfo._fiscal_year}`;
+                            const period = segmentInfo._fiscal_period;
+                            const year = segmentInfo._fiscal_year;
+                            // For FY (annual), just show the year
+                            if (period === 'FY') return year.toString();
+                            return `${period} ${year}`;
                         }
                         
                         // Fallback: Convert month to quarter
