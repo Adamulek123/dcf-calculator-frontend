@@ -179,8 +179,24 @@
             right: 1.5rem;
         }
 
-        /* Data Section Card */
-        .financial-data-section {
+        /* Metrics Section Card (placeholder for future data) */
+        .financial-metrics-section {
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            margin: 0 1rem 1rem 1rem;
+            padding: 1.5rem 2rem;
+        }
+
+        .financial-metrics-placeholder {
+            font-size: 1.25rem;
+            font-weight: 500;
+            color: #64748b;
+            text-align: center;
+        }
+
+        /* Charts Section Card */
+        .financial-charts-section {
             background-color: #ffffff;
             border-radius: 0.75rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -266,7 +282,7 @@
             transition: none;
             position: relative;
             overflow: hidden;
-            min-height: 260px;
+            min-height: 450px;
         }
 
         .financial-chart-card-header {
@@ -307,7 +323,7 @@
 
         .financial-chart-body {
             padding: 0.5rem 0.75rem 0.75rem 0.75rem;
-            height: 220px;
+            height: 400px;
         }
 
         /* When financial data page is shown, body should not center content */
@@ -741,10 +757,13 @@
             </div>
         </div>
 
-        <!-- Data Section -->
-        <div class="financial-data-section">
-            <h2 class="financial-section-title">keep a space here for later text</h2>
-            
+        <!-- Metrics Section (placeholder for later) -->
+        <div class="financial-metrics-section">
+            <div class="financial-metrics-placeholder">keep a space here for later text</div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="financial-charts-section">
             <!-- Period Toggle -->
             <div class="financial-period-toggle">
                 <div class="financial-period-toggle-group">
