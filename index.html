@@ -64,17 +64,258 @@
         }
 
         .insights-page-container {
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            padding: 3rem;
-            border-radius: 2rem;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+            background-color: #f1f5f9;
+            padding: 0;
+            border-radius: 0;
+            box-shadow: none;
             width: 100%;
-            max-width: 1800px;
-            border: 1px solid #e0e0e0;
+            max-width: 100%;
+            border: none;
             display: flex;
             flex-direction: column;
-            gap: 2.5rem;
-            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            gap: 0;
+            min-height: 100vh;
+        }
+
+        /* Financial Data Page - Full Screen Layout */
+        .financial-header-card {
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            padding: 1rem 1.5rem;
+            margin: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .financial-search-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        .financial-search-wrapper input {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            width: 200px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .financial-search-wrapper input:focus {
+            border-color: #3b82f6;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+
+        .financial-search-btn {
+            background-color: #e2e8f0;
+            color: #475569;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .financial-search-btn:hover {
+            background-color: #cbd5e1;
+        }
+
+        .financial-company-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-direction: column;
+        }
+
+        .financial-company-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .financial-company-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 0.375rem;
+            object-fit: contain;
+        }
+
+        .financial-company-details {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .financial-company-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .financial-company-ticker {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .financial-company-price {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .financial-menu-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+        }
+
+        /* Data Section Card */
+        .financial-data-section {
+            background-color: #ffffff;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            margin: 0 1rem 1rem 1rem;
+            padding: 1.5rem;
+        }
+
+        .financial-section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1e293b;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Period Toggle - Matching Image Style */
+        .financial-period-toggle {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .financial-period-toggle-group {
+            display: inline-flex;
+            background-color: #f1f5f9;
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+        }
+
+        .financial-period-btn {
+            padding: 0.5rem 1.25rem;
+            border: none;
+            background: none;
+            color: #64748b;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.875rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+        }
+
+        .financial-period-btn.active {
+            background-color: #3b82f6;
+            color: #ffffff;
+        }
+
+        .financial-period-btn:hover:not(.active) {
+            color: #334155;
+        }
+
+        /* Charts Grid - New Style */
+        .financial-charts-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1rem;
+        }
+
+        @media (max-width: 1400px) {
+            .financial-charts-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (max-width: 1100px) {
+            .financial-charts-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 800px) {
+            .financial-charts-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* New Chart Card Style - Matching Image */
+        .financial-chart-card {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 0;
+            cursor: default;
+            transition: none;
+            position: relative;
+            overflow: hidden;
+            min-height: 200px;
+        }
+
+        .financial-chart-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .financial-chart-card-title {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #475569;
+            margin: 0;
+        }
+
+        .financial-chart-expand-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #94a3b8;
+            padding: 0.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.2s;
+        }
+
+        .financial-chart-expand-btn:hover {
+            color: #64748b;
+        }
+
+        .financial-chart-expand-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .financial-chart-body {
+            padding: 0.75rem;
+            height: 160px;
+        }
+
+        /* When financial data page is shown, body should not center content */
+        body.financial-page-active {
+            justify-content: flex-start;
+            align-items: stretch;
+            padding: 0;
+            background-color: #f1f5f9;
         }
 
         @media (min-width: 1024px) {
@@ -280,45 +521,8 @@
         .modal-buttons .cancel-btn { background-color: #6c757d; color: white; }
         .modal-buttons .cancel-btn:hover { background-color: #5a6268; transform: translateY(-2px); }
 
-        .insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem; }
-        .chart-card { 
-            background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
-            border: 1px solid #e3e6e8; 
-            border-radius: 1.25rem; 
-            padding: 2rem; 
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); 
-            cursor: pointer; 
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-        .chart-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #007bff, #00d4ff);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        .chart-card:hover { 
-            transform: translateY(-8px) scale(1.01); 
-            box-shadow: 0 12px 35px rgba(0, 123, 255, 0.15);
-            border-color: #007bff;
-        }
-        .chart-card:hover::before {
-            opacity: 1;
-        }
-        .chart-card h3 { 
-            text-align: center; 
-            font-weight: 700; 
-            margin-bottom: 1.25rem; 
-            color: #2c3e50;
-            font-size: 1.15rem;
-            letter-spacing: -0.02em;
-        }
+        .insights-grid { display: none; }
+        .chart-card { display: none; }
 
         #fullscreen-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.98); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 2rem;}
         #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
@@ -518,22 +722,41 @@
     </div>
 
     <div id="financialDataPage" class="insights-page-container hidden">
-        <div class="header-section">
-            <div class="header-top-row">
+        <!-- Header Card with Search and Company Info -->
+        <div class="financial-header-card" style="position: relative;">
+            <button id="financialBackToMenuBtn" class="financial-search-btn financial-menu-btn">Menu</button>
+            <div class="financial-search-wrapper">
                 <input type="text" id="financialTickerInput" placeholder="Enter Ticker (e.g., GOOGL)">
-                <button id="getFinancialDataBtn" class="primary-button">Load Financial Data</button>
-                <button id="financialBackToMenuBtn" class="primary-button bg-gray-600">Menu</button>
+                <button id="getFinancialDataBtn" class="financial-search-btn">Search</button>
+            </div>
+            <div id="financialCompanyInfo" class="financial-company-info hidden">
+                <div class="financial-company-row">
+                    <img id="financialCompanyLogo" class="financial-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
+                    <div class="financial-company-details">
+                        <span id="financialCompanyName" class="financial-company-name"></span>
+                        <span id="financialCompanyTicker" class="financial-company-ticker"></span>
+                    </div>
+                </div>
+                <span id="financialCompanyPrice" class="financial-company-price"></span>
             </div>
         </div>
-        <!-- Period Toggle -->
-        <div class="period-toggle-container" style="display: flex; justify-content: flex-start; margin-bottom: 1.5rem;">
-            <div class="period-toggle">
-                <button id="quarterlyBtn" class="active">Quarterly</button>
-                <button id="quarterlyTTMBtn">Quarterly (TTM)</button>
-                <button id="annuallyBtn">Annually</button>
+
+        <!-- Data Section -->
+        <div class="financial-data-section">
+            <h2 class="financial-section-title">keep a space here for later text</h2>
+            
+            <!-- Period Toggle -->
+            <div class="financial-period-toggle">
+                <div class="financial-period-toggle-group">
+                    <button id="quarterlyBtn" class="financial-period-btn active">Quarterly</button>
+                    <button id="quarterlyTTMBtn" class="financial-period-btn">Quarterly (TTM)</button>
+                    <button id="annuallyBtn" class="financial-period-btn">Annually</button>
+                </div>
             </div>
+
+            <!-- Charts Grid -->
+            <div class="financial-charts-grid" id="chartsGrid"></div>
         </div>
-        <div class="insights-grid" id="chartsGrid"></div>
     </div>
 
     <div id="fullscreen-chart-modal" class="hidden">
@@ -603,6 +826,13 @@
             const quarterlyBtn = document.getElementById('quarterlyBtn');
             const quarterlyTTMBtn = document.getElementById('quarterlyTTMBtn');
             const annuallyBtn = document.getElementById('annuallyBtn');
+            
+            // Financial page company info elements
+            const financialCompanyInfo = document.getElementById('financialCompanyInfo');
+            const financialCompanyLogo = document.getElementById('financialCompanyLogo');
+            const financialCompanyName = document.getElementById('financialCompanyName');
+            const financialCompanyTicker = document.getElementById('financialCompanyTicker');
+            const financialCompanyPrice = document.getElementById('financialCompanyPrice');
             
             
             const tickerInput = document.getElementById('tickerInput');
@@ -695,6 +925,13 @@
                 appContent.classList.add('hidden');
                 financialDataPage.classList.add('hidden');
                 page.classList.remove('hidden');
+                
+                // Toggle body class for full-page financial data view
+                if (page === financialDataPage) {
+                    document.body.classList.add('financial-page-active');
+                } else {
+                    document.body.classList.remove('financial-page-active');
+                }
             }
 
             dcfCalculatorMenuBtn.addEventListener('click', () => showPage(appContent));
@@ -759,7 +996,6 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        events: isFullscreen ?  ['click'] : ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
                         animation: isFullscreen ? { duration: 300 } : false,
                         transitions: {
                             active: {
@@ -831,6 +1067,7 @@
                         },
                         scales: {
                             y: {
+                                display: isFullscreen,
                                 beginAtZero: false,
                                 min: yAxisMin,
                                 stacked: chartData.stacked || false,
@@ -866,7 +1103,12 @@
                             x: { 
                                 stacked: chartData.stacked || false,
                                 grid: { display: false }, 
-                                ticks: { color: '#6c757d' } 
+                                ticks: { 
+                                    color: '#6c757d',
+                                    display: isFullscreen,
+                                    maxRotation: 45,
+                                    minRotation: 0
+                                } 
                             }
                         },
                         onClick: onClickHandler
@@ -975,12 +1217,16 @@
 
                 setButtonState(getFinancialDataBtn, 'Loading...', true);
                 chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
+                
+                // Hide company info while loading
+                financialCompanyInfo.classList.add('hidden');
 
                 try {
-                    // Fetch both basic and segment data
-                    const [basicResponse, segmentResponse] = await Promise.all([
+                    // Fetch basic data, segment data, and market price in parallel
+                    const [basicResponse, segmentResponse, priceResponse] = await Promise.all([
                         apiCall(`/get_basic_data?ticker=${ticker}`),
-                        apiCall(`/get_segment_data?ticker=${ticker}`)
+                        apiCall(`/get_segment_data?ticker=${ticker}`),
+                        apiCall(`/get_market_price?ticker=${ticker}`)
                     ]);
 
                     const basicData = await basicResponse.json();
@@ -989,6 +1235,21 @@
                     }
 
                     const segmentData = segmentResponse.ok ? await segmentResponse.json() : null;
+                    const priceData = priceResponse.ok ? await priceResponse.json() : null;
+                    
+                    // Get company info from the first basic data entry
+                    let companyName = ticker;
+                    if (basicData && basicData.length > 0) {
+                        companyName = basicData[0].company_name || ticker;
+                    }
+                    
+                    // Update company info display
+                    financialCompanyLogo.src = `https://img.logo.dev/ticker/${ticker}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
+                    financialCompanyLogo.alt = `${companyName} logo`;
+                    financialCompanyName.textContent = companyName;
+                    financialCompanyTicker.textContent = `${ticker} | ${priceData?.exchange || 'NASDAQ'}`;
+                    financialCompanyPrice.textContent = priceData?.price ? `$${priceData.price.toFixed(2)}` : 'N/A';
+                    financialCompanyInfo.classList.remove('hidden');
 
                     // Cache the data for period filtering
                     cachedBasicData = basicData;
@@ -1003,7 +1264,7 @@
                     chartsGrid.innerHTML = `<p class="text-center text-red-500 col-span-full">Error: ${error.message}</p>`;
                     showToast(`Failed to load financial data: ${error.message}`, true);
                 } finally {
-                    setButtonState(getFinancialDataBtn, 'Load Financial Data', false);
+                    setButtonState(getFinancialDataBtn, 'Search', false);
                 }
             }
             
@@ -1199,9 +1460,9 @@
                     return periodA - periodB;
                 });
                 
-                // Determine max bars based on period view (16 for quarterly, all for annually)
-                // For annually, show all data since there's usually less data
-                const maxBars = currentPeriodView === 'annually' ? sortedData.length : 16;
+                // Determine max bars based on period view (8 for quarterly thumbnails, all for annually)
+                // Thumbnails are smaller now, so show fewer bars
+                const maxBars = currentPeriodView === 'annually' ? sortedData.length : 8;
                 
                 // For fullscreen, use actual data length instead of arbitrary large number
                 const maxBarsFull = sortedData.length;
@@ -1465,20 +1726,31 @@
                 // Render all charts
                 chartOrder.forEach(chart => {
                     const chartCard = document.createElement('div');
-                    chartCard.className = 'chart-card';
-                    chartCard.innerHTML = `<h3>${chart.title}</h3><div style="position: relative; height: 320px;"><canvas></canvas></div>`;
+                    chartCard.className = 'financial-chart-card';
+                    chartCard.innerHTML = `
+                        <div class="financial-chart-card-header">
+                            <h3 class="financial-chart-card-title">${chart.title}</h3>
+                            <button class="financial-chart-expand-btn" title="Expand chart">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="financial-chart-body"><canvas></canvas></div>
+                    `;
                     chartsGrid.appendChild(chartCard);
                     const canvas = chartCard.querySelector('canvas');
                     createChart(canvas, chart.title, chart.data, false);
                     
-                    // Make entire chart card clickable (except for Projected Price Growth)
+                    // Only the expand button opens fullscreen
+                    const expandBtn = chartCard.querySelector('.financial-chart-expand-btn');
                     if (chart.title !== 'Projected Price Growth') {
-                        chartCard.style.cursor = 'pointer';
-                        chartCard.addEventListener('click', (e) => {
+                        expandBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
                             openFullscreen(chart.title, chart.data);
                         });
                     } else {
-                        chartCard.style.cursor = 'default';
+                        expandBtn.style.display = 'none';
                     }
                 });
             }
