@@ -80,47 +80,48 @@
         /* Financial Data Page - Full Screen Layout */
         .financial-header-card {
             background-color: #ffffff;
-            border-radius: 0.75rem;
+            border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-            padding: 1rem 1.5rem;
+            padding: 0.5rem;
             margin: 1rem;
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 1rem;
+            gap: 0.5rem;
         }
 
         .financial-search-wrapper {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            justify-content: center;
+            flex-grow: 1;
+            gap: 0;
         }
 
         .financial-search-wrapper input {
             background-color: #ffffff;
-            border: 1px solid #e2e8f0;
+            border: none;
             color: #334155;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            width: 200px;
-            font-size: 0.9rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem 0 0 0.5rem;
+            flex-grow: 1;
+            font-size: 1rem;
             font-weight: 500;
         }
 
         .financial-search-wrapper input:focus {
-            border-color: #3b82f6;
             outline: none;
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+
+        .financial-search-wrapper input::placeholder {
+            color: #94a3b8;
         }
 
         .financial-search-btn {
             background-color: #e2e8f0;
             color: #475569;
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0 0.5rem 0.5rem 0;
             font-weight: 500;
-            font-size: 0.875rem;
+            font-size: 0.95rem;
             border: none;
             cursor: pointer;
             transition: background-color 0.2s;
@@ -130,11 +131,22 @@
             background-color: #cbd5e1;
         }
 
+        .financial-menu-btn {
+            border-radius: 0.5rem;
+            padding: 0.75rem 1.5rem;
+        }
+
         .financial-company-info {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            justify-content: center;
+            gap: 1rem;
             flex-direction: column;
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            margin: 0 1rem 1rem 1rem;
+            padding: 1.5rem;
         }
 
         .financial-company-row {
@@ -742,23 +754,25 @@
     </div>
 
     <div id="financialDataPage" class="insights-page-container hidden">
-        <!-- Header Card with Search and Company Info -->
-        <div class="financial-header-card" style="position: relative;">
-            <button id="financialBackToMenuBtn" class="financial-search-btn financial-menu-btn">Menu</button>
+        <!-- Header Card with Search -->
+        <div class="financial-header-card">
             <div class="financial-search-wrapper">
-                <input type="text" id="financialTickerInput" placeholder="Enter Ticker (e.g., GOOGL)">
+                <input type="text" id="financialTickerInput" placeholder="MSFT">
                 <button id="getFinancialDataBtn" class="financial-search-btn">Search</button>
             </div>
-            <div id="financialCompanyInfo" class="financial-company-info hidden">
-                <div class="financial-company-row">
-                    <img id="financialCompanyLogo" class="financial-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
-                    <div class="financial-company-details">
-                        <span id="financialCompanyName" class="financial-company-name"></span>
-                        <span id="financialCompanyTicker" class="financial-company-ticker"></span>
-                    </div>
+            <button id="financialBackToMenuBtn" class="financial-search-btn financial-menu-btn">Menu</button>
+        </div>
+        
+        <!-- Company Info Section -->
+        <div id="financialCompanyInfo" class="financial-company-info hidden">
+            <div class="financial-company-row">
+                <img id="financialCompanyLogo" class="financial-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
+                <div class="financial-company-details">
+                    <span id="financialCompanyName" class="financial-company-name"></span>
+                    <span id="financialCompanyTicker" class="financial-company-ticker"></span>
                 </div>
-                <span id="financialCompanyPrice" class="financial-company-price"></span>
             </div>
+            <span id="financialCompanyPrice" class="financial-company-price"></span>
         </div>
 
         <!-- Metrics Section (placeholder for later) -->
@@ -1012,7 +1026,7 @@
                 const yAxisMin = minValue < 0 ? minValue * 1.25 : 0;
                 
                 // Calculate nice step size based on data range
-                // This ensures clean intervals like 1B, 10B, 20B based on the range
+                // Targeting 10-15 ticks for better granularity
                 const calculateStepSize = (max, min) => {
                     const range = Math.abs(max - min);
                     if (range === 0) return 1;
@@ -1021,16 +1035,19 @@
                     const magnitude = Math.pow(10, Math.floor(Math.log10(range)));
                     const normalizedRange = range / magnitude;
                     
-                    // Choose a nice step multiplier based on normalized range
+                    // Choose a nice step multiplier to get ~10-15 ticks
+                    // We want smaller steps for more granularity
                     let stepMultiplier;
-                    if (normalizedRange <= 1.5) {
-                        stepMultiplier = 0.2;  // For range ~1: steps of 0.2 (5 ticks)
-                    } else if (normalizedRange <= 3) {
-                        stepMultiplier = 0.5;  // For range ~2-3: steps of 0.5 (4-6 ticks)
-                    } else if (normalizedRange <= 7) {
-                        stepMultiplier = 1;    // For range ~4-7: steps of 1 (4-7 ticks)
+                    if (normalizedRange <= 1.2) {
+                        stepMultiplier = 0.1;   // For range ~1: steps of 0.1 (10 ticks)
+                    } else if (normalizedRange <= 2.5) {
+                        stepMultiplier = 0.2;   // For range ~2: steps of 0.2 (10-12 ticks)
+                    } else if (normalizedRange <= 4) {
+                        stepMultiplier = 0.25;  // For range ~3-4: steps of 0.25 (12-16 ticks)
+                    } else if (normalizedRange <= 6) {
+                        stepMultiplier = 0.5;   // For range ~5-6: steps of 0.5 (10-12 ticks)
                     } else {
-                        stepMultiplier = 2;    // For range ~8-10: steps of 2 (4-5 ticks)
+                        stepMultiplier = 1;     // For range ~7-10: steps of 1 (7-10 ticks)
                     }
                     
                     return stepMultiplier * magnitude;
