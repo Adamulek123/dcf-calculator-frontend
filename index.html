@@ -195,13 +195,13 @@
             text-align: center;
         }
 
-        /* Charts Section Card */
+        /* Charts Section - No background, charts are individual cards */
         .financial-charts-section {
-            background-color: #ffffff;
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            background-color: transparent;
+            border-radius: 0;
+            box-shadow: none;
             margin: 0 1rem 1rem 1rem;
-            padding: 1.5rem;
+            padding: 0;
         }
 
         .financial-section-title {
@@ -216,12 +216,13 @@
         .financial-period-toggle {
             display: flex;
             justify-content: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
+            padding: 1rem 0;
         }
 
         .financial-period-toggle-group {
             display: inline-flex;
-            background-color: #f1f5f9;
+            background-color: #e8ecef;
             border-radius: 0.5rem;
             padding: 0.25rem;
         }
@@ -277,12 +278,13 @@
             background-color: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
             padding: 0;
             cursor: default;
             transition: none;
             position: relative;
             overflow: hidden;
-            min-height: 450px;
+            min-height: 360px;
         }
 
         .financial-chart-card-header {
@@ -325,7 +327,7 @@
 
         .financial-chart-body {
             padding: 0.5rem 0.75rem 0.75rem 0.75rem;
-            height: 400px;
+            height: 320px;
         }
 
         /* When financial data page is shown, body should not center content */
