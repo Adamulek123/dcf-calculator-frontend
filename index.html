@@ -82,33 +82,37 @@
             background-color: #ffffff;
             border-radius: 0.5rem;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-            padding: 0.5rem;
+            padding: 0.75rem 1rem;
             margin: 1rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            justify-content: center;
+            gap: 0.75rem;
         }
 
         .financial-search-wrapper {
             display: flex;
             align-items: center;
-            flex-grow: 1;
             gap: 0;
+            max-width: 400px;
+            flex-grow: 0;
         }
 
         .financial-search-wrapper input {
-            background-color: #ffffff;
-            border: none;
+            background-color: #f1f5f9;
+            border: 1px solid #e2e8f0;
             color: #334155;
-            padding: 0.75rem 1rem;
-            border-radius: 0.5rem 0 0 0.5rem;
-            flex-grow: 1;
-            font-size: 1rem;
-            font-weight: 500;
+            padding: 0.6rem 1rem;
+            border-radius: 0.375rem 0 0 0.375rem;
+            width: 280px;
+            font-size: 0.95rem;
+            font-weight: 400;
         }
 
         .financial-search-wrapper input:focus {
             outline: none;
+            border-color: #e2e8f0;
+            background-color: #f1f5f9;
         }
 
         .financial-search-wrapper input::placeholder {
@@ -116,24 +120,28 @@
         }
 
         .financial-search-btn {
-            background-color: #e2e8f0;
-            color: #475569;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0 0.5rem 0.5rem 0;
+            background-color: #64748b;
+            color: #ffffff;
+            padding: 0.6rem 1.25rem;
+            border-radius: 0 0.375rem 0.375rem 0;
             font-weight: 500;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             border: none;
             cursor: pointer;
             transition: background-color 0.2s;
         }
 
         .financial-search-btn:hover {
-            background-color: #cbd5e1;
+            background-color: #475569;
         }
 
         .financial-menu-btn {
-            border-radius: 0.5rem;
-            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            padding: 0.6rem 1.25rem;
+            margin-left: auto;
+            position: static;
+            top: auto;
+            right: auto;
         }
 
         .financial-company-info {
@@ -183,12 +191,6 @@
             font-size: 1.125rem;
             font-weight: 700;
             color: #1e293b;
-        }
-
-        .financial-menu-btn {
-            position: absolute;
-            top: 1rem;
-            right: 1.5rem;
         }
 
         /* Metrics Section Card (placeholder for future data) */
@@ -1026,7 +1028,7 @@
                 const yAxisMin = minValue < 0 ? minValue * 1.25 : 0;
                 
                 // Calculate nice step size based on data range
-                // Targeting 10-15 ticks for better granularity
+                // This ensures clean intervals like 1B, 10B, 20B based on the range
                 const calculateStepSize = (max, min) => {
                     const range = Math.abs(max - min);
                     if (range === 0) return 1;
