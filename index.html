@@ -564,9 +564,205 @@
         .insights-grid { display: none; }
         .chart-card { display: none; }
 
-        #fullscreen-chart-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.98); z-index: 1000; display: flex; justify-content: center; align-items: center; padding: 2rem;}
-        #fullscreen-chart-container { width: 90%; height: 90%; max-width: 1600px; max-height: 900px; }
-        #close-fullscreen-btn { position: absolute; top: 2rem; right: 2rem; font-size: 2rem; background: none; border: none; color: #212529; cursor: pointer; }
+        /* Fullscreen Chart Modal - New Design */
+        #fullscreen-chart-modal { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background-color: rgba(0, 0, 0, 0.6); 
+            z-index: 1000; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            padding: 2rem;
+            backdrop-filter: blur(4px);
+        }
+        
+        #fullscreen-chart-container { 
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 90%; 
+            height: 90%; 
+            max-width: 1600px; 
+            max-height: 900px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .fullscreen-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+        }
+        
+        .fullscreen-header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .fullscreen-company-logo {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.5rem;
+            object-fit: contain;
+        }
+        
+        .fullscreen-chart-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0;
+        }
+        
+        .fullscreen-header-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .fullscreen-period-dropdown {
+            position: relative;
+        }
+        
+        .fullscreen-period-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .fullscreen-period-btn:hover {
+            background-color: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+        
+        .fullscreen-period-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .fullscreen-period-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.25rem;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            min-width: 150px;
+            z-index: 10;
+            overflow: hidden;
+        }
+        
+        .fullscreen-period-menu.hidden {
+            display: none;
+        }
+        
+        .fullscreen-period-option {
+            display: block;
+            width: 100%;
+            padding: 0.625rem 1rem;
+            text-align: left;
+            background: none;
+            border: none;
+            font-size: 0.875rem;
+            color: #475569;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        
+        .fullscreen-period-option:hover {
+            background-color: #f1f5f9;
+        }
+        
+        .fullscreen-period-option.active {
+            background-color: #eff6ff;
+            color: #3b82f6;
+            font-weight: 500;
+        }
+        
+        .fullscreen-period-option.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+        
+        .fullscreen-period-option.disabled:hover {
+            background-color: transparent;
+        }
+        
+        #close-fullscreen-btn { 
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem; 
+            background-color: #f1f5f9;
+            border: none; 
+            border-radius: 0.5rem;
+            color: #64748b; 
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        #close-fullscreen-btn:hover {
+            background-color: #e2e8f0;
+            color: #1e293b;
+        }
+        
+        .fullscreen-chart-body {
+            flex: 1;
+            padding: 1rem 1.5rem;
+            min-height: 0;
+        }
+        
+        .fullscreen-chart-body canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        .fullscreen-footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            padding: 0.75rem 1.5rem;
+            border-top: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+        }
+        
+        .fullscreen-growth-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.375rem 0.75rem;
+            background-color: #dcfce7;
+            color: #166534;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        
+        .fullscreen-growth-badge.negative {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
 
         
         #toast-container {
@@ -805,8 +1001,39 @@
     </div>
 
     <div id="fullscreen-chart-modal" class="hidden">
-        <button id="close-fullscreen-btn">&times;</button>
-        <div id="fullscreen-chart-container"><canvas id="fullscreen-canvas"></canvas></div>
+        <div id="fullscreen-chart-container">
+            <div class="fullscreen-header">
+                <div class="fullscreen-header-left">
+                    <img id="fullscreen-company-logo" class="fullscreen-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
+                    <h2 id="fullscreen-chart-title" class="fullscreen-chart-title"></h2>
+                </div>
+                <div class="fullscreen-header-right">
+                    <div class="fullscreen-period-dropdown">
+                        <button id="fullscreen-period-btn" class="fullscreen-period-btn">
+                            <span id="fullscreen-period-text">All</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        <div id="fullscreen-period-menu" class="fullscreen-period-menu hidden">
+                            <button class="fullscreen-period-option active" data-period="all">All</button>
+                            <button class="fullscreen-period-option" data-period="1y">1 Year</button>
+                            <button class="fullscreen-period-option" data-period="2y">2 Years</button>
+                            <button class="fullscreen-period-option" data-period="5y">5 Years</button>
+                            <button class="fullscreen-period-option" data-period="10y">10 Years</button>
+                        </div>
+                    </div>
+                    <button id="close-fullscreen-btn">&times;</button>
+                </div>
+            </div>
+            <div class="fullscreen-chart-body">
+                <canvas id="fullscreen-canvas"></canvas>
+            </div>
+            <div class="fullscreen-footer">
+                <span id="fullscreen-growth-1y" class="fullscreen-growth-badge">1Y: --</span>
+                <span id="fullscreen-growth-2y" class="fullscreen-growth-badge">2Y: --</span>
+            </div>
+        </div>
     </div>
 
     <div id="confirmationModal" class="modal-overlay hidden">
@@ -866,6 +1093,15 @@
             const fullscreenModal = document.getElementById('fullscreen-chart-modal');
             const fullscreenCanvas = document.getElementById('fullscreen-canvas');
             const closeFullscreenBtn = document.getElementById('close-fullscreen-btn');
+            
+            // New fullscreen elements
+            const fullscreenCompanyLogo = document.getElementById('fullscreen-company-logo');
+            const fullscreenChartTitle = document.getElementById('fullscreen-chart-title');
+            const fullscreenPeriodBtn = document.getElementById('fullscreen-period-btn');
+            const fullscreenPeriodText = document.getElementById('fullscreen-period-text');
+            const fullscreenPeriodMenu = document.getElementById('fullscreen-period-menu');
+            const fullscreenGrowth1y = document.getElementById('fullscreen-growth-1y');
+            const fullscreenGrowth2y = document.getElementById('fullscreen-growth-2y');
             
             // Period toggle buttons
             const quarterlyBtn = document.getElementById('quarterlyBtn');
@@ -1203,9 +1439,147 @@
             let storedAdjustedFCFData = null;
             let storedFullFCFData = null;
             let storedFullAdjustedFCFData = null;
+            let currentFullscreenPeriod = 'all';
             
             // Store full chart data for fullscreen (keyed by title)
             let fullChartDataStore = {};
+            
+            // Calculate year-over-year growth
+            function calculateYoYGrowth(chartData, yearsBack) {
+                if (!chartData || !chartData.labels || !chartData.datasets || chartData.datasets.length === 0) {
+                    return null;
+                }
+                
+                const labels = chartData.labels;
+                const values = chartData.datasets[0].data;
+                
+                if (labels.length < 2) return null;
+                
+                // Find the latest data point
+                const latestIdx = labels.length - 1;
+                const latestLabel = labels[latestIdx];
+                const latestValue = values[latestIdx];
+                
+                if (latestValue === null || latestValue === undefined) return null;
+                
+                // Parse the quarter from the latest label (e.g., "Q3 2025")
+                const quarterMatch = latestLabel.match(/Q(\d)\s+(\d{4})/);
+                if (!quarterMatch) return null;
+                
+                const latestQuarter = parseInt(quarterMatch[1]);
+                const latestYear = parseInt(quarterMatch[2]);
+                
+                // Calculate target year
+                const targetYear = latestYear - yearsBack;
+                const targetLabel = `Q${latestQuarter} ${targetYear}`;
+                
+                // Find the target label in our data
+                const targetIdx = labels.indexOf(targetLabel);
+                if (targetIdx === -1) return null;
+                
+                const targetValue = values[targetIdx];
+                if (targetValue === null || targetValue === undefined || targetValue === 0) return null;
+                
+                // Calculate growth percentage
+                const growth = ((latestValue - targetValue) / Math.abs(targetValue)) * 100;
+                return growth;
+            }
+            
+            // Filter chart data by period
+            function filterChartDataByPeriod(chartData, period) {
+                if (!chartData || !chartData.labels || period === 'all') {
+                    return chartData;
+                }
+                
+                const periodYears = {
+                    '1y': 1,
+                    '2y': 2,
+                    '5y': 5,
+                    '10y': 10
+                };
+                
+                const years = periodYears[period];
+                if (!years) return chartData;
+                
+                // Calculate how many quarters to show
+                const quartersToShow = years * 4 + 1; // +1 for the current partial year
+                
+                const totalLabels = chartData.labels.length;
+                const startIdx = Math.max(0, totalLabels - quartersToShow);
+                
+                return {
+                    ...chartData,
+                    labels: chartData.labels.slice(startIdx),
+                    datasets: chartData.datasets.map(ds => ({
+                        ...ds,
+                        data: ds.data.slice(startIdx),
+                        backgroundColor: Array.isArray(ds.backgroundColor) 
+                            ? ds.backgroundColor.slice(startIdx) 
+                            : ds.backgroundColor
+                    }))
+                };
+            }
+            
+            // Get available periods based on data length
+            function getAvailablePeriods(chartData) {
+                if (!chartData || !chartData.labels) return ['all'];
+                
+                const totalQuarters = chartData.labels.length;
+                const available = ['all'];
+                
+                if (totalQuarters >= 5) available.push('1y');  // 4 quarters + current
+                if (totalQuarters >= 9) available.push('2y');  // 8 quarters + current
+                if (totalQuarters >= 21) available.push('5y'); // 20 quarters + current
+                if (totalQuarters >= 41) available.push('10y'); // 40 quarters + current
+                
+                return available;
+            }
+            
+            // Update period dropdown options
+            function updatePeriodDropdown(chartData) {
+                const available = getAvailablePeriods(chartData);
+                const options = fullscreenPeriodMenu.querySelectorAll('.fullscreen-period-option');
+                
+                options.forEach(option => {
+                    const period = option.dataset.period;
+                    if (available.includes(period)) {
+                        option.classList.remove('disabled');
+                    } else {
+                        option.classList.add('disabled');
+                    }
+                    
+                    // Set active state
+                    if (period === currentFullscreenPeriod) {
+                        option.classList.add('active');
+                    } else {
+                        option.classList.remove('active');
+                    }
+                });
+            }
+            
+            // Update growth badges
+            function updateGrowthBadges(chartData) {
+                const growth1y = calculateYoYGrowth(chartData, 1);
+                const growth2y = calculateYoYGrowth(chartData, 2);
+                
+                if (growth1y !== null) {
+                    const sign = growth1y >= 0 ? '+' : '';
+                    fullscreenGrowth1y.textContent = `1Y: ${sign}${growth1y.toFixed(2)}%`;
+                    fullscreenGrowth1y.classList.toggle('negative', growth1y < 0);
+                    fullscreenGrowth1y.style.display = 'inline-flex';
+                } else {
+                    fullscreenGrowth1y.style.display = 'none';
+                }
+                
+                if (growth2y !== null) {
+                    const sign = growth2y >= 0 ? '+' : '';
+                    fullscreenGrowth2y.textContent = `2Y: ${sign}${growth2y.toFixed(2)}%`;
+                    fullscreenGrowth2y.classList.toggle('negative', growth2y < 0);
+                    fullscreenGrowth2y.style.display = 'inline-flex';
+                } else {
+                    fullscreenGrowth2y.style.display = 'none';
+                }
+            }
 
             function openFullscreen(title, chartData) {
                 // Show modal first
@@ -1218,10 +1592,33 @@
                 }
                 
                 currentFullscreenTitle = title;
+                currentFullscreenPeriod = 'all';
                 
                 // Use full data from store if available, otherwise use provided data
                 const fullData = fullChartDataStore[title] || chartData;
                 currentFullscreenData = fullData;
+                
+                // Update header
+                const ticker = financialTickerInput.value.trim().toUpperCase();
+                fullscreenCompanyLogo.src = `https://img.logo.dev/ticker/${ticker}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
+                fullscreenCompanyLogo.alt = `${ticker} logo`;
+                
+                // Build title with period mode if TTM
+                let displayTitle = title;
+                if (currentPeriodView === 'quarterlyTTM') {
+                    displayTitle = `${title} (TTM)`;
+                } else if (currentPeriodView === 'annually') {
+                    displayTitle = `${title} (Annual)`;
+                }
+                fullscreenChartTitle.textContent = `${displayTitle} - ${ticker}`;
+                
+                // Reset period dropdown
+                fullscreenPeriodText.textContent = 'All';
+                fullscreenPeriodMenu.classList.add('hidden');
+                updatePeriodDropdown(fullData);
+                
+                // Update growth badges
+                updateGrowthBadges(fullData);
                 
                 // Remove existing toggle button if any
                 if (fcfToggleBtn) {
@@ -1233,13 +1630,12 @@
                 if (title === 'Free Cash Flow' && storedFullAdjustedFCFData) {
                     showingAdjustedFCF = false;
                     fcfToggleBtn = document.createElement('button');
-                    fcfToggleBtn.className = 'primary-button';
-                    fcfToggleBtn.style.position = 'absolute';
-                    fcfToggleBtn.style.top = '2rem';
-                    fcfToggleBtn.style.left = '2rem';
+                    fcfToggleBtn.className = 'fullscreen-period-btn';
+                    fcfToggleBtn.style.marginRight = '0.5rem';
                     fcfToggleBtn.textContent = 'Show Adjusted FCF';
                     fcfToggleBtn.addEventListener('click', toggleFCFView);
-                    fullscreenModal.appendChild(fcfToggleBtn);
+                    // Insert before period dropdown
+                    fullscreenPeriodBtn.parentElement.parentElement.insertBefore(fcfToggleBtn, fullscreenPeriodBtn.parentElement);
                 }
                 
                 // Use requestAnimationFrame to defer chart creation for smoother modal opening
@@ -1247,6 +1643,54 @@
                     activeFullscreenChart = createChart(fullscreenCanvas, title, fullData, true);
                 });
             }
+            
+            // Period dropdown toggle
+            fullscreenPeriodBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fullscreenPeriodMenu.classList.toggle('hidden');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!fullscreenPeriodBtn.contains(e.target) && !fullscreenPeriodMenu.contains(e.target)) {
+                    fullscreenPeriodMenu.classList.add('hidden');
+                }
+            });
+            
+            // Period option click handler
+            fullscreenPeriodMenu.addEventListener('click', (e) => {
+                const option = e.target.closest('.fullscreen-period-option');
+                if (!option || option.classList.contains('disabled')) return;
+                
+                const period = option.dataset.period;
+                currentFullscreenPeriod = period;
+                
+                // Update button text
+                fullscreenPeriodText.textContent = option.textContent;
+                
+                // Update active state
+                fullscreenPeriodMenu.querySelectorAll('.fullscreen-period-option').forEach(opt => {
+                    opt.classList.toggle('active', opt === option);
+                });
+                
+                // Close dropdown
+                fullscreenPeriodMenu.classList.add('hidden');
+                
+                // Filter and redraw chart
+                const filteredData = filterChartDataByPeriod(currentFullscreenData, period);
+                
+                if (activeFullscreenChart) {
+                    activeFullscreenChart.destroy();
+                    activeFullscreenChart = null;
+                }
+                
+                // Update growth badges with filtered data
+                updateGrowthBadges(filteredData);
+                
+                requestAnimationFrame(() => {
+                    activeFullscreenChart = createChart(fullscreenCanvas, currentFullscreenTitle, filteredData, true);
+                });
+            });
             
             function toggleFCFView() {
                 if (!fcfToggleBtn) return;
@@ -1261,13 +1705,24 @@
                 // Update button text immediately
                 fcfToggleBtn.textContent = showingAdjustedFCF ? 'Show Free Cash Flow' : 'Show Adjusted FCF';
                 
+                // Update current data reference
+                const newFullData = showingAdjustedFCF ? storedFullAdjustedFCFData : storedFullFCFData;
+                currentFullscreenData = newFullData;
+                currentFullscreenTitle = showingAdjustedFCF ? 'Adjusted Free Cash Flow' : 'Free Cash Flow';
+                
+                // Update title
+                const ticker = financialTickerInput.value.trim().toUpperCase();
+                fullscreenChartTitle.textContent = `${currentFullscreenTitle} - ${ticker}`;
+                
+                // Filter by current period
+                const filteredData = filterChartDataByPeriod(newFullData, currentFullscreenPeriod);
+                
+                // Update growth badges
+                updateGrowthBadges(filteredData);
+                
                 // Defer chart creation
                 requestAnimationFrame(() => {
-                    if (showingAdjustedFCF) {
-                        activeFullscreenChart = createChart(fullscreenCanvas, 'Adjusted Free Cash Flow', storedFullAdjustedFCFData, true);
-                    } else {
-                        activeFullscreenChart = createChart(fullscreenCanvas, 'Free Cash Flow', storedFullFCFData, true);
-                    }
+                    activeFullscreenChart = createChart(fullscreenCanvas, currentFullscreenTitle, filteredData, true);
                 });
             }
 
@@ -1283,6 +1738,7 @@
                 }
                 currentFullscreenTitle = '';
                 currentFullscreenData = null;
+                currentFullscreenPeriod = 'all';
             });
 
             
