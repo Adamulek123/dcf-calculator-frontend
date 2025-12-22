@@ -577,7 +577,6 @@
             justify-content: center; 
             align-items: center; 
             padding: 2rem;
-            backdrop-filter: blur(4px);
         }
         
         #fullscreen-chart-container { 
@@ -2257,6 +2256,33 @@
                         type: 'bar',
                         backgroundColor: 'rgba(94, 150, 146, 1)',
                         borderColor: 'rgba(94, 150, 146, 1)'
+                    };
+                }
+
+                // 9. Backlog (RPO) - BAR CHART
+                const rpoData = limitedData.filter(d => d.facts?.RevenueRemainingPerformanceObligation);
+                const rpoDataFull = sortedData.filter(d => d.facts?.RevenueRemainingPerformanceObligation);
+                if (rpoData.length > 0) {
+                    const rpoLabels = rpoData.map(formatPeriodLabel);
+                    const rpoValues = rpoData.map(d => parseFloat(d.facts.RevenueRemainingPerformanceObligation.value));
+                    chartOrder.push({
+                        title: 'Backlog (RPO)',
+                        data: {
+                            labels: rpoLabels,
+                            data: rpoValues,
+                            type: 'bar',
+                            backgroundColor: 'rgba(216, 81, 64, 1)',
+                            borderColor: 'rgba(216, 81, 64, 1)'
+                        }
+                    });
+                    
+                    // Store full Backlog (RPO) data
+                    fullChartDataStore['Backlog (RPO)'] = {
+                        labels: rpoDataFull.map(formatPeriodLabel),
+                        data: rpoDataFull.map(d => parseFloat(d.facts.RevenueRemainingPerformanceObligation.value)),
+                        type: 'bar',
+                        backgroundColor: 'rgba(216, 81, 64, 1)',
+                        borderColor: 'rgba(216, 81, 64, 1)'
                     };
                 }
 
