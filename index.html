@@ -1031,6 +1031,8 @@
             <div class="fullscreen-footer">
                 <span id="fullscreen-growth-1y" class="fullscreen-growth-badge">1Y: --</span>
                 <span id="fullscreen-growth-2y" class="fullscreen-growth-badge">2Y: --</span>
+                <span id="fullscreen-growth-5y" class="fullscreen-growth-badge">5Y: --</span>
+                <span id="fullscreen-growth-10y" class="fullscreen-growth-badge">10Y: --</span>
             </div>
         </div>
     </div>
@@ -1101,6 +1103,8 @@
             const fullscreenPeriodMenu = document.getElementById('fullscreen-period-menu');
             const fullscreenGrowth1y = document.getElementById('fullscreen-growth-1y');
             const fullscreenGrowth2y = document.getElementById('fullscreen-growth-2y');
+            const fullscreenGrowth5y = document.getElementById('fullscreen-growth-5y');
+            const fullscreenGrowth10y = document.getElementById('fullscreen-growth-10y');
             
             // Period toggle buttons
             const quarterlyBtn = document.getElementById('quarterlyBtn');
@@ -1443,8 +1447,8 @@
             // Store full chart data for fullscreen (keyed by title)
             let fullChartDataStore = {};
             
-            // Calculate year-over-year growth
-            function calculateYoYGrowth(chartData, yearsBack) {
+            // Calculate year-over-year growth (simple for 1Y, CAGR for multi-year)
+            function calculateYoYGrowth(chartData, yearsBack, useCAGR = false) {
                 if (!chartData || !chartData.labels || !chartData.datasets || chartData.datasets.length === 0) {
                     return null;
                 }
@@ -1479,9 +1483,28 @@
                 const targetValue = values[targetIdx];
                 if (targetValue === null || targetValue === undefined || targetValue === 0) return null;
                 
-                // Calculate growth percentage
-                const growth = ((latestValue - targetValue) / Math.abs(targetValue)) * 100;
-                return growth;
+                // For 1 year, use simple growth. For multi-year, use CAGR
+                if (useCAGR && yearsBack > 1) {
+                    // CAGR formula: ((endValue / startValue) ^ (1/years) - 1) * 100
+                    // Handle negative values carefully
+                    if (targetValue < 0 && latestValue < 0) {
+                        // Both negative - calculate based on absolute improvement
+                        const cagr = (Math.pow(Math.abs(latestValue) / Math.abs(targetValue), 1 / yearsBack) - 1) * 100;
+                        return latestValue > targetValue ? cagr : -cagr;
+                    } else if (targetValue < 0 || latestValue < 0) {
+                        // Mixed signs - use simple growth rate divided by years as approximation
+                        const simpleGrowth = ((latestValue - targetValue) / Math.abs(targetValue)) * 100;
+                        return simpleGrowth / yearsBack;
+                    } else {
+                        // Both positive - standard CAGR
+                        const cagr = (Math.pow(latestValue / targetValue, 1 / yearsBack) - 1) * 100;
+                        return cagr;
+                    }
+                } else {
+                    // Simple growth percentage
+                    const growth = ((latestValue - targetValue) / Math.abs(targetValue)) * 100;
+                    return growth;
+                }
             }
             
             // Filter chart data by period
@@ -1558,26 +1581,29 @@
             
             // Update growth badges
             function updateGrowthBadges(chartData) {
-                const growth1y = calculateYoYGrowth(chartData, 1);
-                const growth2y = calculateYoYGrowth(chartData, 2);
+                // 1Y uses simple YoY growth
+                const growth1y = calculateYoYGrowth(chartData, 1, false);
+                // 2Y, 5Y, 10Y use CAGR
+                const growth2y = calculateYoYGrowth(chartData, 2, true);
+                const growth5y = calculateYoYGrowth(chartData, 5, true);
+                const growth10y = calculateYoYGrowth(chartData, 10, true);
                 
-                if (growth1y !== null) {
-                    const sign = growth1y >= 0 ? '+' : '';
-                    fullscreenGrowth1y.textContent = `1Y: ${sign}${growth1y.toFixed(2)}%`;
-                    fullscreenGrowth1y.classList.toggle('negative', growth1y < 0);
-                    fullscreenGrowth1y.style.display = 'inline-flex';
-                } else {
-                    fullscreenGrowth1y.style.display = 'none';
+                // Helper function to update a badge
+                function updateBadge(element, label, value) {
+                    if (value !== null) {
+                        const sign = value >= 0 ? '+' : '';
+                        element.textContent = `${label}: ${sign}${value.toFixed(2)}%`;
+                        element.classList.toggle('negative', value < 0);
+                        element.style.display = 'inline-flex';
+                    } else {
+                        element.style.display = 'none';
+                    }
                 }
                 
-                if (growth2y !== null) {
-                    const sign = growth2y >= 0 ? '+' : '';
-                    fullscreenGrowth2y.textContent = `2Y: ${sign}${growth2y.toFixed(2)}%`;
-                    fullscreenGrowth2y.classList.toggle('negative', growth2y < 0);
-                    fullscreenGrowth2y.style.display = 'inline-flex';
-                } else {
-                    fullscreenGrowth2y.style.display = 'none';
-                }
+                updateBadge(fullscreenGrowth1y, '1Y', growth1y);
+                updateBadge(fullscreenGrowth2y, '2Y', growth2y);
+                updateBadge(fullscreenGrowth5y, '5Y', growth5y);
+                updateBadge(fullscreenGrowth10y, '10Y', growth10y);
             }
 
             function openFullscreen(title, chartData) {
