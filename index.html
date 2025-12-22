@@ -1340,7 +1340,7 @@
                                         if (label) label += ': ';
                                         const value = context.parsed.y;
                                         if (value !== null && value !== 0) {
-                                            const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue'];
+                                            const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue', 'Backlog (RPO)'];
                                             const shareCharts = ['Shares Outstanding'];
                                             if (shareCharts.some(c => title.includes(c))) {
                                                 if (Math.abs(value) >= 1000000000) {
@@ -1388,7 +1388,7 @@
                                     font: { size: isFullscreen ? 14 : 11, weight: '500' },
                                     stepSize: yAxisStepSize,
                                     callback: function(value, index, values) {
-                                        const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue'];
+                                        const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue', 'Backlog (RPO)'];
                                         const shareCharts = ['Shares Outstanding'];
                                         if (shareCharts.some(c => title.includes(c))) {
                                             if (Math.abs(value) >= 1000000000) {
