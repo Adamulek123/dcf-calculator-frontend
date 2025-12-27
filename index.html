@@ -1341,18 +1341,7 @@
                         maintainAspectRatio: false,
                         animation: isFullscreen ? {
                             duration: 800,
-                            easing: 'easeOutQuart',
-                            // Prevent bars from animating from 0 (which causes jumping for negative values)
-                            // Instead animate from their final position with opacity/scale
-                            y: {
-                                from: (ctx) => {
-                                    // For initial animation, start from a value closer to final
-                                    if (ctx.type === 'data' && ctx.mode === 'default') {
-                                        return ctx.parsed.y * 0.8;
-                                    }
-                                    return ctx.parsed.y;
-                                }
-                            }
+                            easing: 'easeOutQuart'
                         } : false,
                         transitions: {
                             active: {
