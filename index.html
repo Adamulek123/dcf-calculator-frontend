@@ -1339,11 +1339,37 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        animation: isFullscreen ? { duration: 300 } : false,
+                        animation: isFullscreen ? {
+                            duration: 800,
+                            easing: 'easeOutQuart',
+                            // Prevent bars from animating from 0 (which causes jumping for negative values)
+                            // Instead animate from their final position with opacity/scale
+                            y: {
+                                from: (ctx) => {
+                                    // For initial animation, start from a value closer to final
+                                    if (ctx.type === 'data' && ctx.mode === 'default') {
+                                        return ctx.parsed.y * 0.8;
+                                    }
+                                    return ctx.parsed.y;
+                                }
+                            }
+                        } : false,
                         transitions: {
                             active: {
                                 animation: {
-                                    duration: isFullscreen ? 200 : 0
+                                    duration: isFullscreen ? 300 : 0
+                                }
+                            },
+                            hide: {
+                                animation: {
+                                    duration: 400,
+                                    easing: 'easeOutQuart'
+                                }
+                            },
+                            show: {
+                                animation: {
+                                    duration: 400,
+                                    easing: 'easeOutQuart'
                                 }
                             }
                         },
@@ -1361,7 +1387,18 @@
                                     padding: isFullscreen ? 20 : 15,
                                     boxWidth: isFullscreen ? 50 : 40,
                                     boxHeight: isFullscreen ? 20 : 15
-                                }
+                                },
+                                onClick: isFullscreen ? function(e, legendItem, legend) {
+                                    // Default behavior - toggle visibility
+                                    const index = legendItem.datasetIndex;
+                                    const chart = legend.chart;
+                                    const meta = chart.getDatasetMeta(index);
+                                    meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+                                    chart.update();
+                                    
+                                    // Update growth badges based on visible datasets
+                                    updateGrowthBadgesFromChart(chart);
+                                } : undefined
                             },
                             tooltip: {
                                 enabled: isFullscreen,
@@ -1609,14 +1646,102 @@
             
             // Update growth badges
             function updateGrowthBadges(chartData) {
+                // Normalize data structure for growth calculations
+                // Handle both formats: { data: [...] } and { datasets: [{ data: [...] }] }
+                let normalizedData;
+                if (chartData.datasets && chartData.datasets.length > 0) {
+                    // Multi-dataset chart (segment charts, EPS, Cash & Debt)
+                    // For stacked charts, sum all datasets; otherwise use first dataset
+                    if (chartData.stacked) {
+                        // Sum all dataset values for each index
+                        const summedData = chartData.labels.map((_, idx) => {
+                            return chartData.datasets.reduce((sum, ds) => {
+                                const val = ds.data[idx];
+                                return sum + (val !== null && val !== undefined ? val : 0);
+                            }, 0);
+                        });
+                        normalizedData = { labels: chartData.labels, datasets: [{ data: summedData }] };
+                    } else {
+                        // Use first dataset (e.g., EPS Basic, Cash for Cash & Debt)
+                        normalizedData = { labels: chartData.labels, datasets: [{ data: chartData.datasets[0].data }] };
+                    }
+                } else if (chartData.data) {
+                    // Simple chart with data array directly
+                    normalizedData = { labels: chartData.labels, datasets: [{ data: chartData.data }] };
+                } else {
+                    normalizedData = null;
+                }
+                
                 // 1Y uses simple YoY growth
-                const growth1y = calculateYoYGrowth(chartData, 1, false);
+                const growth1y = normalizedData ? calculateYoYGrowth(normalizedData, 1, false) : null;
                 // 2Y, 5Y, 10Y use CAGR
-                const growth2y = calculateYoYGrowth(chartData, 2, true);
-                const growth5y = calculateYoYGrowth(chartData, 5, true);
-                const growth10y = calculateYoYGrowth(chartData, 10, true);
+                const growth2y = normalizedData ? calculateYoYGrowth(normalizedData, 2, true) : null;
+                const growth5y = normalizedData ? calculateYoYGrowth(normalizedData, 5, true) : null;
+                const growth10y = normalizedData ? calculateYoYGrowth(normalizedData, 10, true) : null;
                 
                 // Helper function to update a badge
+                function updateBadge(element, label, value) {
+                    if (value !== null) {
+                        const sign = value >= 0 ? '+' : '';
+                        element.textContent = `${label}: ${sign}${value.toFixed(2)}%`;
+                        element.classList.toggle('negative', value < 0);
+                        element.style.display = 'inline-flex';
+                    } else {
+                        element.style.display = 'none';
+                    }
+                }
+                
+                updateBadge(fullscreenGrowth1y, '1Y', growth1y);
+                updateBadge(fullscreenGrowth2y, '2Y', growth2y);
+                updateBadge(fullscreenGrowth5y, '5Y', growth5y);
+                updateBadge(fullscreenGrowth10y, '10Y', growth10y);
+            }
+            
+            // Update growth badges from chart instance (used when legend items are toggled)
+            function updateGrowthBadgesFromChart(chart) {
+                if (!chart || !chart.data) return;
+                
+                const labels = chart.data.labels;
+                const datasets = chart.data.datasets;
+                const isStacked = chart.options.scales?.y?.stacked || false;
+                
+                // Get only visible datasets
+                const visibleDatasets = datasets.filter((ds, idx) => {
+                    const meta = chart.getDatasetMeta(idx);
+                    return !meta.hidden;
+                });
+                
+                if (visibleDatasets.length === 0) {
+                    // No visible datasets - hide all badges
+                    fullscreenGrowth1y.style.display = 'none';
+                    fullscreenGrowth2y.style.display = 'none';
+                    fullscreenGrowth5y.style.display = 'none';
+                    fullscreenGrowth10y.style.display = 'none';
+                    return;
+                }
+                
+                // Build normalized data from visible datasets
+                let normalizedData;
+                if (isStacked || visibleDatasets.length > 1) {
+                    // Sum visible datasets for stacked charts or multi-dataset
+                    const summedData = labels.map((_, idx) => {
+                        return visibleDatasets.reduce((sum, ds) => {
+                            const val = ds.data[idx];
+                            return sum + (val !== null && val !== undefined ? val : 0);
+                        }, 0);
+                    });
+                    normalizedData = { labels: labels, datasets: [{ data: summedData }] };
+                } else {
+                    // Single visible dataset
+                    normalizedData = { labels: labels, datasets: [{ data: visibleDatasets[0].data }] };
+                }
+                
+                // Calculate and update badges
+                const growth1y = calculateYoYGrowth(normalizedData, 1, false);
+                const growth2y = calculateYoYGrowth(normalizedData, 2, true);
+                const growth5y = calculateYoYGrowth(normalizedData, 5, true);
+                const growth10y = calculateYoYGrowth(normalizedData, 10, true);
+                
                 function updateBadge(element, label, value) {
                     if (value !== null) {
                         const sign = value >= 0 ? '+' : '';
@@ -2345,37 +2470,11 @@
                     // Get full data for growth calculations
                     const fullData = fullChartDataStore[chart.title] || chart.data;
                     
-                    // Normalize data structure for growth calculations
-                    // Handle both formats: { data: [...] } and { datasets: [{ data: [...] }] }
-                    let growthData;
-                    if (fullData.datasets && fullData.datasets.length > 0) {
-                        // Multi-dataset chart (segment charts, EPS, Cash & Debt)
-                        // For stacked charts, sum all datasets; otherwise use first dataset
-                        if (fullData.stacked) {
-                            // Sum all dataset values for each index
-                            const summedData = fullData.labels.map((_, idx) => {
-                                return fullData.datasets.reduce((sum, ds) => {
-                                    const val = ds.data[idx];
-                                    return sum + (val !== null && val !== undefined ? val : 0);
-                                }, 0);
-                            });
-                            growthData = { labels: fullData.labels, datasets: [{ data: summedData }] };
-                        } else {
-                            // Use first dataset (e.g., EPS Basic, Cash for Cash & Debt)
-                            growthData = { labels: fullData.labels, datasets: [{ data: fullData.datasets[0].data }] };
-                        }
-                    } else if (fullData.data) {
-                        // Simple chart with data array directly
-                        growthData = { labels: fullData.labels, datasets: [{ data: fullData.data }] };
-                    } else {
-                        growthData = null;
-                    }
-                    
                     // Calculate growth rates using full data
-                    const growth1y = growthData ? calculateYoYGrowth(growthData, 1, false) : null;
-                    const growth2y = growthData ? calculateYoYGrowth(growthData, 2, true) : null;
-                    const growth5y = growthData ? calculateYoYGrowth(growthData, 5, true) : null;
-                    const growth10y = growthData ? calculateYoYGrowth(growthData, 10, true) : null;
+                    const growth1y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 1, false);
+                    const growth2y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 2, true);
+                    const growth5y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 5, true);
+                    const growth10y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 10, true);
                     
                     // Build growth badges HTML
                     let badgesHtml = '';
