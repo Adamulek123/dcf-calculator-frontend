@@ -347,7 +347,35 @@
 
         .financial-chart-body {
             padding: 0.5rem 0.75rem 0.75rem 0.75rem;
-            height: 320px;
+            height: 280px;
+        }
+
+        .financial-chart-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            border-top: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+            min-height: 36px;
+        }
+
+        .chart-growth-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            background-color: #dcfce7;
+            color: #166534;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .chart-growth-badge.negative {
+            background-color: #fee2e2;
+            color: #991b1b;
         }
 
         /* When financial data page is shown, body should not center content */
@@ -2314,6 +2342,64 @@
 
                 // Render all charts
                 chartOrder.forEach(chart => {
+                    // Get full data for growth calculations
+                    const fullData = fullChartDataStore[chart.title] || chart.data;
+                    
+                    // Normalize data structure for growth calculations
+                    // Handle both formats: { data: [...] } and { datasets: [{ data: [...] }] }
+                    let growthData;
+                    if (fullData.datasets && fullData.datasets.length > 0) {
+                        // Multi-dataset chart (segment charts, EPS, Cash & Debt)
+                        // For stacked charts, sum all datasets; otherwise use first dataset
+                        if (fullData.stacked) {
+                            // Sum all dataset values for each index
+                            const summedData = fullData.labels.map((_, idx) => {
+                                return fullData.datasets.reduce((sum, ds) => {
+                                    const val = ds.data[idx];
+                                    return sum + (val !== null && val !== undefined ? val : 0);
+                                }, 0);
+                            });
+                            growthData = { labels: fullData.labels, datasets: [{ data: summedData }] };
+                        } else {
+                            // Use first dataset (e.g., EPS Basic, Cash for Cash & Debt)
+                            growthData = { labels: fullData.labels, datasets: [{ data: fullData.datasets[0].data }] };
+                        }
+                    } else if (fullData.data) {
+                        // Simple chart with data array directly
+                        growthData = { labels: fullData.labels, datasets: [{ data: fullData.data }] };
+                    } else {
+                        growthData = null;
+                    }
+                    
+                    // Calculate growth rates using full data
+                    const growth1y = growthData ? calculateYoYGrowth(growthData, 1, false) : null;
+                    const growth2y = growthData ? calculateYoYGrowth(growthData, 2, true) : null;
+                    const growth5y = growthData ? calculateYoYGrowth(growthData, 5, true) : null;
+                    const growth10y = growthData ? calculateYoYGrowth(growthData, 10, true) : null;
+                    
+                    // Build growth badges HTML
+                    let badgesHtml = '';
+                    if (growth1y !== null) {
+                        const sign1y = growth1y >= 0 ? '+' : '';
+                        const negClass1y = growth1y < 0 ? ' negative' : '';
+                        badgesHtml += `<span class="chart-growth-badge${negClass1y}">1Y: ${sign1y}${growth1y.toFixed(2)}%</span>`;
+                    }
+                    if (growth2y !== null) {
+                        const sign2y = growth2y >= 0 ? '+' : '';
+                        const negClass2y = growth2y < 0 ? ' negative' : '';
+                        badgesHtml += `<span class="chart-growth-badge${negClass2y}">2Y: ${sign2y}${growth2y.toFixed(2)}%</span>`;
+                    }
+                    if (growth5y !== null) {
+                        const sign5y = growth5y >= 0 ? '+' : '';
+                        const negClass5y = growth5y < 0 ? ' negative' : '';
+                        badgesHtml += `<span class="chart-growth-badge${negClass5y}">5Y: ${sign5y}${growth5y.toFixed(2)}%</span>`;
+                    }
+                    if (growth10y !== null) {
+                        const sign10y = growth10y >= 0 ? '+' : '';
+                        const negClass10y = growth10y < 0 ? ' negative' : '';
+                        badgesHtml += `<span class="chart-growth-badge${negClass10y}">10Y: ${sign10y}${growth10y.toFixed(2)}%</span>`;
+                    }
+                    
                     const chartCard = document.createElement('div');
                     chartCard.className = 'financial-chart-card';
                     chartCard.innerHTML = `
@@ -2326,6 +2412,7 @@
                             </button>
                         </div>
                         <div class="financial-chart-body"><canvas></canvas></div>
+                        <div class="financial-chart-card-footer">${badgesHtml}</div>
                     `;
                     chartsGrid.appendChild(chartCard);
                     const canvas = chartCard.querySelector('canvas');
