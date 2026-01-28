@@ -10,9 +10,8 @@
     <!-- Firebase SDKs -->
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-    
     const firebaseConfig = {
         apiKey: "AIzaSyAuu1xiRsjARyIGNZyjHna9HsCqhrbPb74",
         authDomain: "dcf123-b6cb1.firebaseapp.com",
@@ -23,10 +22,16 @@
         measurementId: "G-FTJT1KSKL4"
     };
 
-    
     try {
         window.firebaseApp = initializeApp(firebaseConfig);
         window.auth = getAuth(window.firebaseApp);
+        
+        // Connect to Auth Emulator ONLY if running locally
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            connectAuthEmulator(window. auth, 'http://127.0.0.1:9099');
+            console.log("Connected to Firebase Auth Emulator");
+        }
+        
         console.log("Firebase initialized successfully.");
     } catch (e) {
         console.error("Error initializing Firebase:", e);
@@ -99,6 +104,83 @@
             max-width: 600px;
             flex-grow: 0;
             justify-content: center;
+            position: relative;
+        }
+
+        /* Autocomplete Dropdown Styles */
+        .ticker-autocomplete {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-top: none;
+            border-radius: 0 0 0.5rem 0.5rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 100;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .ticker-autocomplete.hidden {
+            display: none;
+        }
+
+        .ticker-suggestion {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: background-color 0.15s;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .ticker-suggestion:last-child {
+            border-bottom: none;
+        }
+
+        .ticker-suggestion:hover {
+            background-color: #f8fafc;
+        }
+
+        .ticker-suggestion-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 0.25rem;
+            object-fit: contain;
+            margin-right: 0.75rem;
+            background-color: #f8fafc;
+        }
+
+        .ticker-suggestion-symbol {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #1e293b;
+            min-width: 70px;
+        }
+
+        .ticker-suggestion-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            margin-left: 0.5rem;
+            text-align: right;
+        }
+
+        .ticker-suggestion-name {
+            font-size: 0.85rem;
+            color: #475569;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 280px;
+        }
+
+        .ticker-suggestion-exchange {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
         }
 
         .financial-search-wrapper input {
@@ -161,6 +243,15 @@
             box-shadow: none;
             margin: 0;
             padding: 0;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out, opacity 0.6s ease-in;
+        }
+        
+        .financial-company-info.visible {
+            max-height: 100px;
+            opacity: 1;
         }
 
         .financial-company-row {
@@ -194,26 +285,119 @@
         }
 
         .financial-company-price {
-            font-size: 1.125rem;
-            font-weight: 700;
+            font-size: 1.375rem;
+            font-weight: 600;
             color: #1e293b;
         }
 
-        /* Metrics Section Card (placeholder for future data) */
-        .financial-metrics-section {
-            background-color: #ffffff;
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-            margin: 0 1rem 1rem 1rem;
-            padding: 1.5rem 2rem;
+        .financial-price-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
-        .financial-metrics-placeholder {
-            font-size: 1.25rem;
+        .financial-price-change {
+            font-size: 1rem;
             font-weight: 500;
             color: #64748b;
-            text-align: center;
+            padding-left: 0.25rem;
+            padding-right: 0.25rem;
+            padding-top: 0.125rem;
+            padding-bottom: 0.125rem;
         }
+
+        .financial-price-change.positive {
+            color: #14883e;
+            background-color: #d9efe2;
+            border-radius: 0.375rem;
+        }
+
+        .financial-price-change.negative {
+            color: #dc2626;
+            background-color: #f7dfdf;
+            border-radius: 0.375rem;
+        }
+
+        /* Metrics Section Card */
+        .financial-metrics-section {
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            margin: 0 1rem 1rem 1rem;
+            padding: 1rem 1.5rem;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.5s ease-in, transform 0.6s ease-in-out;
+        }
+        
+        .financial-metrics-section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 2rem;
+        }
+
+        @media (max-width: 1200px) {
+            .metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 500px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .metrics-column {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .metrics-column-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 0.35rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .metrics-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 0.35rem 0;
+            border-bottom: 1px dotted #d1d5db;
+        }
+
+        .metrics-row:last-child {
+            border-bottom: none;
+        }
+
+        .metrics-label {
+            font-size: 0.8rem;
+            font-weight: 400;
+            color: #6b7280;
+        }
+
+        .metrics-value {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #111827;
+        }
+
 
         /* Charts Section - No background, charts are individual cards */
         .financial-charts-section {
@@ -238,6 +422,14 @@
             justify-content: center;
             margin-bottom: 1rem;
             padding: 1rem 0;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.4s ease-in, transform 0.4s ease-in-out;
+        }
+        
+        .financial-period-toggle.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .financial-period-toggle-group {
@@ -273,6 +465,14 @@
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 1rem;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: opacity 0.4s ease-in, transform 0.4s ease-in-out;
+        }
+        
+        .financial-charts-grid.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         @media (max-width: 1400px) {
@@ -304,7 +504,7 @@
             transition: none;
             position: relative;
             overflow: hidden;
-            min-height: 360px;
+            min-height: 320px;
         }
 
         .financial-chart-card-header {
@@ -316,9 +516,9 @@
         }
 
         .financial-chart-card-title {
-            font-size: 0.8rem;
+            font-size: 1.125rem;
             font-weight: 500;
-            color: #475569;
+            color: #212528;
             margin: 0;
         }
 
@@ -347,7 +547,7 @@
 
         .financial-chart-body {
             padding: 0.5rem 0.75rem 0.75rem 0.75rem;
-            height: 280px;
+            height: 320px;
         }
 
         .financial-chart-card-footer {
@@ -376,6 +576,59 @@
         .chart-growth-badge.negative {
             background-color: #fee2e2;
             color: #991b1b;
+        }
+
+        /* Price Chart Card - Same as regular cards */
+        .price-chart-card {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            padding: 0;
+            cursor: default;
+            position: relative;
+            overflow: hidden;
+            min-height: 320px;
+        }
+
+        .price-chart-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .price-chart-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .price-chart-title {
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin: 0;
+            color: #212528;
+        }
+
+        .price-chart-change-badge {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            color: #14883e;
+            background-color: #d9efe2;
+        }
+
+        .price-chart-change-badge.negative {
+            color: #dc2626;
+            background-color: #f7dfdf;
+        }
+
+        .price-chart-body {
+            padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+            height: 320px;
         }
 
         /* When financial data page is shown, body should not center content */
@@ -791,6 +1044,39 @@
             color: #991b1b;
         }
 
+        /* FCF Toggle Button Group */
+        .fcf-toggle-group {
+            display: inline-flex;
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+            gap: 0.25rem;
+        }
+        
+        .fcf-toggle-btn {
+            padding: 0.4rem 0.75rem;
+            border: none;
+            background: none;
+            color: #64748b;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.8rem;
+            border-radius: 0.375rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        
+        .fcf-toggle-btn:hover:not(.active) {
+            background-color: #f1f5f9;
+            color: #334155;
+        }
+        
+        .fcf-toggle-btn.active {
+            background-color: #3b82f6;
+            color: #ffffff;
+        }
+
         
         #toast-container {
             position: fixed;
@@ -991,6 +1277,7 @@
             <div class="financial-search-wrapper">
                 <input type="text" autocomplete="off" id="financialTickerInput" placeholder="Enter a ticker to begin.">
                 <button id="getFinancialDataBtn" class="financial-search-btn">Search</button>
+                <div id="tickerAutocomplete" class="ticker-autocomplete hidden"></div>
             </div>
             
             <!-- Company Info Section (inside header) -->
@@ -1002,19 +1289,115 @@
                         <span id="financialCompanyTicker" class="financial-company-ticker"></span>
                     </div>
                 </div>
-                <span id="financialCompanyPrice" class="financial-company-price"></span>
+                <div class="financial-price-row">
+                    <span id="financialCompanyPrice" class="financial-company-price"></span>
+                    <span id="financialPriceChange" class="financial-price-change"></span>
+                </div>
             </div>
         </div>
 
-        <!-- Metrics Section (placeholder for later) -->
-        <div class="financial-metrics-section">
-            <div class="financial-metrics-placeholder">keep a space here for later text</div>
+        <!-- Metrics Section -->
+        <div id="financialMetricsSection" class="financial-metrics-section hidden">
+            <div class="metrics-grid">
+                <!-- Valuation Column -->
+                <div class="metrics-column">
+                    <div class="metrics-column-title">Valuation</div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Market Cap:</span>
+                        <span class="metrics-value" id="metricMarketCap">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">PE (TTM|FWD):</span>
+                        <span class="metrics-value" id="metricPE">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Price To Sales:</span>
+                        <span class="metrics-value" id="metricPriceToSales">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">EV To EBITDA:</span>
+                        <span class="metrics-value" id="metricEvToEbitda">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Price to Book:</span>
+                        <span class="metrics-value" id="metricPriceToBook">-</span>
+                    </div>
+                </div>
+                <!-- Cash Flow Column -->
+                <div class="metrics-column">
+                    <div class="metrics-column-title">Cash Flow</div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Free Cash Flow Yield:</span>
+                        <span class="metrics-value" id="metricFcfYield">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">SBC Adj. Free Cash Flow Yield:</span>
+                        <span class="metrics-value" id="metricSbcAdjFcfYield">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">SBC Impact:</span>
+                        <span class="metrics-value" id="metricSbcImpact">-</span>
+                    </div>
+                </div>
+                <!-- Margins & Growth Column -->
+                <div class="metrics-column">
+                    <div class="metrics-column-title">Margins & Growth</div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Profit Margin:</span>
+                        <span class="metrics-value" id="metricProfitMargin">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Operating Margin:</span>
+                        <span class="metrics-value" id="metricOperatingMargin">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Quarterly Earnings (YoY):</span>
+                        <span class="metrics-value" id="metricEarningsGrowth">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Quarterly Revenue (YoY):</span>
+                        <span class="metrics-value" id="metricRevenueGrowth">-</span>
+                    </div>
+                </div>
+                <!-- Balance Column -->
+                <div class="metrics-column">
+                    <div class="metrics-column-title">Balance</div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Cash:</span>
+                        <span class="metrics-value" id="metricCash">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Debt:</span>
+                        <span class="metrics-value" id="metricDebt">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Net:</span>
+                        <span class="metrics-value" id="metricNet">-</span>
+                    </div>
+                </div>
+                <!-- Dividend Column -->
+                <div class="metrics-column">
+                    <div class="metrics-column-title">Dividend</div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Dividend Yield:</span>
+                        <span class="metrics-value" id="metricDividendYield">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Payout Ratio:</span>
+                        <span class="metrics-value" id="metricPayoutRatio">-</span>
+                    </div>
+                    <div class="metrics-row">
+                        <span class="metrics-label">Payout Date:</span>
+                        <span class="metrics-value" id="metricPayoutDate">-</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Charts Section -->
         <div class="financial-charts-section">
             <!-- Period Toggle -->
-            <div class="financial-period-toggle">
+            <div id="financialPeriodToggle" class="financial-period-toggle">
                 <div class="financial-period-toggle-group">
                     <button id="quarterlyBtn" class="financial-period-btn active">Quarterly</button>
                     <button id="quarterlyTTMBtn" class="financial-period-btn">Quarterly (TTM)</button>
@@ -1035,6 +1418,13 @@
                     <h2 id="fullscreen-chart-title" class="fullscreen-chart-title"></h2>
                 </div>
                 <div class="fullscreen-header-right">
+                    <div id="fcf-toggle-container" class="fcf-toggle-group hidden">
+                        <button class="fcf-toggle-btn active" data-fcf-view="fcf">FCF</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="fcf-sbc">FCF & SBC</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="sbc-adj-fcf">SBC Adj. FCF</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="fcf-per-share">FCF Per Share</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="sbc-adj-fcf-per-share">SBC Adj. FCF Per Share</button>
+                    </div>
                     <div class="fullscreen-period-dropdown">
                         <button id="fullscreen-period-btn" class="fullscreen-period-btn">
                             <span id="fullscreen-period-text">All</span>
@@ -1088,8 +1478,12 @@
             
             const auth = window.auth; 
 
-            const backendBaseUrl = 'https://dcf-backend.onrender.com';
+            const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const backendBaseUrl = isLocalDev 
+                ? 'http://localhost:5000' 
+                : 'https://dcf-backend.onrender.com';
 
+            console.log(`Using backend:  ${backendBaseUrl}`);
             
             const mainMenu = document.getElementById('mainMenu');
             const loginPage = document.getElementById('loginPage');
@@ -1134,6 +1528,9 @@
             const fullscreenGrowth5y = document.getElementById('fullscreen-growth-5y');
             const fullscreenGrowth10y = document.getElementById('fullscreen-growth-10y');
             
+            // FCF toggle container
+            const fcfToggleContainer = document.getElementById('fcf-toggle-container');
+            
             // Period toggle buttons
             const quarterlyBtn = document.getElementById('quarterlyBtn');
             const quarterlyTTMBtn = document.getElementById('quarterlyTTMBtn');
@@ -1145,7 +1542,10 @@
             const financialCompanyName = document.getElementById('financialCompanyName');
             const financialCompanyTicker = document.getElementById('financialCompanyTicker');
             const financialCompanyPrice = document.getElementById('financialCompanyPrice');
-            
+            const financialPriceChange = document.getElementById('financialPriceChange');
+            const financialPeriodToggle = document.getElementById('financialPeriodToggle');
+            //page kept for later data
+            const metricsSection = document.getElementById('financialMetricsSection');
             
             const tickerInput = document.getElementById('tickerInput');
             const getCurrentDataBtn = document.getElementById('getCurrentDataBtn');
@@ -1201,12 +1601,14 @@
             let currentTicker = '';
             let modalCallback = null;
             let currentUser = null;
-            let fullscreenChartData = null; // Store data for fullscreen charts
+            let fullscreenChartData = null; 
             
             // Store fetched data for period filtering
             let cachedBasicData = null;
             let cachedSegmentData = null;
-            let currentPeriodView = 'quarterly'; // 'quarterly', 'quarterlyTTM', 'annually' 
+            let cachedTTMData = null;
+            let cachedTTMSegmentData = null;
+            let currentPeriodView = 'quarterly'; 
 
             
             onAuthStateChanged(auth, (user) => { 
@@ -1217,8 +1619,9 @@
                     
                     if (user.emailVerified || user.providerData[0].providerId === 'google.com') {
                         showPage(mainMenu);
+                        fetchTickers();
                     } else {
-                        showPage(loginPage); // Keep them on login page if email not verified
+                        showPage(loginPage); 
                         showToast('Please verify your email address to continue.', true);
                     }
                 } else {
@@ -1228,6 +1631,376 @@
                 }
             });
 
+            // Store fetched tickers
+            let cachedTickers = [];
+
+            // Ticker cache constants
+            const TICKER_CACHE_KEY = 'dcf_tickers_cache';
+            const TICKER_CACHE_EXPIRY_KEY = 'dcf_tickers_cache_expiry';
+            const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 1 month in milliseconds
+
+            // ===========================================
+            // FINANCIAL DATA CACHING SYSTEM
+            // ===========================================
+            
+            // Cache durations
+            const FILING_CACHE_DURATION_MS = 24 * 60 * 60 * 1000;  // 24 hours for filing data
+            const PRICE_CACHE_DURATION_MS = 5 * 60 * 1000;          // 5 minutes for price data
+            const MAX_CACHED_COMPANIES = 50;                         // LRU limit
+            
+            // LocalStorage keys
+            const FINANCIAL_CACHE_KEY = 'dcf_financial_cache';
+            const FINANCIAL_CACHE_ACCESS_KEY = 'dcf_financial_cache_access'; // For LRU tracking
+            
+            // In-memory cache (instant access for current session)
+            const memoryCache = {};
+            
+            // Get cached data for a ticker (checks memory first, then localStorage)
+            function getCachedFinancialData(ticker, dataType) {
+                const cacheKey = `${ticker}_${dataType}`;
+                
+                // 1. Check in-memory cache first (instant)
+                if (memoryCache[cacheKey]) {
+                    const cached = memoryCache[cacheKey];
+                    const maxAge = dataType.includes('price') || dataType.includes('stock_info') 
+                        ? PRICE_CACHE_DURATION_MS 
+                        : FILING_CACHE_DURATION_MS;
+                    
+                    if (Date.now() - cached.timestamp < maxAge) {
+                        console.log(`[Cache HIT - Memory] ${cacheKey}`);
+                        return cached.data;
+                    } else {
+                        // Expired in memory
+                        delete memoryCache[cacheKey];
+                    }
+                }
+                
+                // 2. Check localStorage cache
+                try {
+                    const storedCache = localStorage.getItem(FINANCIAL_CACHE_KEY);
+                    if (storedCache) {
+                        const allCached = JSON.parse(storedCache);
+                        if (allCached[cacheKey]) {
+                            const cached = allCached[cacheKey];
+                            const maxAge = dataType.includes('price') || dataType.includes('stock_info') 
+                                ? PRICE_CACHE_DURATION_MS 
+                                : FILING_CACHE_DURATION_MS;
+                            
+                            if (Date.now() - cached.timestamp < maxAge) {
+                                console.log(`[Cache HIT - LocalStorage] ${cacheKey}`);
+                                // Also store in memory for faster subsequent access
+                                memoryCache[cacheKey] = cached;
+                                // Update LRU access time
+                                updateCacheAccessTime(ticker);
+                                return cached.data;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error reading from localStorage cache:', e);
+                }
+                
+                console.log(`[Cache MISS] ${cacheKey}`);
+                return null;
+            }
+            
+            // Store data in cache (both memory and localStorage)
+            function setCachedFinancialData(ticker, dataType, data) {
+                const cacheKey = `${ticker}_${dataType}`;
+                const cacheEntry = {
+                    data: data,
+                    timestamp: Date.now()
+                };
+                
+                // 1. Always store in memory
+                memoryCache[cacheKey] = cacheEntry;
+                
+                // 2. Store in localStorage (with LRU eviction)
+                try {
+                    let allCached = {};
+                    const storedCache = localStorage.getItem(FINANCIAL_CACHE_KEY);
+                    if (storedCache) {
+                        allCached = JSON.parse(storedCache);
+                    }
+                    
+                    allCached[cacheKey] = cacheEntry;
+                    
+                    // Update LRU access time
+                    updateCacheAccessTime(ticker);
+                    
+                    // Check if we need to evict old entries
+                    evictOldCacheEntries(allCached);
+                    
+                    localStorage.setItem(FINANCIAL_CACHE_KEY, JSON.stringify(allCached));
+                    console.log(`[Cache SET] ${cacheKey}`);
+                } catch (e) {
+                    if (e.name === 'QuotaExceededError') {
+                        console.warn('LocalStorage full, clearing old cache entries');
+                        clearOldestCacheEntries();
+                        // Retry once
+                        try {
+                            let allCached = {};
+                            allCached[cacheKey] = cacheEntry;
+                            localStorage.setItem(FINANCIAL_CACHE_KEY, JSON.stringify(allCached));
+                        } catch (e2) {
+                            console.error('Still cannot save to localStorage:', e2);
+                        }
+                    } else {
+                        console.error('Error saving to localStorage cache:', e);
+                    }
+                }
+            }
+            
+            // Update LRU access time for a ticker
+            function updateCacheAccessTime(ticker) {
+                try {
+                    let accessTimes = {};
+                    const stored = localStorage.getItem(FINANCIAL_CACHE_ACCESS_KEY);
+                    if (stored) {
+                        accessTimes = JSON.parse(stored);
+                    }
+                    accessTimes[ticker] = Date.now();
+                    localStorage.setItem(FINANCIAL_CACHE_ACCESS_KEY, JSON.stringify(accessTimes));
+                } catch (e) {
+                    console.error('Error updating cache access time:', e);
+                }
+            }
+            
+            // Evict old cache entries using LRU
+            function evictOldCacheEntries(allCached) {
+                try {
+                    const accessTimesStr = localStorage.getItem(FINANCIAL_CACHE_ACCESS_KEY);
+                    if (!accessTimesStr) return;
+                    
+                    const accessTimes = JSON.parse(accessTimesStr);
+                    const tickers = Object.keys(accessTimes);
+                    
+                    if (tickers.length <= MAX_CACHED_COMPANIES) return;
+                    
+                    // Sort by access time (oldest first)
+                    tickers.sort((a, b) => accessTimes[a] - accessTimes[b]);
+                    
+                    // Remove oldest tickers until we're under the limit
+                    const tickersToRemove = tickers.slice(0, tickers.length - MAX_CACHED_COMPANIES);
+                    
+                    for (const ticker of tickersToRemove) {
+                        // Remove all data types for this ticker
+                        const keysToRemove = Object.keys(allCached).filter(k => k.startsWith(`${ticker}_`));
+                        for (const key of keysToRemove) {
+                            delete allCached[key];
+                            delete memoryCache[key];
+                        }
+                        delete accessTimes[ticker];
+                        console.log(`[Cache EVICT] ${ticker} (LRU)`);
+                    }
+                    
+                    localStorage.setItem(FINANCIAL_CACHE_ACCESS_KEY, JSON.stringify(accessTimes));
+                } catch (e) {
+                    console.error('Error evicting cache entries:', e);
+                }
+            }
+            
+            // Clear oldest cache entries (emergency cleanup)
+            function clearOldestCacheEntries() {
+                try {
+                    const accessTimesStr = localStorage.getItem(FINANCIAL_CACHE_ACCESS_KEY);
+                    if (!accessTimesStr) {
+                        localStorage.removeItem(FINANCIAL_CACHE_KEY);
+                        return;
+                    }
+                    
+                    const accessTimes = JSON.parse(accessTimesStr);
+                    const tickers = Object.keys(accessTimes);
+                    
+                    // Sort by access time and remove oldest half
+                    tickers.sort((a, b) => accessTimes[a] - accessTimes[b]);
+                    const tickersToRemove = tickers.slice(0, Math.ceil(tickers.length / 2));
+                    
+                    let allCached = {};
+                    const storedCache = localStorage.getItem(FINANCIAL_CACHE_KEY);
+                    if (storedCache) {
+                        allCached = JSON.parse(storedCache);
+                    }
+                    
+                    for (const ticker of tickersToRemove) {
+                        const keysToRemove = Object.keys(allCached).filter(k => k.startsWith(`${ticker}_`));
+                        for (const key of keysToRemove) {
+                            delete allCached[key];
+                        }
+                        delete accessTimes[ticker];
+                    }
+                    
+                    localStorage.setItem(FINANCIAL_CACHE_KEY, JSON.stringify(allCached));
+                    localStorage.setItem(FINANCIAL_CACHE_ACCESS_KEY, JSON.stringify(accessTimes));
+                    console.log(`[Cache CLEANUP] Removed ${tickersToRemove.length} old tickers`);
+                } catch (e) {
+                    // Last resort: clear everything
+                    localStorage.removeItem(FINANCIAL_CACHE_KEY);
+                    localStorage.removeItem(FINANCIAL_CACHE_ACCESS_KEY);
+                    console.log('[Cache CLEARED] Full reset');
+                }
+            }
+            
+            // ===========================================
+            // END FINANCIAL DATA CACHING SYSTEM
+            // ===========================================
+
+            // Load tickers from localStorage cache or fetch from API
+            async function fetchTickers() {
+                // Check if we already have tickers in memory
+                if (cachedTickers && cachedTickers.length > 0) {
+                    console.log('Tickers already in memory, skipping fetch');
+                    return;
+                }
+
+                // Check localStorage cache
+                const cachedData = localStorage.getItem(TICKER_CACHE_KEY);
+                const cacheExpiry = localStorage.getItem(TICKER_CACHE_EXPIRY_KEY);
+
+                if (cachedData && cacheExpiry) {
+                    const expiryTime = parseInt(cacheExpiry, 10);
+                    if (Date.now() < expiryTime) {
+                        // Cache is still valid
+                        try {
+                            cachedTickers = JSON.parse(cachedData);
+                            console.log(`Loaded ${cachedTickers.length} tickers from localStorage cache`);
+                            return;
+                        } catch (e) {
+                            console.error('Error parsing cached tickers:', e);
+                            // Clear invalid cache
+                            localStorage.removeItem(TICKER_CACHE_KEY);
+                            localStorage.removeItem(TICKER_CACHE_EXPIRY_KEY);
+                        }
+                    } else {
+                        // Cache expired
+                        console.log('Ticker cache expired, fetching fresh data');
+                        localStorage.removeItem(TICKER_CACHE_KEY);
+                        localStorage.removeItem(TICKER_CACHE_EXPIRY_KEY);
+                    }
+                }
+
+                // Fetch from API
+                try {
+                    console.log('Fetching tickers from API...');
+                    const response = await apiCall('/get_tickers');
+                    if (response.ok) {
+                        cachedTickers = await response.json();
+                        console.log(`Fetched ${cachedTickers.length} tickers from API`);
+
+                        // Store in localStorage with expiry
+                        localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(cachedTickers));
+                        localStorage.setItem(TICKER_CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION_MS).toString());
+                        console.log('Tickers cached in localStorage (expires in 1 month)');
+                    } else {
+                        console.error('Failed to fetch tickers:', response.status);
+                    }
+                } catch (error) {
+                    console.error('Error fetching tickers:', error);
+                }
+            }
+
+            // Autocomplete dropdown element
+            const tickerAutocomplete = document.getElementById('tickerAutocomplete');
+
+            // Helper function to check if ticker is valid
+            function isValidTicker(query) {
+                if (!query || !cachedTickers || cachedTickers.length === 0) return false;
+                const queryUpper = query.toUpperCase().trim();
+                return cachedTickers.some(t => t.symbol && t.symbol.toUpperCase() === queryUpper);
+            }
+
+            // Filter and display ticker suggestions
+            function showTickerSuggestions(query) {
+                if (!query || query.length < 2) {
+                    tickerAutocomplete.classList.add('hidden');
+                    return;
+                }
+
+                const queryUpper = query.toUpperCase();
+                const queryLower = query.toLowerCase();
+
+                // Filter tickers - prioritize symbol matches, then name matches
+                const symbolMatches = cachedTickers.filter(t => 
+                    t.symbol && t.symbol.toUpperCase().startsWith(queryUpper)
+                );
+                const nameMatches = cachedTickers.filter(t => 
+                    t.name && t.name.toLowerCase().includes(queryLower) &&
+                    !symbolMatches.includes(t)
+                );
+
+                // Combine and limit to 5
+                const suggestions = [...symbolMatches, ...nameMatches].slice(0, 5);
+
+                if (suggestions.length === 0) {
+                    tickerAutocomplete.classList.add('hidden');
+                    return;
+                }
+
+                // Render suggestions
+                tickerAutocomplete.innerHTML = suggestions.map(ticker => `
+                    <div class="ticker-suggestion" data-symbol="${ticker.symbol}">
+                        <img class="ticker-suggestion-logo" 
+                             src="https://img.logo.dev/ticker/${ticker.symbol}?token=pk_R2lSMHBZTHFndU94enRNQ1lLVUJVUToxLVBPOVBtUzhveDZiQTlYN01Ld24w" 
+                             alt="${ticker.symbol}"
+                             onerror="this.src='https://img.logo.dev/${ticker.symbol.toLowerCase()}.com?token=pk_R2lSMHBZTHFndU94enRNQ1lLVUJVUToxLVBPOVBtUzhveDZiQTlYN01Ld24w'; this.onerror=null;">
+                        <span class="ticker-suggestion-symbol">${ticker.symbol}</span>
+                        <div class="ticker-suggestion-info">
+                            <span class="ticker-suggestion-name">${ticker.name || ''}</span>
+                            <span class="ticker-suggestion-exchange">${ticker.exchange || ''} USD</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                tickerAutocomplete.classList.remove('hidden');
+            }
+
+            // Handle suggestion click
+            tickerAutocomplete.addEventListener('click', (e) => {
+                const suggestion = e.target.closest('.ticker-suggestion');
+                if (suggestion) {
+                    const symbol = suggestion.dataset.symbol;
+                    financialTickerInput.value = symbol;
+                    tickerAutocomplete.classList.add('hidden');
+                    // Trigger search
+                    fetchFinancialData();
+                }
+            });
+
+            // Handle input events
+            financialTickerInput.addEventListener('input', (e) => {
+                showTickerSuggestions(e.target.value.trim());
+            });
+
+            // Handle focus - show suggestions if input has 2+ chars
+            financialTickerInput.addEventListener('focus', () => {
+                const value = financialTickerInput.value.trim();
+                if (value.length >= 2) {
+                    showTickerSuggestions(value);
+                }
+            });
+
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.financial-search-wrapper')) {
+                    tickerAutocomplete.classList.add('hidden');
+                }
+            });
+
+            // Handle Enter key to search
+            financialTickerInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    tickerAutocomplete.classList.add('hidden');
+                    const ticker = financialTickerInput.value.trim();
+                    if (!isValidTicker(ticker)) {
+                        showToast('Please select a valid ticker from the suggestions.', true);
+                        return;
+                    }
+                    fetchFinancialData();
+                }
+                if (e.key === 'Escape') {
+                    tickerAutocomplete.classList.add('hidden');
+                }
+            });
 
             
             function showPage(page) {
@@ -1263,8 +2036,8 @@
                     label: title,
                     data: chartData.data,
                     backgroundColor: chartData.backgroundColor,
-                    borderColor: chartData.borderColor,
-                    borderWidth: chartData.type === 'bar' ? 1 : 2,
+                    borderColor: chartData.backgroundColor,
+                    borderWidth: chartData.type === 'bar' ? 0 : 2,
                     fill: chartData.type === 'line',
                     tension: 0.1,
                     pointBackgroundColor: chartData.borderColor,
@@ -1364,7 +2137,8 @@
                         },
                         elements: {
                             bar: {
-                                borderSkipped: 'start'
+                                borderSkipped: 'start',
+                                borderWidth: 0
                             }
                         },
                         plugins: { 
@@ -1398,7 +2172,7 @@
                                         if (label) label += ': ';
                                         const value = context.parsed.y;
                                         if (value !== null && value !== 0) {
-                                            const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue', 'Backlog (RPO)'];
+                                            const moneyCharts = ['Price', 'Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue', 'Backlog (RPO)', 'FCF & SBC', 'SBC Adj. FCF', 'FCF Per Share', 'SBC Adj. FCF Per Share', 'CapEx'];
                                             const shareCharts = ['Shares Outstanding'];
                                             if (shareCharts.some(c => title.includes(c))) {
                                                 if (Math.abs(value) >= 1000000000) {
@@ -1446,7 +2220,7 @@
                                     font: { size: isFullscreen ? 14 : 11, weight: '500' },
                                     stepSize: yAxisStepSize,
                                     callback: function(value, index, values) {
-                                        const moneyCharts = ['Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue', 'Backlog (RPO)'];
+                                        const moneyCharts = ['Price', 'Revenue by Product', 'Revenue by Geography', 'Revenue by Business', 'Free Cash Flow', 'Adjusted Free Cash Flow', 'Net Income', 'Cash & Debt', 'Revenue', 'Backlog (RPO)', 'FCF & SBC', 'SBC Adj. FCF', 'FCF Per Share', 'SBC Adj. FCF Per Share', 'CapEx'];
                                         const shareCharts = ['Shares Outstanding'];
                                         if (shareCharts.some(c => title.includes(c))) {
                                             if (Math.abs(value) >= 1000000000) {
@@ -1498,8 +2272,18 @@
             let storedFullAdjustedFCFData = null;
             let currentFullscreenPeriod = 'all';
             
+            // Additional FCF data storage for new toggle options
+            let storedFullFCFAndSBCData = null;       // FCF & SBC (shows both as stacked/grouped)
+            let storedFullFCFPerShareData = null;     // FCF Per Share
+            let storedFullSBCAdjFCFPerShareData = null; // SBC Adj. FCF Per Share
+            let currentFCFView = 'fcf';               // Current FCF view mode
+            
             // Store full chart data for fullscreen (keyed by title)
             let fullChartDataStore = {};
+            
+            // Store price history data for price chart
+            let storedPriceHistory = null;
+            let storedYearChangePct = null;
             
             // Calculate year-over-year growth (simple for 1Y, CAGR for multi-year)
             function calculateYoYGrowth(chartData, yearsBack, useCAGR = false) {
@@ -1583,17 +2367,27 @@
                 const totalLabels = chartData.labels.length;
                 const startIdx = Math.max(0, totalLabels - quartersToShow);
                 
-                return {
-                    ...chartData,
-                    labels: chartData.labels.slice(startIdx),
-                    datasets: chartData.datasets.map(ds => ({
-                        ...ds,
-                        data: ds.data.slice(startIdx),
-                        backgroundColor: Array.isArray(ds.backgroundColor) 
-                            ? ds.backgroundColor.slice(startIdx) 
-                            : ds.backgroundColor
-                    }))
-                };
+                // Handle both single-dataset (data array) and multi-dataset formats
+                if (chartData.datasets) {
+                    return {
+                        ...chartData,
+                        labels: chartData.labels.slice(startIdx),
+                        datasets: chartData.datasets.map(ds => ({
+                            ...ds,
+                            data: ds.data.slice(startIdx),
+                            backgroundColor: Array.isArray(ds.backgroundColor) 
+                                ? ds.backgroundColor.slice(startIdx) 
+                                : ds.backgroundColor
+                        }))
+                    };
+                } else {
+                    // Single dataset format with data array
+                    return {
+                        ...chartData,
+                        labels: chartData.labels.slice(startIdx),
+                        data: chartData.data.slice(startIdx)
+                    };
+                }
             }
             
             // Get available periods based on data length
@@ -1645,6 +2439,7 @@
                         // Sum all dataset values for each index
                         const summedData = chartData.labels.map((_, idx) => {
                             return chartData.datasets.reduce((sum, ds) => {
+                                if (!ds.data || idx >= ds.data.length) return sum;
                                 const val = ds.data[idx];
                                 return sum + (val !== null && val !== undefined ? val : 0);
                             }, 0);
@@ -1652,7 +2447,12 @@
                         normalizedData = { labels: chartData.labels, datasets: [{ data: summedData }] };
                     } else {
                         // Use first dataset (e.g., EPS Basic, Cash for Cash & Debt)
-                        normalizedData = { labels: chartData.labels, datasets: [{ data: chartData.datasets[0].data }] };
+                        const firstDataset = chartData.datasets[0];
+                        if (firstDataset && firstDataset.data) {
+                            normalizedData = { labels: chartData.labels, datasets: [{ data: firstDataset.data }] };
+                        } else {
+                            normalizedData = null;
+                        }
                     }
                 } else if (chartData.data) {
                     // Simple chart with data array directly
@@ -1692,12 +2492,15 @@
                 
                 const labels = chart.data.labels;
                 const datasets = chart.data.datasets;
+                
+                if (!labels || !datasets) return;
+                
                 const isStacked = chart.options.scales?.y?.stacked || false;
                 
                 // Get only visible datasets
                 const visibleDatasets = datasets.filter((ds, idx) => {
                     const meta = chart.getDatasetMeta(idx);
-                    return !meta.hidden;
+                    return !meta.hidden && ds.data && ds.data.length > 0;
                 });
                 
                 if (visibleDatasets.length === 0) {
@@ -1715,6 +2518,7 @@
                     // Sum visible datasets for stacked charts or multi-dataset
                     const summedData = labels.map((_, idx) => {
                         return visibleDatasets.reduce((sum, ds) => {
+                            if (!ds.data || idx >= ds.data.length) return sum;
                             const val = ds.data[idx];
                             return sum + (val !== null && val !== undefined ? val : 0);
                         }, 0);
@@ -1787,22 +2591,16 @@
                 // Update growth badges
                 updateGrowthBadges(fullData);
                 
-                // Remove existing toggle button if any
-                if (fcfToggleBtn) {
-                    fcfToggleBtn.remove();
-                    fcfToggleBtn = null;
-                }
-                
-                // Add FCF toggle button if this is a Free Cash Flow chart
-                if (title === 'Free Cash Flow' && storedFullAdjustedFCFData) {
-                    showingAdjustedFCF = false;
-                    fcfToggleBtn = document.createElement('button');
-                    fcfToggleBtn.className = 'fullscreen-period-btn';
-                    fcfToggleBtn.style.marginRight = '0.5rem';
-                    fcfToggleBtn.textContent = 'Show Adjusted FCF';
-                    fcfToggleBtn.addEventListener('click', toggleFCFView);
-                    // Insert before period dropdown
-                    fullscreenPeriodBtn.parentElement.parentElement.insertBefore(fcfToggleBtn, fullscreenPeriodBtn.parentElement);
+                // Show/hide FCF toggle group based on chart type
+                if (title === 'Free Cash Flow') {
+                    fcfToggleContainer.classList.remove('hidden');
+                    currentFCFView = 'fcf';
+                    // Reset toggle buttons
+                    fcfToggleContainer.querySelectorAll('.fcf-toggle-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.fcfView === 'fcf');
+                    });
+                } else {
+                    fcfToggleContainer.classList.add('hidden');
                 }
                 
                 // Use requestAnimationFrame to defer chart creation for smoother modal opening
@@ -1859,27 +2657,68 @@
                 });
             });
             
-            function toggleFCFView() {
-                if (!fcfToggleBtn) return;
+            // FCF toggle button group click handler
+            fcfToggleContainer.addEventListener('click', (e) => {
+                const btn = e.target.closest('.fcf-toggle-btn');
+                if (!btn) return;
                 
-                showingAdjustedFCF = !showingAdjustedFCF;
+                const newView = btn.dataset.fcfView;
+                if (newView === currentFCFView) return;
+                
+                currentFCFView = newView;
+                
+                // Update active state
+                fcfToggleContainer.querySelectorAll('.fcf-toggle-btn').forEach(b => {
+                    b.classList.toggle('active', b === btn);
+                });
                 
                 if (activeFullscreenChart) {
                     activeFullscreenChart.destroy();
                     activeFullscreenChart = null;
                 }
                 
-                // Update button text immediately
-                fcfToggleBtn.textContent = showingAdjustedFCF ? 'Show Free Cash Flow' : 'Show Adjusted FCF';
+                // Get appropriate data based on view
+                let newFullData;
+                let chartTitle;
                 
-                // Update current data reference
-                const newFullData = showingAdjustedFCF ? storedFullAdjustedFCFData : storedFullFCFData;
+                switch (newView) {
+                    case 'fcf':
+                        newFullData = storedFullFCFData;
+                        chartTitle = 'Free Cash Flow';
+                        break;
+                    case 'fcf-sbc':
+                        newFullData = storedFullFCFAndSBCData || storedFullFCFData;
+                        chartTitle = 'FCF & SBC';
+                        break;
+                    case 'sbc-adj-fcf':
+                        newFullData = storedFullAdjustedFCFData || storedFullFCFData;
+                        chartTitle = 'SBC Adj. FCF';
+                        break;
+                    case 'fcf-per-share':
+                        newFullData = storedFullFCFPerShareData || storedFullFCFData;
+                        chartTitle = 'FCF Per Share';
+                        break;
+                    case 'sbc-adj-fcf-per-share':
+                        newFullData = storedFullSBCAdjFCFPerShareData || storedFullFCFData;
+                        chartTitle = 'SBC Adj. FCF Per Share';
+                        break;
+                    default:
+                        newFullData = storedFullFCFData;
+                        chartTitle = 'Free Cash Flow';
+                }
+                
                 currentFullscreenData = newFullData;
-                currentFullscreenTitle = showingAdjustedFCF ? 'Adjusted Free Cash Flow' : 'Free Cash Flow';
+                currentFullscreenTitle = chartTitle;
                 
                 // Update title
                 const ticker = financialTickerInput.value.trim().toUpperCase();
-                fullscreenChartTitle.textContent = `${currentFullscreenTitle} - ${ticker}`;
+                let displayTitle = chartTitle;
+                if (currentPeriodView === 'quarterlyTTM') {
+                    displayTitle = `${chartTitle} (TTM)`;
+                } else if (currentPeriodView === 'annually') {
+                    displayTitle = `${chartTitle} (Annual)`;
+                }
+                fullscreenChartTitle.textContent = `${displayTitle} - ${ticker}`;
                 
                 // Filter by current period
                 const filteredData = filterChartDataByPeriod(newFullData, currentFullscreenPeriod);
@@ -1891,7 +2730,7 @@
                 requestAnimationFrame(() => {
                     activeFullscreenChart = createChart(fullscreenCanvas, currentFullscreenTitle, filteredData, true);
                 });
-            }
+            });
 
             closeFullscreenBtn.addEventListener('click', () => {
                 fullscreenModal.classList.add('hidden');
@@ -1899,15 +2738,109 @@
                     activeFullscreenChart.destroy();
                     activeFullscreenChart = null;
                 }
-                if (fcfToggleBtn) {
-                    fcfToggleBtn.remove();
-                    fcfToggleBtn = null;
-                }
+                // Hide FCF toggle group
+                fcfToggleContainer.classList.add('hidden');
                 currentFullscreenTitle = '';
                 currentFullscreenData = null;
                 currentFullscreenPeriod = 'all';
+                currentFCFView = 'fcf';
             });
 
+            // Helper functions for formatting metrics
+            function formatLargeNumber(num) {
+                if (num === null || num === undefined) return '-';
+                const absNum = Math.abs(num);
+                if (absNum >= 1e12) return (num / 1e12).toFixed(2) + 't';
+                if (absNum >= 1e9) return (num / 1e9).toFixed(2) + 'b';
+                if (absNum >= 1e6) return (num / 1e6).toFixed(2) + 'm';
+                if (absNum >= 1e3) return (num / 1e3).toFixed(2) + 'k';
+                return num.toFixed(2);
+            }
+
+            function formatPercent(num) {
+                if (num === null || num === undefined) return '-';
+                return (num * 100).toFixed(2) + '%';
+            }
+
+            function formatNumber(num, decimals = 2) {
+                if (num === null || num === undefined) return '-';
+                return num.toFixed(decimals);
+            }
+
+            function formatDate(dateStr) {
+                if (!dateStr) return '-';
+                const date = new Date(dateStr);
+                const options = { year: 'numeric', month: 'short', day: 'numeric' };
+                return date.toLocaleDateString('en-US', options);
+            }
+
+            function populateMetricsSection(data) {
+                // Valuation
+                document.getElementById('metricMarketCap').textContent = data.marketCap ? '$' + formatLargeNumber(data.marketCap) : '-';
+                
+                const ttmPE = data.trailingPE ? formatNumber(data.trailingPE) : '-';
+                const fwdPE = data.forwardPE ? formatNumber(data.forwardPE) : '-';
+                document.getElementById('metricPE').textContent = `${ttmPE} | ${fwdPE}`;
+                
+                document.getElementById('metricPriceToSales').textContent = data.priceToSales ? formatNumber(data.priceToSales) : '-';
+                document.getElementById('metricEvToEbitda').textContent = data.evToEbitda ? formatNumber(data.evToEbitda) : '-';
+                document.getElementById('metricPriceToBook').textContent = data.priceToBook ? formatNumber(data.priceToBook) : '-';
+
+                // Cash Flow
+                document.getElementById('metricFcfYield').textContent = formatPercent(data.freeCashFlowYield);
+                document.getElementById('metricSbcAdjFcfYield').textContent = formatPercent(data.sbcAdjFreeCashFlowYield);
+                
+                const sbcImpactEl = document.getElementById('metricSbcImpact');
+                if (data.sbcImpact !== null && data.sbcImpact !== undefined) {
+                    const sbcVal = (data.sbcImpact * 100).toFixed(2);
+                    sbcImpactEl.textContent = '-' + sbcVal + '%';
+                    sbcImpactEl.className = 'metrics-value';
+                } else {
+                    sbcImpactEl.textContent = '-';
+                    sbcImpactEl.className = 'metrics-value';
+                }
+
+                // Margins & Growth
+                document.getElementById('metricProfitMargin').textContent = formatPercent(data.profitMargin);
+                document.getElementById('metricOperatingMargin').textContent = formatPercent(data.operatingMargin);
+                
+                const earningsGrowthEl = document.getElementById('metricEarningsGrowth');
+                if (data.earningsQuarterlyGrowth !== null && data.earningsQuarterlyGrowth !== undefined) {
+                    earningsGrowthEl.textContent = formatPercent(data.earningsQuarterlyGrowth);
+                    earningsGrowthEl.className = 'metrics-value';
+                } else {
+                    earningsGrowthEl.textContent = '-';
+                    earningsGrowthEl.className = 'metrics-value';
+                }
+                
+                const revenueGrowthEl = document.getElementById('metricRevenueGrowth');
+                if (data.revenueGrowth !== null && data.revenueGrowth !== undefined) {
+                    revenueGrowthEl.textContent = formatPercent(data.revenueGrowth);
+                    revenueGrowthEl.className = 'metrics-value';
+                } else {
+                    revenueGrowthEl.textContent = '-';
+                    revenueGrowthEl.className = 'metrics-value';
+                }
+
+                // Balance
+                document.getElementById('metricCash').textContent = data.totalCash ? '$' + formatLargeNumber(data.totalCash) : '-';
+                document.getElementById('metricDebt').textContent = data.totalDebt ? '$' + formatLargeNumber(data.totalDebt) : '-';
+                
+                const netEl = document.getElementById('metricNet');
+                if (data.net !== null && data.net !== undefined) {
+                    const prefix = data.net >= 0 ? '' : '-';
+                    netEl.textContent = prefix + '$' + formatLargeNumber(Math.abs(data.net));
+                    netEl.className = 'metrics-value';
+                } else {
+                    netEl.textContent = '-';
+                    netEl.className = 'metrics-value';
+                }
+
+                // Dividend
+                document.getElementById('metricDividendYield').textContent = formatPercent(data.dividendYield);
+                document.getElementById('metricPayoutRatio').textContent = formatPercent(data.payoutRatio);
+                document.getElementById('metricPayoutDate').textContent = formatDate(data.payoutDate);
+            }
             
             async function fetchFinancialData() {
                 const ticker = financialTickerInput.value.trim().toUpperCase();
@@ -1919,24 +2852,113 @@
                 setButtonState(getFinancialDataBtn, 'Loading...', true);
                 chartsGrid.innerHTML = '<p class="text-center text-gray-500 col-span-full">Fetching data...</p>';
                 
-                // Hide company info while loading
+                // Hide all elements while loading
+                financialCompanyInfo.classList.remove('visible');
                 financialCompanyInfo.classList.add('hidden');
+                metricsSection.classList.remove('visible');
+                metricsSection.classList.add('hidden');
+                financialPeriodToggle.classList.remove('visible');
+                chartsGrid.classList.remove('visible');
 
                 try {
-                    // Fetch basic data, segment data, and market price in parallel
-                    const [basicResponse, segmentResponse, priceResponse] = await Promise.all([
-                        apiCall(`/get_basic_data?ticker=${ticker}`),
-                        apiCall(`/get_segment_data?ticker=${ticker}`),
-                        apiCall(`/get_market_price?ticker=${ticker}`)
-                    ]);
-
-                    const basicData = await basicResponse.json();
-                    if (!basicResponse.ok) {
-                        throw new Error(basicData.error || 'Failed to fetch basic data');
+                    // Check cache first for each data type
+                    let basicData = getCachedFinancialData(ticker, 'basic_data');
+                    let segmentData = getCachedFinancialData(ticker, 'segment_data');
+                    let ttmData = getCachedFinancialData(ticker, 'ttm_data');
+                    let ttmSegmentData = getCachedFinancialData(ticker, 'ttm_segment_data');
+                    let priceData = getCachedFinancialData(ticker, 'price_data');
+                    let stockInfoData = getCachedFinancialData(ticker, 'stock_info_data');
+                    
+                    // Determine what needs to be fetched
+                    const fetchPromises = [];
+                    const fetchTypes = [];
+                    
+                    if (!basicData) {
+                        fetchPromises.push(apiCall(`/get_basic_data?ticker=${ticker}`));
+                        fetchTypes.push('basic');
                     }
-
-                    const segmentData = segmentResponse.ok ? await segmentResponse.json() : null;
-                    const priceData = priceResponse.ok ? await priceResponse.json() : null;
+                    if (!segmentData) {
+                        fetchPromises.push(apiCall(`/get_segment_data?ticker=${ticker}`));
+                        fetchTypes.push('segment');
+                    }
+                    if (!priceData) {
+                        fetchPromises.push(apiCall(`/get_market_price?ticker=${ticker}`));
+                        fetchTypes.push('price');
+                    }
+                    if (!ttmData) {
+                        fetchPromises.push(apiCall(`/get_ttm_data?ticker=${ticker}`));
+                        fetchTypes.push('ttm');
+                    }
+                    if (!ttmSegmentData) {
+                        fetchPromises.push(apiCall(`/get_ttm_segment_data?ticker=${ticker}`));
+                        fetchTypes.push('ttm_segment');
+                    }
+                    if (!stockInfoData) {
+                        fetchPromises.push(apiCall(`/get_stock_info_data?ticker=${ticker}`));
+                        fetchTypes.push('stock_info');
+                    }
+                    
+                    // Log cache status
+                    const cachedCount = 6 - fetchPromises.length;
+                    if (cachedCount > 0) {
+                        console.log(`[Cache] Using ${cachedCount}/6 cached data types for ${ticker}`);
+                    }
+                    
+                    // Fetch any missing data
+                    if (fetchPromises.length > 0) {
+                        const responses = await Promise.all(fetchPromises);
+                        
+                        for (let i = 0; i < responses.length; i++) {
+                            const response = responses[i];
+                            const type = fetchTypes[i];
+                            
+                            if (type === 'basic') {
+                                const data = await response.json();
+                                if (!response.ok) {
+                                    if (response.status === 400 && data.error && data.error.includes('No financial data')) {
+                                        throw new Error('No financial data for that company');
+                                    }
+                                    throw new Error(data.error || 'Failed to fetch basic data');
+                                }
+                                basicData = data;
+                                setCachedFinancialData(ticker, 'basic_data', basicData);
+                            } else if (type === 'segment') {
+                                if (response.ok) {
+                                    segmentData = await response.json();
+                                    setCachedFinancialData(ticker, 'segment_data', segmentData);
+                                }
+                            } else if (type === 'price') {
+                                if (response.ok) {
+                                    priceData = await response.json();
+                                    setCachedFinancialData(ticker, 'price_data', priceData);
+                                }
+                            } else if (type === 'ttm') {
+                                if (response.ok) {
+                                    ttmData = await response.json();
+                                    setCachedFinancialData(ticker, 'ttm_data', ttmData);
+                                }
+                            } else if (type === 'ttm_segment') {
+                                if (response.ok) {
+                                    ttmSegmentData = await response.json();
+                                    setCachedFinancialData(ticker, 'ttm_segment_data', ttmSegmentData);
+                                }
+                            } else if (type === 'stock_info') {
+                                if (response.ok) {
+                                    stockInfoData = await response.json();
+                                    setCachedFinancialData(ticker, 'stock_info_data', stockInfoData);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Populate metrics section with stock info data
+                    if (stockInfoData) {
+                        populateMetricsSection(stockInfoData);
+                    }
+                    
+                    // Store price history for the price chart
+                    storedPriceHistory = priceData?.history || null;
+                    storedYearChangePct = priceData?.yearChangePct || null;
                     
                     // Get company info from the first basic data entry
                     let companyName = ticker;
@@ -1950,14 +2972,52 @@
                     financialCompanyName.textContent = companyName;
                     financialCompanyTicker.textContent = `${ticker} | ${priceData?.exchange || 'NASDAQ'}`;
                     financialCompanyPrice.textContent = priceData?.price ? `$${priceData.price.toFixed(2)}` : 'N/A';
+                    
+                    // Display price change
+                    if (priceData?.change !== null && priceData?.pctChange !== null) {
+                        const isPositive = priceData.change >= 0;
+                        const sign = isPositive ? '+' : '';
+                        financialPriceChange.textContent = `${sign}$${priceData.change.toFixed(2)} | ${sign}${priceData.pctChange.toFixed(2)}%`;
+                        financialPriceChange.className = `financial-price-change ${isPositive ? 'positive' : 'negative'}`;
+                    } else {
+                        financialPriceChange.textContent = '';
+                    }
+                    
                     financialCompanyInfo.classList.remove('hidden');
+                    // Trigger reflow to ensure transition works
+                    financialCompanyInfo.offsetHeight;
+                    financialCompanyInfo.classList.add('visible');
+                    
+                    // Sequential animations with delays
+                    // 1. Company info is already animating (500ms transition)
+                    // 2. After 400ms, start metrics section animation
+                    setTimeout(() => {
+                        metricsSection.classList.remove('hidden');
+                        metricsSection.offsetHeight;
+                        metricsSection.classList.add('visible');
+                        
+                        // 3. After metrics starts (400ms later), start period toggle
+                        setTimeout(() => {
+                            financialPeriodToggle.classList.add('visible');
+                            
+                            // 4. After period toggle starts (300ms later), start charts grid
+                            setTimeout(() => {
+                                chartsGrid.classList.add('visible');
+                            }, 300);
+                        }, 400);
+                    }, 400);
 
                     // Cache the data for period filtering
                     cachedBasicData = basicData;
                     cachedSegmentData = segmentData;
+                    cachedTTMData = ttmData;
+                    cachedTTMSegmentData = ttmSegmentData;
                     
                     // Render combined charts with current period view
-                    renderCombinedCharts(filterDataByPeriod(basicData, currentPeriodView), filterSegmentDataByPeriod(segmentData, currentPeriodView));
+                    renderCombinedCharts(
+                        filterDataByPeriod(basicData, currentPeriodView, ttmData), 
+                        filterSegmentDataByPeriod(segmentData, currentPeriodView, ttmSegmentData)
+                    );
                     
                     showToast('Financial data loaded successfully!', false);
 
@@ -1969,8 +3029,16 @@
                 }
             }
             
-            // Filter basic data by period type (quarterly vs annually)
-            function filterDataByPeriod(data, periodView) {
+            // Filter basic data by period type (quarterly vs annually vs TTM)
+            function filterDataByPeriod(data, periodView, ttmData = null) {
+                if (periodView === 'quarterlyTTM') {
+                    // Return TTM data if available
+                    if (ttmData && ttmData.length > 0) {
+                        return ttmData;
+                    }
+                    return [];
+                }
+                
                 if (!data || data.length === 0) return data;
                 
                 return data.filter(item => {
@@ -1987,7 +3055,43 @@
             }
             
             // Filter segment data by period type
-            function filterSegmentDataByPeriod(segmentData, periodView) {
+            function filterSegmentDataByPeriod(segmentData, periodView, ttmSegmentData = null) {
+                if (periodView === 'quarterlyTTM') {
+                    // Return TTM segment data if available
+                    if (!ttmSegmentData) return null;
+                    
+                    // Transform TTM segment data to expected format
+                    const transformedData = {
+                        geographic: {},
+                        product: {},
+                        business: {}
+                    };
+                    
+                    Object.keys(ttmSegmentData).forEach(periodKey => {
+                        const entry = ttmSegmentData[periodKey];
+                        if (!entry || typeof entry !== 'object') return;
+                        
+                        // Add geographic segments
+                        if (entry.geographic && Object.keys(entry.geographic).length > 0) {
+                            transformedData.geographic[periodKey] = entry.geographic;
+                        }
+                        
+                        // Add product segments
+                        if (entry.product && Object.keys(entry.product).length > 0) {
+                            transformedData.product[periodKey] = entry.product;
+                        }
+                    });
+                    
+                    // Clean up empty segment types
+                    Object.keys(transformedData).forEach(key => {
+                        if (Object.keys(transformedData[key]).length === 0) {
+                            delete transformedData[key];
+                        }
+                    });
+                    
+                    return Object.keys(transformedData).length > 0 ? transformedData : null;
+                }
+                
                 if (!segmentData) return null;
                 
                 // Transform Firebase format to expected format
@@ -2099,15 +3203,13 @@
             
             // Handle period toggle button clicks
             function updatePeriodView(newView) {
-                // QuarterlyTTM does nothing for now
-                if (newView === 'quarterlyTTM') {
-                    return;
-                }
-                
                 // Prevent jitter - don't re-render if view hasn't changed
                 if (currentPeriodView === newView) {
                     return;
                 }
+                
+                // Save scroll position before re-rendering
+                const scrollY = window.scrollY;
                 
                 currentPeriodView = newView;
                 
@@ -2125,22 +3227,35 @@
                 }
                 
                 // Re-render charts if data is cached
-                if (cachedBasicData) {
+                if (cachedBasicData || cachedTTMData) {
                     renderCombinedCharts(
-                        filterDataByPeriod(cachedBasicData, currentPeriodView),
-                        filterSegmentDataByPeriod(cachedSegmentData, currentPeriodView)
+                        filterDataByPeriod(cachedBasicData, currentPeriodView, cachedTTMData),
+                        filterSegmentDataByPeriod(cachedSegmentData, currentPeriodView, cachedTTMSegmentData)
                     );
+                    
+                    // Restore scroll position after re-render
+                    requestAnimationFrame(() => {
+                        window.scrollTo(0, scrollY);
+                    });
                 }
             }
 
             function renderCombinedCharts(basicData, segmentData) {
                 chartsGrid.innerHTML = '';
                 
+                // Render price chart first if we have price history data
+                if (storedPriceHistory && storedPriceHistory.length > 0) {
+                    renderPriceChart();
+                }
+                
                 // Reset stored FCF data and full chart data store
                 storedFCFData = null;
                 storedAdjustedFCFData = null;
                 storedFullFCFData = null;
                 storedFullAdjustedFCFData = null;
+                storedFullFCFAndSBCData = null;
+                storedFullFCFPerShareData = null;
+                storedFullSBCAdjFCFPerShareData = null;
                 fullChartDataStore = {};
                 
                 if (!basicData || basicData.length === 0) {
@@ -2242,15 +3357,12 @@
                                     label: 'EPS Basic',
                                     data: epsBasic,
                                     backgroundColor: 'rgba(240, 206, 99, 1)',
-                                    borderColor: 'rgba(240, 206, 99, 1)',
-                                    borderWidth: 1
+
                                 },
                                 {
                                     label: 'EPS Diluted',
                                     data: epsDiluted,
                                     backgroundColor: 'rgba(255, 99, 132, 1)',
-                                    borderColor: 'rgba(255, 99, 132, 1)',
-                                    borderWidth: 1,
                                     hidden: true  
                                 }
                             ],
@@ -2265,8 +3377,8 @@
                     fullChartDataStore['Earnings Per Share'] = {
                         labels: epsLabelsFull,
                         datasets: [
-                            { label: 'EPS Basic', data: epsBasicFull, backgroundColor: 'rgba(240, 206, 99, 1)', borderColor: 'rgba(240, 206, 99, 1)', borderWidth: 1 },
-                            { label: 'EPS Diluted', data: epsDilutedFull, backgroundColor: 'rgba(255, 99, 132, 1)', borderColor: 'rgba(255, 99, 132, 1)', borderWidth: 1, hidden: true }
+                            { label: 'EPS Basic', data: epsBasicFull, backgroundColor: 'rgba(240, 206, 99, 1)'},
+                            { label: 'EPS Diluted', data: epsDilutedFull, backgroundColor: 'rgba(255, 99, 132, 1)',  hidden: true }
                         ],
                         type: 'bar'
                     };
@@ -2284,8 +3396,7 @@
                             labels: netIncomeLabels,
                             data: netIncome,
                             type: 'bar',
-                            backgroundColor: 'rgba(242, 207, 98, 1)',
-                            borderColor: 'rgba(242, 207, 98, 1)'
+                            backgroundColor: 'rgba(254, 190, 125, 1)',
                         }
                     });
                     
@@ -2294,8 +3405,7 @@
                         labels: netIncomeDataFull.map(formatPeriodLabel),
                         data: netIncomeDataFull.map(d => parseFloat(d.facts.NetIncomeLoss.value)),
                         type: 'bar',
-                        backgroundColor: 'rgba(242, 207, 98, 1)',
-                        borderColor: 'rgba(242, 207, 98, 1)'
+                        backgroundColor: 'rgba(254, 190, 125, 1)',
                     };
                 }
 
@@ -2355,6 +3465,80 @@
                         borderColor: 'rgba(160, 203, 232, 1)'
                     };
                 }
+                
+                // FCF & SBC (showing FCF and Stock Based Compensation together)
+                const sbcDataFull = sortedData.filter(d => d.facts?.ShareBasedCompensation);
+                if (storedFullFCFData && sbcDataFull.length > 0) {
+                    // Get SBC values directly from database
+                    const sbcValues = sbcDataFull.map(d => parseFloat(d.facts.ShareBasedCompensation.value));
+                    const sbcLabels = sbcDataFull.map(formatPeriodLabel);
+                    
+                    storedFullFCFAndSBCData = {
+                        labels: storedFullFCFData.labels,
+                        datasets: [
+                            {
+                                label: 'FCF',
+                                data: storedFullFCFData.data,
+                                backgroundColor: 'rgba(243, 143, 42, 1)'
+                            },
+                            {
+                                label: 'SBC',
+                                data: sbcValues,
+                                backgroundColor: 'rgba(160, 203, 232, 1)'
+                            }
+                        ],
+                        type: 'bar'
+                    };
+                }
+                
+                // Calculate FCF Per Share and SBC Adj. FCF Per Share
+                const sharesDataForFCF = sortedData.filter(d => d.facts?.SharesOutstanding);
+                if (fcfDataFull.length > 0 && sharesDataForFCF.length > 0) {
+                    // Create a map of period -> shares outstanding
+                    const sharesMap = new Map();
+                    sharesDataForFCF.forEach(d => {
+                        const label = formatPeriodLabel(d);
+                        sharesMap.set(label, parseFloat(d.facts.SharesOutstanding.value));
+                    });
+                    
+                    // Calculate FCF Per Share
+                    const fcfPerShareData = fcfDataFull.map(d => {
+                        const label = formatPeriodLabel(d);
+                        const fcf = parseFloat(d.facts.FreeCashFlow.value);
+                        const shares = sharesMap.get(label);
+                        return shares ? fcf / shares : null;
+                    }).filter(v => v !== null);
+                    
+                    if (fcfPerShareData.length > 0) {
+                        storedFullFCFPerShareData = {
+                            labels: fcfDataFull.map(formatPeriodLabel).slice(0, fcfPerShareData.length),
+                            data: fcfPerShareData,
+                            type: 'bar',
+                            backgroundColor: 'rgba(243, 143, 42, 1)',
+                            borderColor: 'rgba(243, 143, 42, 1)'
+                        };
+                    }
+                    
+                    // Calculate SBC Adj. FCF Per Share
+                    if (adjFcfDataFull.length > 0) {
+                        const adjFcfPerShareData = adjFcfDataFull.map(d => {
+                            const label = formatPeriodLabel(d);
+                            const adjFcf = parseFloat(d.facts.AdjustedFreeCashFlow.value);
+                            const shares = sharesMap.get(label);
+                            return shares ? adjFcf / shares : null;
+                        }).filter(v => v !== null);
+                        
+                        if (adjFcfPerShareData.length > 0) {
+                            storedFullSBCAdjFCFPerShareData = {
+                                labels: adjFcfDataFull.map(formatPeriodLabel).slice(0, adjFcfPerShareData.length),
+                                data: adjFcfPerShareData,
+                                type: 'bar',
+                                backgroundColor: 'rgba(160, 203, 232, 1)',
+                                borderColor: 'rgba(160, 203, 232, 1)'
+                            };
+                        }
+                    }
+                }
 
                 // 7. Cash & Debt - BAR CHART for usd (clustered)
                 const cashDebtData = limitedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
@@ -2373,16 +3557,12 @@
                                 {
                                     label: 'Cash',
                                     data: cash,
-                                    backgroundColor: 'rgba(85, 158, 56, 1)',
-                                    borderColor: 'rgba(85, 158, 56, 1)',
-                                    borderWidth: 1
+                                    backgroundColor: 'rgba(85, 158, 56, 1)'
                                 },
                                 {
                                     label: 'Debt',
                                     data: debt,
-                                    backgroundColor: 'rgb(250, 86, 78, 1)',
-                                    borderColor: 'rgb(250, 86, 78, 1)',
-                                    borderWidth: 1
+                                    backgroundColor: 'rgb(250, 86, 78, 1)'
                                 }
                             ],
                             type: 'bar'
@@ -2393,10 +3573,38 @@
                     fullChartDataStore['Cash & Debt'] = {
                         labels: cashDebtDataFull.map(formatPeriodLabel),
                         datasets: [
-                            { label: 'Cash', data: cashDebtDataFull.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null), backgroundColor: 'rgba(85, 158, 56, 1)', borderColor: 'rgba(85, 158, 56, 1)', borderWidth: 1 },
-                            { label: 'Debt', data: cashDebtDataFull.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null), backgroundColor: 'rgb(250, 86, 78, 1)', borderColor: 'rgb(250, 86, 78, 1)', borderWidth: 1 }
+                            { label: 'Cash', data: cashDebtDataFull.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null), backgroundColor: 'rgba(85, 158, 56, 1)' },
+                            { label: 'Debt', data: cashDebtDataFull.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null), backgroundColor: 'rgb(250, 86, 78, 1)' }
                         ],
                         type: 'bar'
+                    };
+                }
+                
+                // 7b. CapEx - BAR CHART
+                const capexData = limitedData.filter(d => d.facts?.CapEx);
+                const capexDataFull = sortedData.filter(d => d.facts?.CapEx);
+                
+                if (capexData.length > 0) {
+                    const capexLabels = capexData.map(formatPeriodLabel);
+                    const capexValues = capexData.map(d => parseFloat(d.facts.CapEx.value));
+                    chartOrder.push({
+                        title: 'CapEx',
+                        data: {
+                            labels: capexLabels,
+                            data: capexValues,
+                            type: 'bar',
+                            backgroundColor: 'rgb(52, 152, 219,1)',
+                            borderColor: 'rgb(52, 152, 219,1)'
+                        }
+                    });
+                    
+                    // Store full CapEx data
+                    fullChartDataStore['CapEx'] = {
+                        labels: capexDataFull.map(formatPeriodLabel),
+                        data: capexDataFull.map(d => parseFloat(d.facts.CapEx.value)),
+                        type: 'bar',
+                        backgroundColor: 'rgb(52, 152, 219,1)',
+                        borderColor: 'rgb(52, 152, 219,1)'
                     };
                 }
                 
@@ -2456,38 +3664,6 @@
 
                 // Render all charts
                 chartOrder.forEach(chart => {
-                    // Get full data for growth calculations
-                    const fullData = fullChartDataStore[chart.title] || chart.data;
-                    
-                    // Calculate growth rates using full data
-                    const growth1y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 1, false);
-                    const growth2y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 2, true);
-                    const growth5y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 5, true);
-                    const growth10y = calculateYoYGrowth({ labels: fullData.labels, datasets: [{ data: fullData.data }] }, 10, true);
-                    
-                    // Build growth badges HTML
-                    let badgesHtml = '';
-                    if (growth1y !== null) {
-                        const sign1y = growth1y >= 0 ? '+' : '';
-                        const negClass1y = growth1y < 0 ? ' negative' : '';
-                        badgesHtml += `<span class="chart-growth-badge${negClass1y}">1Y: ${sign1y}${growth1y.toFixed(2)}%</span>`;
-                    }
-                    if (growth2y !== null) {
-                        const sign2y = growth2y >= 0 ? '+' : '';
-                        const negClass2y = growth2y < 0 ? ' negative' : '';
-                        badgesHtml += `<span class="chart-growth-badge${negClass2y}">2Y: ${sign2y}${growth2y.toFixed(2)}%</span>`;
-                    }
-                    if (growth5y !== null) {
-                        const sign5y = growth5y >= 0 ? '+' : '';
-                        const negClass5y = growth5y < 0 ? ' negative' : '';
-                        badgesHtml += `<span class="chart-growth-badge${negClass5y}">5Y: ${sign5y}${growth5y.toFixed(2)}%</span>`;
-                    }
-                    if (growth10y !== null) {
-                        const sign10y = growth10y >= 0 ? '+' : '';
-                        const negClass10y = growth10y < 0 ? ' negative' : '';
-                        badgesHtml += `<span class="chart-growth-badge${negClass10y}">10Y: ${sign10y}${growth10y.toFixed(2)}%</span>`;
-                    }
-                    
                     const chartCard = document.createElement('div');
                     chartCard.className = 'financial-chart-card';
                     chartCard.innerHTML = `
@@ -2500,7 +3676,6 @@
                             </button>
                         </div>
                         <div class="financial-chart-body"><canvas></canvas></div>
-                        <div class="financial-chart-card-footer">${badgesHtml}</div>
                     `;
                     chartsGrid.appendChild(chartCard);
                     const canvas = chartCard.querySelector('canvas');
@@ -2519,11 +3694,132 @@
                 });
             }
 
+            // Render the price chart with 1-year historical data
+            function renderPriceChart() {
+                if (!storedPriceHistory || storedPriceHistory.length === 0) return;
+                
+                const priceChartCard = document.createElement('div');
+                priceChartCard.className = 'price-chart-card';
+                
+                // Determine if change is positive or negative
+                const isPositive = storedYearChangePct >= 0;
+                const changeIcon = isPositive ? '↑' : '↓';
+                const changeClass = isPositive ? '' : 'negative';
+                const changePctDisplay = storedYearChangePct !== null ? `${isPositive ? '' : ''}${storedYearChangePct.toFixed(2)}%` : '';
+                
+                priceChartCard.innerHTML = `
+                    <div class="price-chart-card-header">
+                        <div class="price-chart-header-left">
+                            <span class="price-chart-title">Price</span>
+                            <span class="price-chart-change-badge ${changeClass}">${changeIcon} ${changePctDisplay}</span>
+                        </div>
+                        <button class="financial-chart-expand-btn" title="Expand chart">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="price-chart-body"><canvas></canvas></div>
+                `;
+                chartsGrid.appendChild(priceChartCard);
+                
+                const canvas = priceChartCard.querySelector('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Prepare data for chart
+                const labels = storedPriceHistory.map(d => d.date);
+                const prices = storedPriceHistory.map(d => d.price);
+                
+                // Store full data for fullscreen
+                const priceChartData = {
+                    labels: labels,
+                    data: prices,
+                    type: 'line',
+                    backgroundColor: 'rgba(140, 208, 126, 1)',
+                    borderColor: 'rgba(50, 189, 24, 1)'
+                };
+                fullChartDataStore['Price'] = priceChartData;
+                
+                // Create the chart
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price',
+                            data: prices,
+                            borderColor: 'rgba(50, 189, 24, 1)',
+                            backgroundColor: 'rgba(140, 208, 126, 1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1,
+                            pointRadius: 0,
+                            pointHoverRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                enabled: false
+                            }
+                        },
+                        interaction: {
+                            mode: null,
+                            intersect: false
+                        },
+                        scales: {
+                            y: {
+                                display: true,
+                                grid: { color: 'rgba(34, 197, 94, 0.1)' },
+                                ticks: {
+                                    color: '#3c4145',
+                                    font: { size: 11, weight: '500' },
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString();
+                                    }
+                                }
+                            },
+                            x: {
+                                display: true,
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#3c4145',
+                                    font: { size: 11 },
+                                    maxRotation: 40,
+                                    minRotation: 40,
+                                    maxTicksLimit: 12
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Add expand button click handler
+                const expandBtn = priceChartCard.querySelector('.financial-chart-expand-btn');
+                expandBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openFullscreen('Price', priceChartData);
+                });
+            }
+
             // Helper function to create Revenue chart from geographic Total
             function createRevenueChart(geoData, maxBars) {
                 // Sort dates
                 const allDates = Object.keys(geoData).sort((a, b) => {
                     const parseKey = (key) => {
+                        // Check TTM format first (e.g., "Q1_2024_TTM")
+                        const ttmMatch = key.match(/^(Q[1-4])_(\d{4})_TTM$/);
+                        if (ttmMatch) {
+                            const period = ttmMatch[1];
+                            const year = parseInt(ttmMatch[2]);
+                            const periodOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+                            return { type: 'period', year, order: periodOrder[period] || 0 };
+                        }
+                        // Regular quarterly/annual format (e.g., "Q1_2024", "FY_2024")
                         const periodMatch = key.match(/^(Q[1-4]|FY)_(\d{4})$/);
                         if (periodMatch) {
                             const period = periodMatch[1];
@@ -2551,10 +3847,12 @@
                     return 0;
                 });
                 
-                // Filter dates that have Total revenue
+                // Filter dates that have Total revenue (must be > 0)
                 const datesWithTotal = allDates.filter(date => {
                     const dateData = geoData[date];
-                    return dateData && dateData.Total !== undefined && dateData.Total !== null;
+                    if (!dateData || dateData.Total === undefined || dateData.Total === null) return false;
+                    const totalValue = parseFloat(dateData.Total);
+                    return !isNaN(totalValue) && totalValue > 0;
                 });
                 
                 if (datesWithTotal.length === 0) return null;
@@ -2564,6 +3862,14 @@
                 
                 // Format labels
                 const labels = limitedDates.map(date => {
+                    // Check TTM format first (e.g., "Q1_2024_TTM")
+                    const ttmMatch = date.match(/^(Q[1-4])_(\d{4})_TTM$/);
+                    if (ttmMatch) {
+                        const period = ttmMatch[1];
+                        const year = ttmMatch[2];
+                        return `${period} ${year}`;
+                    }
+                    // Regular quarterly/annual format
                     const periodMatch = date.match(/^(Q[1-4]|FY)_(\d{4})$/);
                     if (periodMatch) {
                         const period = periodMatch[1];
@@ -2611,8 +3917,16 @@
             function createSegmentChart(title, typeData, colors, stacked, maxBars = 16) {
                 // Sort dates by year and quarter/FY or date string
                 const allDates = Object.keys(typeData).sort((a, b) => {
-                    // First check if it's a period-based key like "Q1_2024" or "FY_2024"
+                    // First check if it's a period-based key like "Q1_2024", "FY_2024", or "Q1_2024_TTM"
                     const parseKey = (key) => {
+                        const ttmMatch = key.match(/^(Q[1-4])_(\d{4})_TTM$/);
+                        if (ttmMatch) {
+                            const period = ttmMatch[1];
+                            const year = parseInt(ttmMatch[2]);
+                            const periodOrder = { 'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4 };
+                            return { type: 'period', year, order: periodOrder[period] || 0 };
+                        }
+                        
                         const periodMatch = key.match(/^(Q[1-4]|FY)_(\d{4})$/);
                         if (periodMatch) {
                             const period = periodMatch[1];
@@ -2677,6 +3991,14 @@
                 
                 // Format labels nicely - use fiscal_period and fiscal_year if available
                 const formattedLabels = dates.map(date => {
+                    // Check if it's a TTM period key like "Q1_2024_TTM"
+                    const ttmMatch = date.match(/^(Q[1-4])_(\d{4})_TTM$/);
+                    if (ttmMatch) {
+                        const period = ttmMatch[1];
+                        const year = ttmMatch[2];
+                        return `${period} ${year}`;
+                    }
+                    
                     // Check if it's a period key like "Q1_2024" or "FY_2024"
                     const periodMatch = date.match(/^(Q[1-4]|FY)_(\d{4})$/);
                     if (periodMatch) {
@@ -2777,9 +4099,7 @@
                     return {
                         label: segmentName,
                         data: data,
-                        backgroundColor: backgroundColor,
-                        borderColor: backgroundColor,
-                        borderWidth: 1
+                        backgroundColor: backgroundColor
                     };
                 });
 
@@ -2794,7 +4114,14 @@
                 };
             }
             
-            getFinancialDataBtn.addEventListener('click', fetchFinancialData);
+            getFinancialDataBtn.addEventListener('click', () => {
+                const ticker = financialTickerInput.value.trim();
+                if (!isValidTicker(ticker)) {
+                    showToast('Please select a valid ticker from the suggestions.', true);
+                    return;
+                }
+                fetchFinancialData();
+            });
             
             // Period toggle event listeners
             quarterlyBtn.addEventListener('click', () => updatePeriodView('quarterly'));
