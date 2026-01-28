@@ -1846,13 +1846,13 @@
             // ===========================================
 
             // ===========================================
-            // LOGO CACHING SYSTEM
+            // LOGO CACHING SYSTEM (Base64 Data URLs)
             // ===========================================
             
             const LOGO_CACHE_KEY = 'dcf_logo_cache';
             const LOGO_CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
             
-            // Get cached logo URL for a ticker
+            // Get cached logo as base64 data URL
             function getCachedLogo(ticker) {
                 try {
                     const storedCache = localStorage.getItem(LOGO_CACHE_KEY);
@@ -1868,16 +1868,21 @@
                         return null;
                     }
                     
-                    return entry.url;
+                    return entry.dataUrl; // Return base64 data URL
                 } catch (e) {
                     console.warn('[Logo Cache] Error reading cache:', e);
                     return null;
                 }
             }
             
-            // Store logo URL in cache
-            function setCachedLogo(ticker, url) {
+            // Store logo as base64 data URL in cache
+            function setCachedLogo(ticker, dataUrl) {
                 try {
+                    // Only cache data URLs (base64), not regular URLs
+                    if (!dataUrl || !dataUrl.startsWith('data:')) {
+                        return;
+                    }
+                    
                     let cache = {};
                     const storedCache = localStorage.getItem(LOGO_CACHE_KEY);
                     if (storedCache) {
@@ -1885,41 +1890,86 @@
                     }
                     
                     cache[ticker.toUpperCase()] = {
-                        url: url,
+                        dataUrl: dataUrl,
                         timestamp: Date.now()
                     };
                     
-                    // Limit cache size (keep last 200 logos)
+                    // Limit cache size (keep last 100 logos - reduced due to base64 size)
                     const keys = Object.keys(cache);
-                    if (keys.length > 200) {
+                    if (keys.length > 100) {
                         const sortedKeys = keys.sort((a, b) => cache[a].timestamp - cache[b].timestamp);
-                        const toRemove = sortedKeys.slice(0, keys.length - 200);
+                        const toRemove = sortedKeys.slice(0, keys.length - 100);
                         toRemove.forEach(k => delete cache[k]);
                     }
                     
                     localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(cache));
+                    console.log(`[Logo Cache] STORED ${ticker}`);
                 } catch (e) {
-                    console.warn('[Logo Cache] Error writing cache:', e);
+                    // localStorage might be full, try clearing old entries
+                    if (e.name === 'QuotaExceededError') {
+                        console.warn('[Logo Cache] Storage full, clearing old logos');
+                        try {
+                            localStorage.removeItem(LOGO_CACHE_KEY);
+                        } catch (e2) {}
+                    } else {
+                        console.warn('[Logo Cache] Error writing cache:', e);
+                    }
                 }
             }
             
-            // Get logo URL with caching (returns cached URL or primary URL)
+            // Convert image to base64 data URL
+            function imageToBase64(img) {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || 32;
+                    canvas.height = img.naturalHeight || 32;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    return canvas.toDataURL('image/png');
+                } catch (e) {
+                    // CORS error - can't convert cross-origin image
+                    console.warn('[Logo Cache] Cannot convert to base64 (CORS):', e);
+                    return null;
+                }
+            }
+            
+            // Get logo URL - returns cached base64 or fetch URL
             function getLogoUrl(ticker, token = 'pk_RQ-JlIhmQEOm6yeZvHsSKA') {
-                const cachedUrl = getCachedLogo(ticker);
-                if (cachedUrl) {
+                const cached = getCachedLogo(ticker);
+                if (cached) {
                     console.log(`[Logo Cache] HIT for ${ticker}`);
-                    return cachedUrl;
+                    return cached; // Return base64 data URL - NO network request!
                 }
                 console.log(`[Logo Cache] MISS for ${ticker}`);
                 return `https://img.logo.dev/ticker/${ticker}?token=${token}`;
             }
             
-            // Handle logo load success - cache the working URL
+            // Handle logo load success - convert to base64 and cache
             function onLogoLoad(img, ticker) {
-                setCachedLogo(ticker, img.src);
+                // Use fetch to get image as blob and convert to base64
+                // This avoids CORS issues with canvas
+                const imgUrl = img.src;
+                if (imgUrl.startsWith('data:')) {
+                    // Already a data URL, no need to cache again
+                    return;
+                }
+                
+                fetch(imgUrl)
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const base64 = reader.result;
+                            setCachedLogo(ticker, base64);
+                        };
+                        reader.readAsDataURL(blob);
+                    })
+                    .catch(e => {
+                        console.warn(`[Logo Cache] Failed to cache ${ticker}:`, e);
+                    });
             }
             
-            // Handle logo error - try fallback and cache if successful
+            // Handle logo error - try fallback
             function onLogoError(img, ticker, token = 'pk_RQ-JlIhmQEOm6yeZvHsSKA') {
                 const fallbackUrl = `https://img.logo.dev/${ticker.toLowerCase()}.com?token=${token}`;
                 img.src = fallbackUrl;
@@ -1939,7 +1989,7 @@
                 };
             }
             
-            
+
             async function fetchTickers() {
                 // Check if we already have tickers in memory
                 if (cachedTickers && cachedTickers.length > 0) {
