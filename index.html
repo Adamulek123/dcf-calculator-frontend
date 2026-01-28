@@ -1845,7 +1845,101 @@
             // END FINANCIAL DATA CACHING SYSTEM
             // ===========================================
 
-            // Load tickers from localStorage cache or fetch from API
+            // ===========================================
+            // LOGO CACHING SYSTEM
+            // ===========================================
+            
+            const LOGO_CACHE_KEY = 'dcf_logo_cache';
+            const LOGO_CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+            
+            // Get cached logo URL for a ticker
+            function getCachedLogo(ticker) {
+                try {
+                    const storedCache = localStorage.getItem(LOGO_CACHE_KEY);
+                    if (!storedCache) return null;
+                    
+                    const cache = JSON.parse(storedCache);
+                    const entry = cache[ticker.toUpperCase()];
+                    
+                    if (!entry) return null;
+                    
+                    // Check if expired
+                    if (Date.now() - entry.timestamp > LOGO_CACHE_EXPIRY_MS) {
+                        return null;
+                    }
+                    
+                    return entry.url;
+                } catch (e) {
+                    console.warn('[Logo Cache] Error reading cache:', e);
+                    return null;
+                }
+            }
+            
+            // Store logo URL in cache
+            function setCachedLogo(ticker, url) {
+                try {
+                    let cache = {};
+                    const storedCache = localStorage.getItem(LOGO_CACHE_KEY);
+                    if (storedCache) {
+                        cache = JSON.parse(storedCache);
+                    }
+                    
+                    cache[ticker.toUpperCase()] = {
+                        url: url,
+                        timestamp: Date.now()
+                    };
+                    
+                    // Limit cache size (keep last 200 logos)
+                    const keys = Object.keys(cache);
+                    if (keys.length > 200) {
+                        const sortedKeys = keys.sort((a, b) => cache[a].timestamp - cache[b].timestamp);
+                        const toRemove = sortedKeys.slice(0, keys.length - 200);
+                        toRemove.forEach(k => delete cache[k]);
+                    }
+                    
+                    localStorage.setItem(LOGO_CACHE_KEY, JSON.stringify(cache));
+                } catch (e) {
+                    console.warn('[Logo Cache] Error writing cache:', e);
+                }
+            }
+            
+            // Get logo URL with caching (returns cached URL or primary URL)
+            function getLogoUrl(ticker, token = 'pk_RQ-JlIhmQEOm6yeZvHsSKA') {
+                const cachedUrl = getCachedLogo(ticker);
+                if (cachedUrl) {
+                    console.log(`[Logo Cache] HIT for ${ticker}`);
+                    return cachedUrl;
+                }
+                console.log(`[Logo Cache] MISS for ${ticker}`);
+                return `https://img.logo.dev/ticker/${ticker}?token=${token}`;
+            }
+            
+            // Handle logo load success - cache the working URL
+            function onLogoLoad(img, ticker) {
+                setCachedLogo(ticker, img.src);
+            }
+            
+            // Handle logo error - try fallback and cache if successful
+            function onLogoError(img, ticker, token = 'pk_RQ-JlIhmQEOm6yeZvHsSKA') {
+                const fallbackUrl = `https://img.logo.dev/${ticker.toLowerCase()}.com?token=${token}`;
+                img.src = fallbackUrl;
+                img.onerror = null; // Prevent infinite loop
+            }
+            
+            
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+            
+            
             async function fetchTickers() {
                 // Check if we already have tickers in memory
                 if (cachedTickers && cachedTickers.length > 0) {
@@ -1936,13 +2030,14 @@
                     return;
                 }
 
-                // Render suggestions
+                // Render suggestions with cached logos
                 tickerAutocomplete.innerHTML = suggestions.map(ticker => `
                     <div class="ticker-suggestion" data-symbol="${ticker.symbol}">
                         <img class="ticker-suggestion-logo" 
-                             src="https://img.logo.dev/ticker/${ticker.symbol}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA" 
+                             src="${getLogoUrl(ticker.symbol)}" 
                              alt="${ticker.symbol}"
-                             onerror="this.src='https://img.logo.dev/${ticker.symbol.toLowerCase()}.com?token=pk_RQ-JlIhmQEOm6yeZvHsSKA'; this.onerror=null;">
+                             onload="window.dcfOnLogoLoad && window.dcfOnLogoLoad(this, '${ticker.symbol}')"
+                             onerror="window.dcfOnLogoError && window.dcfOnLogoError(this, '${ticker.symbol}')">
                         <span class="ticker-suggestion-symbol">${ticker.symbol}</span>
                         <div class="ticker-suggestion-info">
                             <span class="ticker-suggestion-name">${ticker.name || ''}</span>
@@ -1953,6 +2048,10 @@
 
                 tickerAutocomplete.classList.remove('hidden');
             }
+            
+            // Expose logo handlers globally for inline event handlers
+            window.dcfOnLogoLoad = onLogoLoad;
+            window.dcfOnLogoError = onLogoError;
 
             // Handle suggestion click
             tickerAutocomplete.addEventListener('click', (e) => {
@@ -1966,9 +2065,14 @@
                 }
             });
 
-            // Handle input events
+            // Debounced version of showTickerSuggestions (200ms delay)
+            const debouncedShowSuggestions = debounce((query) => {
+                showTickerSuggestions(query);
+            }, 200);
+            
+            // Handle input events with debounce
             financialTickerInput.addEventListener('input', (e) => {
-                showTickerSuggestions(e.target.value.trim());
+                debouncedShowSuggestions(e.target.value.trim());
             });
 
             // Handle focus - show suggestions if input has 2+ chars
@@ -2571,8 +2675,10 @@
                 
                 // Update header
                 const ticker = financialTickerInput.value.trim().toUpperCase();
-                fullscreenCompanyLogo.src = `https://img.logo.dev/ticker/${ticker}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
+                fullscreenCompanyLogo.src = getLogoUrl(ticker, 'pk_RQ-JlIhmQEOm6yeZvHsSKA');
                 fullscreenCompanyLogo.alt = `${ticker} logo`;
+                fullscreenCompanyLogo.onload = () => onLogoLoad(fullscreenCompanyLogo, ticker);
+                fullscreenCompanyLogo.onerror = () => onLogoError(fullscreenCompanyLogo, ticker, 'pk_RQ-JlIhmQEOm6yeZvHsSKA');
                 
                 // Build title with period mode if TTM
                 let displayTitle = title;
@@ -2966,9 +3072,11 @@
                         companyName = basicData[0].company_name || ticker;
                     }
                     
-                    // Update company info display
-                    financialCompanyLogo.src = `https://img.logo.dev/ticker/${ticker}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
+                    // Update company info display with cached logo
+                    financialCompanyLogo.src = getLogoUrl(ticker, 'pk_RQ-JlIhmQEOm6yeZvHsSKA');
                     financialCompanyLogo.alt = `${companyName} logo`;
+                    financialCompanyLogo.onload = () => onLogoLoad(financialCompanyLogo, ticker);
+                    financialCompanyLogo.onerror = () => onLogoError(financialCompanyLogo, ticker, 'pk_RQ-JlIhmQEOm6yeZvHsSKA');
                     financialCompanyName.textContent = companyName;
                     financialCompanyTicker.textContent = `${ticker} | ${priceData?.exchange || 'NASDAQ'}`;
                     financialCompanyPrice.textContent = priceData?.price ? `$${priceData.price.toFixed(2)}` : 'N/A';
