@@ -3699,13 +3699,13 @@
                 }
 
                 // 7. Cash & Debt - BAR CHART for usd (clustered)
-                const cashDebtData = limitedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
-                const cashDebtDataFull = sortedData.filter(d => d.facts?.CashAndCashEquivalentsAtCarryingValue || d.facts?.LiabilitiesCurrent);
+                const cashDebtData = limitedData.filter(d => d.facts?.CashCashEquivalentsAndShortTermInvestments || d.facts?.LongTermDebtNoncurrent);
+                const cashDebtDataFull = sortedData.filter(d => d.facts?.CashCashEquivalentsAndShortTermInvestments || d.facts?.LongTermDebtNoncurrent);
                 
                 if (cashDebtData.length > 0) {
                     const cashDebtLabels = cashDebtData.map(formatPeriodLabel);
-                    const cash = cashDebtData.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null);
-                    const debt = cashDebtData.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null);
+                    const cash = cashDebtData.map(d => d.facts?.CashCashEquivalentsAndShortTermInvestments ? parseFloat(d.facts.CashCashEquivalentsAndShortTermInvestments.value) : null);
+                    const debt = cashDebtData.map(d => d.facts?.LongTermDebtNoncurrent ? parseFloat(d.facts.LongTermDebtNoncurrent.value) : null);
                     
                     chartOrder.push({
                         title: 'Cash & Debt',
@@ -3731,8 +3731,8 @@
                     fullChartDataStore['Cash & Debt'] = {
                         labels: cashDebtDataFull.map(formatPeriodLabel),
                         datasets: [
-                            { label: 'Cash', data: cashDebtDataFull.map(d => d.facts?.CashAndCashEquivalentsAtCarryingValue ? parseFloat(d.facts.CashAndCashEquivalentsAtCarryingValue.value) : null), backgroundColor: 'rgba(85, 158, 56, 1)' },
-                            { label: 'Debt', data: cashDebtDataFull.map(d => d.facts?.LiabilitiesCurrent ? parseFloat(d.facts.LiabilitiesCurrent.value) : null), backgroundColor: 'rgb(250, 86, 78, 1)' }
+                            { label: 'Cash', data: cashDebtDataFull.map(d => d.facts?.CashCashEquivalentsAndShortTermInvestments ? parseFloat(d.facts.CashCashEquivalentsAndShortTermInvestments.value) : null), backgroundColor: 'rgba(85, 158, 56, 1)' },
+                            { label: 'Debt', data: cashDebtDataFull.map(d => d.facts?.LongTermDebtNoncurrent ? parseFloat(d.facts.LongTermDebtNoncurrent.value) : null), backgroundColor: 'rgb(250, 86, 78, 1)' }
                         ],
                         type: 'bar'
                     };
