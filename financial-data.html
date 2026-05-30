@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com;">
+    <meta name="theme-color" content="#0b101a">
+    <title>Financial Data | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="financial-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <div class="app-layout">
+        <!-- Sidebar injected by sidebar.js -->
+
+        <main id="main-content" class="app-main">
+            <div class="insights-page-container">
+                <!-- Header Card with Search and Company Info -->
+                <div class="financial-header-card">
+                    <div class="financial-search-wrapper" id="financialSearchWrapper">
+                        <input type="text" autocomplete="off" id="financialTickerInput" placeholder="Enter a ticker to begin.">
+                        <button id="getFinancialDataBtn" class="financial-search-btn">Search</button>
+                        <div id="tickerAutocomplete" class="ticker-autocomplete hidden"></div>
+                    </div>
+
+                    <!-- Company Info Section (inside header) -->
+                    <div id="financialCompanyInfo" class="financial-company-info hidden">
+                        <div class="financial-company-row">
+                            <img id="financialCompanyLogo" class="financial-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
+                            <div class="financial-company-details">
+                                <span id="financialCompanyName" class="financial-company-name"></span>
+                                <span id="financialCompanyTicker" class="financial-company-ticker"></span>
+                            </div>
+                        </div>
+                        <div class="financial-price-row">
+                            <span id="financialCompanyPrice" class="financial-company-price"></span>
+                            <span id="financialPriceChange" class="financial-price-change"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics Section -->
+                <div id="financialMetricsSection" class="financial-metrics-section hidden">
+                    <div class="metrics-grid">
+                        <!-- Valuation Column -->
+                        <div class="metrics-column">
+                            <div class="metrics-column-title">Valuation</div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Market Cap:</span>
+                                <span class="metrics-value" id="metricMarketCap">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">PE (TTM|FWD):</span>
+                                <span class="metrics-value" id="metricPE">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Price To Sales:</span>
+                                <span class="metrics-value" id="metricPriceToSales">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">EV To EBITDA:</span>
+                                <span class="metrics-value" id="metricEvToEbitda">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Price to Book:</span>
+                                <span class="metrics-value" id="metricPriceToBook">-</span>
+                            </div>
+                        </div>
+                        <!-- Cash Flow Column -->
+                        <div class="metrics-column">
+                            <div class="metrics-column-title">Cash Flow</div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Free Cash Flow Yield:</span>
+                                <span class="metrics-value" id="metricFcfYield">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">SBC Adj. Free Cash Flow Yield:</span>
+                                <span class="metrics-value" id="metricSbcAdjFcfYield">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">SBC Impact:</span>
+                                <span class="metrics-value" id="metricSbcImpact">-</span>
+                            </div>
+                        </div>
+                        <!-- Margins & Growth Column -->
+                        <div class="metrics-column">
+                            <div class="metrics-column-title">Margins & Growth</div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Profit Margin:</span>
+                                <span class="metrics-value" id="metricProfitMargin">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Operating Margin:</span>
+                                <span class="metrics-value" id="metricOperatingMargin">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Quarterly Earnings (YoY):</span>
+                                <span class="metrics-value" id="metricEarningsGrowth">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Quarterly Revenue (YoY):</span>
+                                <span class="metrics-value" id="metricRevenueGrowth">-</span>
+                            </div>
+                        </div>
+                        <!-- Balance Column -->
+                        <div class="metrics-column">
+                            <div class="metrics-column-title">Balance</div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Cash:</span>
+                                <span class="metrics-value" id="metricCash">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Debt:</span>
+                                <span class="metrics-value" id="metricDebt">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Net:</span>
+                                <span class="metrics-value" id="metricNet">-</span>
+                            </div>
+                        </div>
+                        <!-- Dividend Column -->
+                        <div class="metrics-column">
+                            <div class="metrics-column-title">Dividend</div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Dividend Yield:</span>
+                                <span class="metrics-value" id="metricDividendYield">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Payout Ratio:</span>
+                                <span class="metrics-value" id="metricPayoutRatio">-</span>
+                            </div>
+                            <div class="metrics-row">
+                                <span class="metrics-label">Payout Date:</span>
+                                <span class="metrics-value" id="metricPayoutDate">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Section -->
+                <div class="financial-charts-section">
+                    <!-- Period Toggle -->
+                    <div id="financialPeriodToggle" class="financial-period-toggle">
+                        <div class="financial-period-toggle-group">
+                            <button id="quarterlyBtn" class="financial-period-btn active">Quarterly</button>
+                            <button id="quarterlyTTMBtn" class="financial-period-btn">Quarterly (TTM)</button>
+                            <button id="annuallyBtn" class="financial-period-btn">Annually</button>
+                        </div>
+                    </div>
+
+                    <!-- Charts Grid -->
+                    <div class="financial-charts-grid" id="chartsGrid"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Fullscreen Chart Modal -->
+    <div id="fullscreen-chart-modal" class="hidden">
+        <div id="fullscreen-chart-container">
+            <div class="fullscreen-header">
+                <div class="fullscreen-header-left">
+                    <img id="fullscreen-company-logo" class="fullscreen-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
+                    <h2 id="fullscreen-chart-title" class="fullscreen-chart-title"></h2>
+                </div>
+                <div class="fullscreen-header-right">
+                    <div id="fcf-toggle-container" class="fcf-toggle-group hidden">
+                        <button class="fcf-toggle-btn active" data-fcf-view="fcf">FCF</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="fcf-sbc">FCF & SBC</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="sbc-adj-fcf">SBC Adj. FCF</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="fcf-per-share">FCF Per Share</button>
+                        <button class="fcf-toggle-btn" data-fcf-view="sbc-adj-fcf-per-share">SBC Adj. FCF Per Share</button>
+                    </div>
+                    <div class="fullscreen-period-dropdown">
+                        <button id="fullscreen-period-btn" class="fullscreen-period-btn">
+                            <span id="fullscreen-period-text">All</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </button>
+                        <div id="fullscreen-period-menu" class="fullscreen-period-menu hidden">
+                            <button class="fullscreen-period-option active" data-period="all">All</button>
+                            <button class="fullscreen-period-option" data-period="1y">1 Year</button>
+                            <button class="fullscreen-period-option" data-period="2y">2 Years</button>
+                            <button class="fullscreen-period-option" data-period="5y">5 Years</button>
+                            <button class="fullscreen-period-option" data-period="10y">10 Years</button>
+                        </div>
+                    </div>
+                    <button id="close-fullscreen-btn">&times;</button>
+                </div>
+            </div>
+            <div class="fullscreen-chart-body">
+                <canvas id="fullscreen-canvas"></canvas>
+            </div>
+            <div class="fullscreen-footer">
+                <span id="fullscreen-growth-1y" class="fullscreen-growth-badge">1Y: --</span>
+                <span id="fullscreen-growth-2y" class="fullscreen-growth-badge">2Y: --</span>
+                <span id="fullscreen-growth-5y" class="fullscreen-growth-badge">5Y: --</span>
+                <span id="fullscreen-growth-10y" class="fullscreen-growth-badge">10Y: --</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script type="module">
+        import { runAuthGuard } from "./js/auth-guard.js";
+        import { renderSidebar } from "./js/sidebar.js";
+        import "./js/financial-data.js";
+        runAuthGuard();
+        renderSidebar();
+    </script>
+</body>
+</html>

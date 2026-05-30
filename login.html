@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://accounts.google.com https://www.gstatic.com;
+                   frame-src 'self' https://accounts.google.com https://dcf123-b6cb1.firebaseapp.com https://apis.google.com;">
+    <meta name="theme-color" content="#0b101a">
+    <title>Login | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <main id="main-content" class="login-shell">
+
+        <section class="login-card login-card--auth" aria-label="Sign in">
+
+                <a href="index.html" class="login-back" aria-label="Back to homepage">
+                    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 2L4 7l5 5"/>
+                    </svg>
+                    Back
+                </a>
+
+                <h1>Welcome back</h1>
+                <p>Sign in to continue to your DCF workspace.</p>
+
+                <form id="loginForm" class="stack auth-form" novalidate style="margin-top:1.25rem">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" name="email" autocomplete="email" required>
+
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
+
+                    <button type="submit" id="loginBtn" class="btn btn-solid" style="margin-top:0.25rem">Login</button>
+                </form>
+
+                <p id="loginMessage" class="auth-message" role="status" aria-live="polite"></p>
+
+                <div class="auth-divider"><span>or</span></div>
+
+                <button type="button" id="googleLoginBtn" class="btn btn-google">
+                    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+                        <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                    </svg>
+                    Sign in with Google
+                </button>
+
+                <div class="stack" style="margin-top:1rem">
+                    <a class="btn btn-ghost" href="register.html">Create account</a>
+                </div>
+
+        </section>
+
+    </main>
+
+    <script type="module">
+        import { loginWithEmail, loginWithGoogle, getUserMessage } from "./js/auth.js";
+        import { runAuthGuard } from "./js/auth-guard.js";
+
+        runAuthGuard();
+
+        const loginForm    = document.getElementById("loginForm");
+        const loginBtn     = document.getElementById("loginBtn");
+        const googleLoginBtn = document.getElementById("googleLoginBtn");
+        const messageEl    = document.getElementById("loginMessage");
+
+        function setMessage(message, isError = false) {
+            messageEl.textContent = message;
+            messageEl.classList.toggle("error", isError);
+            messageEl.classList.toggle("success", !isError && Boolean(message));
+        }
+
+        googleLoginBtn.addEventListener("click", async () => {
+            setMessage("");
+            googleLoginBtn.disabled = true;
+            googleLoginBtn.textContent = "Signing in with Google...";
+            try {
+                await loginWithGoogle();
+                setMessage("Signed in with Google. Redirecting...");
+                window.location.href = "dcf-calculator.html";
+            } catch (error) {
+                const code = error?.code || "";
+                const msg = code === "auth/popup-closed-by-user" ? "Sign-in window closed."
+                    : code === "auth/cancelled-popup-request" ? "Sign-in cancelled."
+                    : error.message || "Google Sign-In failed.";
+                setMessage(`Google Sign-In failed: ${msg}`, true);
+            } finally {
+                googleLoginBtn.disabled = false;
+                googleLoginBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+                        <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                    </svg>
+                    Sign in with Google`;
+            }
+        });
+
+        loginForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setMessage("");
+
+            const email    = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = "Logging in...";
+
+            try {
+                await loginWithEmail(email, password);
+                setMessage("Login successful. Redirecting...");
+                window.location.href = "dcf-calculator.html";
+            } catch (error) {
+                setMessage(`Login failed: ${getUserMessage(error, "login")}`, true);
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.textContent = "Login";
+            }
+        });
+    </script>
+</body>
+</html>

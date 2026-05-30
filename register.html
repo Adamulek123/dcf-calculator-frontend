@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com;">
+    <meta name="theme-color" content="#0b101a">
+    <title>Register | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="login-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <main id="main-content" class="login-shell">
+
+        <section class="login-card login-card--auth" aria-label="Create account">
+
+                <a href="login.html" class="login-back" aria-label="Back to login">
+                    <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M9 2L4 7l5 5"/>
+                    </svg>
+                    Back to login
+                </a>
+
+                <h1>Create your account</h1>
+                <p>Register with your email to start using the DCF Calculator.</p>
+
+                <form id="registerForm" class="stack auth-form" novalidate style="margin-top:1.25rem">
+                    <label for="registerEmail">Email</label>
+                    <input type="email" id="registerEmail" name="email" autocomplete="email" required>
+
+                    <label for="registerPassword">Password</label>
+                    <input type="password" id="registerPassword" name="password" autocomplete="new-password" minlength="6" required>
+
+                    <button type="submit" id="registerBtn" class="btn btn-solid" style="margin-top:0.25rem">Create account</button>
+                </form>
+
+                <p id="registerMessage" class="auth-message" role="status" aria-live="polite"></p>
+
+        </section>
+
+    </main>
+
+    <script type="module">
+        import { registerWithEmail, getUserMessage } from "./js/auth.js";
+        import { runAuthGuard } from "./js/auth-guard.js";
+
+        runAuthGuard();
+
+        const registerForm = document.getElementById("registerForm");
+        const registerBtn  = document.getElementById("registerBtn");
+        const messageEl    = document.getElementById("registerMessage");
+
+        function setMessage(message, isError = false) {
+            messageEl.textContent = message;
+            messageEl.classList.toggle("error", isError);
+            messageEl.classList.toggle("success", !isError && Boolean(message));
+        }
+
+        registerForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            setMessage("");
+
+            const email    = document.getElementById("registerEmail").value.trim();
+            const password = document.getElementById("registerPassword").value;
+
+            registerBtn.disabled = true;
+            registerBtn.textContent = "Creating account...";
+
+            try {
+                await registerWithEmail(email, password);
+                setMessage("Registration successful. Verify your email, then login.");
+                registerForm.reset();
+            } catch (error) {
+                setMessage(`Registration failed: ${getUserMessage(error, "register")}`, true);
+            } finally {
+                registerBtn.disabled = false;
+                registerBtn.textContent = "Create account";
+            }
+        });
+    </script>
+</body>
+</html>

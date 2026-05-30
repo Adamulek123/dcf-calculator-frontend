@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com;">
+    <meta name="theme-color" content="#0b101a">
+    <title>DCF Calculator | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dcf-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <div class="app-layout">
+        <!-- Sidebar injected by sidebar.js -->
+
+        <main id="main-content" class="app-main">
+            <div id="appContent" class="dcf-container">
+                <!-- Left Panel — Inputs -->
+                <div class="left-panel">
+                    <div class="header-section" style="flex-direction: row;">
+                        <div class="search-wrapper">
+                            <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., GOOG)">
+                            <div id="tickerAutocomplete" class="ticker-autocomplete hidden"></div>
+                        </div>
+                        <button id="getCurrentDataBtn" class="primary-button">Search</button>
+                    </div>
+
+                    <div class="tab-buttons">
+                        <button id="earningsTabBtn" class="tab-button active">Earnings</button>
+                        <button id="cashFlowTabBtn" class="tab-button">Cash Flow</button>
+                    </div>
+
+                    <!-- Earnings Section -->
+                    <div id="earningsSection">
+                        <h2 class="section-title">Assumptions (Earnings)</h2>
+                        <div class="metric-grid">
+                            <div class="metric-item"><p class="metric-label">EPS (TTM)</p><p id="currentEps" class="metric-value">$0.00</p></div>
+                            <div class="metric-item"><p class="metric-label">PE (TTM)</p><p id="currentPe" class="metric-value">0.00</p></div>
+                            <div class="metric-item"><p class="metric-label">EPS Growth</p><p id="epsGrowth" class="metric-value">0.0%</p></div>
+                        </div>
+                        <div class="input-group"><label for="epsTtmInput">EPS (TTM)</label><div class="input-field-wrapper"><span class="currency-symbol">$</span><input type="number" id="epsTtmInput" value="0.00" step="0.01" readonly></div></div>
+                        <div class="input-group"><label for="growthRateInput">EPS Growth Rate</label><div class="input-field-wrapper"><input type="number" id="growthRateInput" placeholder="e.g., 15" step="0.1"><span class="percentage-symbol">%</span></div></div>
+                        <div class="input-group"><label for="peMultipleInput">Appropriate PE Multiple</label><div class="input-field-wrapper"><input type="number" id="peMultipleInput" placeholder="e.g., 20" step="0.1"></div></div>
+                    </div>
+
+                    <!-- Cash Flow Section -->
+                    <div id="cashFlowSection" class="hidden">
+                        <h2 class="section-title">Assumptions (Cash Flow)</h2>
+                        <div class="metric-grid">
+                            <div class="metric-item"><p class="metric-label">FCF/Share (TTM)</p><p id="currentFcfShare" class="metric-value">$0.00</p></div>
+                            <div class="metric-item"><p class="metric-label">FCF Yield (TTM)</p><p id="fcfYield" class="metric-value">0.0%</p></div>
+                            <div class="metric-item"><p class="metric-label">SBC Impact</p><p id="sbcImpact" class="metric-value">0.0%</p></div>
+                        </div>
+                        <div class="input-group"><label for="fcfShareInput">FCF/Share (TTM)</label><div class="input-field-wrapper"><span class="currency-symbol">$</span><input type="number" id="fcfShareInput" value="0.00" step="0.01" readonly></div></div>
+                        <div class="input-group"><label for="fcfGrowthRateInput">FCF Growth Rate</label><div class="input-field-wrapper"><input type="number" id="fcfGrowthRateInput" placeholder="e.g., 12" step="0.1"><span class="percentage-symbol">%</span></div></div>
+                        <div class="input-group"><label for="fcfYieldInput">Appropriate FCF Yield</label><div class="input-field-wrapper"><input type="number" id="fcfYieldInput" placeholder="e.g., 5" step="0.1"><span class="percentage-symbol">%</span></div></div>
+                    </div>
+
+                    <div class="input-group"><label for="desiredReturnInput">Desired Return</label><div class="input-field-wrapper"><input type="number" id="desiredReturnInput" placeholder="e.g., 10" step="0.1"><span class="percentage-symbol">%</span></div></div>
+
+                    <div class="button-group">
+                        <button id="calculatePriceBtn" class="primary-button">Calculate</button>
+                        <button id="saveCalculationBtn" class="primary-button bg-green-600">Save</button>
+                        <button id="clearBtn" class="primary-button bg-gray-600">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Right Panel — Results -->
+                <div class="right-panel">
+                    <div id="companyInfo" class="company-info hidden-state">
+                        <div class="company-logo" id="companyLogo"></div>
+                        <div><p id="companyName" class="company-name"></p></div>
+                        <p id="currentStockPrice" class="current-price"></p>
+                    </div>
+
+                    <div id="projectionPlaceholder" class="projection-placeholder">
+                        <h3>5-Year Projection</h3>
+                        <p>Enter a stock ticker and your assumptions, then click "Calculate" to see the projected stock price and potential returns.</p>
+                    </div>
+
+                    <div id="projectionOutput" class="hidden">
+                        <h2 class="section-title">5-Year Projection</h2>
+                        <div id="calculationResults" class="projection-results">
+                            <p class="projection-result-row">Return from today: <strong id="returnFromTodayDisplay" class="projection-value">N/A</strong></p>
+                            <p class="projection-result-row">Entry Price for Desired Return: <strong id="entryPriceDisplay" class="projection-value">N/A</strong></p>
+                            <p class="projection-result-row">Desired Return: <strong id="desiredReturnDisplay" class="projection-value">N/A</strong></p>
+                            <p class="projection-result-row">Price After 5 Years: <strong id="priceAfter5YearsDisplay" class="projection-value">N/A</strong></p>
+                        </div>
+                        <div class="dcf-chart-container">
+                            <canvas id="priceChart"></canvas>
+                        </div>
+                        <div id="calculationMessage" class="calculation-message"></div>
+                    </div>
+
+                    <div class="saved-calculations-list saved-section-margin">
+                        <h3>Saved Calculations</h3>
+                        <div id="savedCalculationsContainer"><p class="muted">No saved calculations yet.</p></div>
+                        <button id="loadCalculationsBtn" class="primary-button bg-indigo-600 w-full" style="margin-top: 1rem;">Load</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmationModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 id="modalTitle">Confirm Action</h3>
+            <p id="modalMessage">Are you sure?</p>
+            <div class="modal-buttons">
+                <button id="confirmYesBtn" class="confirm-btn">Yes</button>
+                <button id="confirmNoBtn" class="cancel-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script type="module">
+        import { runAuthGuard } from "./js/auth-guard.js";
+        import { renderSidebar } from "./js/sidebar.js";
+        import "./js/dcf-calculator.js";
+        runAuthGuard();
+        renderSidebar();
+    </script>
+</body>
+</html>
