@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;">
+    <meta name="theme-color" content="#0b101a">
+    <title>Portfolio Creator | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="portfolio-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <div class="app-layout">
+        <main id="main-content" class="app-main">
+            <div class="portfolio-page-container">
+                <div class="portfolio-header-card">
+                    <div class="portfolio-header-top">
+                        <h1 class="portfolio-title">Portfolio Creator</h1>
+                        <div class="portfolio-currency-controls">
+                            <label for="portfolioCurrencySelect">Currency</label>
+                            <select id="portfolioCurrencySelect" class="portfolio-select"></select>
+                            <button id="refreshRatesBtn" class="primary-button" type="button">Recalculate</button>
+                        </div>
+                    </div>
+
+                    <div class="portfolio-add-row">
+                        <div class="portfolio-search-wrapper">
+                            <input type="text" id="portfolioTickerInput" autocomplete="off" placeholder="Enter ticker (e.g., AAPL)">
+                            <div id="portfolioTickerAutocomplete" class="ticker-autocomplete hidden"></div>
+                        </div>
+                        <select id="positionSideSelect" class="portfolio-select">
+                            <option value="buy">Buy</option>
+                            <option value="sell">Sell</option>
+                        </select>
+                        <select id="sizingModeSelect" class="portfolio-select">
+                            <option value="shares">Shares</option>
+                            <option value="notional">Notional</option>
+                        </select>
+                        <input id="positionSizeInput" class="portfolio-input" type="number" min="0" step="0.0001" placeholder="Size">
+                        <input id="entryPriceInput" class="portfolio-input" type="number" min="0" step="0.0001" placeholder="Entry price">
+                        <input id="leverageInput" class="portfolio-input" type="number" min="0.01" step="0.01" value="1" placeholder="Leverage">
+                        <button id="addPositionBtn" class="primary-button" type="button">Add</button>
+                    </div>
+
+                    <div class="portfolio-action-row">
+                        <button id="savePortfolioBtn" class="primary-button bg-green-600" type="button">Save Portfolio</button>
+                        <button id="loadPortfolioBtn" class="primary-button bg-indigo-600" type="button">Load Portfolio</button>
+                        <button id="refreshPricesBtn" class="primary-button" type="button">Refresh Prices</button>
+                    </div>
+                </div>
+
+                <div class="portfolio-content-grid">
+                    <section class="portfolio-card">
+                        <h2 class="portfolio-section-title">Positions</h2>
+                        <div id="positionsList" class="portfolio-positions-list">
+                            <p class="muted">No positions yet.</p>
+                        </div>
+                    </section>
+
+                    <section class="portfolio-card">
+                        <h2 class="portfolio-section-title">Position Details</h2>
+                        <div id="positionDetails" class="portfolio-details">
+                            <p class="muted">Select a position to view details.</p>
+                        </div>
+                        <button id="deletePositionBtn" class="primary-button bg-red-600 w-full hidden" type="button">Delete Selected Position</button>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script type="module">
+        import { runAuthGuard } from "./js/auth-guard.js";
+        import { renderSidebar } from "./js/sidebar.js";
+        import "./js/portfolio-creator.js";
+        runAuthGuard();
+        renderSidebar();
+    </script>
+</body>
+</html>
