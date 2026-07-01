@@ -2,6 +2,7 @@ import { apiCall } from "./api.js";
 import { getCachedLogo, setCachedLogo } from "./cache.js";
 
 let cachedTickers = [];
+const autocompleteRequestIds = new WeakMap();
 
 const TICKER_CACHE_KEY = "dcf_tickers_cache";
 const TICKER_CACHE_EXPIRY_KEY = "dcf_tickers_cache_expiry";
@@ -111,10 +112,20 @@ function onLogoError(img, ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Toke
     img.onerror = null;
 }
 
-function showTickerSuggestions(query, tickerAutocomplete = document.getElementById("tickerAutocomplete"), tickers = cachedTickers) {
+function hideTickerSuggestions(tickerAutocomplete = document.getElementById("tickerAutocomplete")) {
+    if (!tickerAutocomplete) return;
+    autocompleteRequestIds.set(tickerAutocomplete, (autocompleteRequestIds.get(tickerAutocomplete) || 0) + 1);
+    tickerAutocomplete.classList.add("hidden");
+}
+
+async function showTickerSuggestions(query, tickerAutocomplete = document.getElementById("tickerAutocomplete"), tickers = cachedTickers) {
     if (!tickerAutocomplete) {
         return;
     }
+
+    const requestId = (autocompleteRequestIds.get(tickerAutocomplete) || 0) + 1;
+    autocompleteRequestIds.set(tickerAutocomplete, requestId);
+    tickerAutocomplete.classList.add("hidden");
 
     if (!query || query.length < 2) {
         tickerAutocomplete.classList.add("hidden");
@@ -133,7 +144,8 @@ function showTickerSuggestions(query, tickerAutocomplete = document.getElementBy
         return;
     }
 
-    tickerAutocomplete.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    const logoLoads = [];
 
     suggestions.forEach((ticker) => {
         const div = document.createElement("div");
@@ -142,18 +154,24 @@ function showTickerSuggestions(query, tickerAutocomplete = document.getElementBy
 
         const img = document.createElement("img");
         img.className = "ticker-suggestion-logo";
-        img.src = getLogoUrl(ticker.symbol);
         img.alt = ticker.symbol;
-        img.onload = function () {
-            if (window.dcfOnLogoLoad) {
-                window.dcfOnLogoLoad(this, ticker.symbol);
-            }
-        };
-        img.onerror = function () {
-            if (window.dcfOnLogoError) {
-                window.dcfOnLogoError(this, ticker.symbol);
-            }
-        };
+        logoLoads.push(new Promise((resolve) => {
+            let triedFallback = false;
+            img.onload = () => {
+                onLogoLoad(img, ticker.symbol);
+                resolve();
+            };
+            img.onerror = () => {
+                if (!triedFallback) {
+                    triedFallback = true;
+                    img.src = `https://img.logo.dev/${ticker.symbol.toLowerCase()}.com?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
+                    return;
+                }
+                img.style.visibility = "hidden";
+                resolve();
+            };
+            img.src = getLogoUrl(ticker.symbol);
+        }));
 
         const symbolSpan = document.createElement("span");
         symbolSpan.className = "ticker-suggestion-symbol";
@@ -177,9 +195,13 @@ function showTickerSuggestions(query, tickerAutocomplete = document.getElementBy
         div.appendChild(symbolSpan);
         div.appendChild(infoDiv);
 
-        tickerAutocomplete.appendChild(div);
+        fragment.appendChild(div);
     });
 
+    await Promise.all(logoLoads);
+    if (autocompleteRequestIds.get(tickerAutocomplete) !== requestId) return;
+
+    tickerAutocomplete.replaceChildren(fragment);
     tickerAutocomplete.classList.remove("hidden");
 }
 
@@ -193,6 +215,7 @@ export {
     isValidTicker,
     fetchTickers,
     showTickerSuggestions,
+    hideTickerSuggestions,
     getLogoUrl,
     onLogoLoad,
     onLogoError

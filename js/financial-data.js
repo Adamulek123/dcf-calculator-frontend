@@ -1,6 +1,6 @@
 import { apiCall, setButtonState } from "./api.js";
 import { getCachedFinancialData, setCachedFinancialData } from "./cache.js";
-import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
+import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, hideTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
 import { createChart, filterChartDataByPeriod, openFullscreen, updateGrowthBadges } from "./charts.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
@@ -996,25 +996,28 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // Ticker search
     const debouncedSuggestions = debounce((query) => showTickerSuggestions(query, els.autocomplete), 180);
-    els.tickerInput.addEventListener("input", (event) => debouncedSuggestions(event.target.value.trim()));
+    els.tickerInput.addEventListener("input", (event) => {
+        hideTickerSuggestions(els.autocomplete);
+        debouncedSuggestions(event.target.value.trim());
+    });
     els.tickerInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
-            els.autocomplete.classList.add("hidden");
+            hideTickerSuggestions(els.autocomplete);
             loadFinancialData();
         } else if (event.key === "Escape") {
-            els.autocomplete.classList.add("hidden");
+            hideTickerSuggestions(els.autocomplete);
         }
     });
     els.autocomplete.addEventListener("click", (event) => {
         const suggestion = event.target.closest(".ticker-suggestion");
         if (!suggestion) return;
         els.tickerInput.value = suggestion.dataset.symbol;
-        els.autocomplete.classList.add("hidden");
+        hideTickerSuggestions(els.autocomplete);
         loadFinancialData();
     });
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".financial-search-wrapper")) {
-            els.autocomplete.classList.add("hidden");
+            hideTickerSuggestions(els.autocomplete);
         }
     });
     els.searchBtn.addEventListener("click", loadFinancialData);

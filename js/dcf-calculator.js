@@ -1,6 +1,6 @@
 import { apiCall, setButtonState } from "./api.js";
 import { showToast } from "./toast.js";
-import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
+import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, hideTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
 import { createChart } from "./charts.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 
@@ -505,7 +505,10 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     const debouncedSuggestions = debounce((query) => showTickerSuggestions(query, tickerAutocomplete), 200);
 
-    tickerInput.addEventListener("input", (event) => debouncedSuggestions(event.target.value.trim()));
+    tickerInput.addEventListener("input", (event) => {
+        hideTickerSuggestions(tickerAutocomplete);
+        debouncedSuggestions(event.target.value.trim());
+    });
     tickerInput.addEventListener("focus", () => {
         const value = tickerInput.value.trim();
         if (value.length >= 2) {
@@ -516,7 +519,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (event.key !== "Enter") {
             return;
         }
-        tickerAutocomplete.classList.add("hidden");
+        hideTickerSuggestions(tickerAutocomplete);
         const ticker = tickerInput.value.trim().toUpperCase();
         if (!isTickerValid(ticker)) {
             showToast("Please enter a valid ticker symbol.", true, 3000, toastContainer);
@@ -531,13 +534,13 @@ window.addEventListener("DOMContentLoaded", async () => {
             return;
         }
         tickerInput.value = suggestion.dataset.symbol;
-        tickerAutocomplete.classList.add("hidden");
+        hideTickerSuggestions(tickerAutocomplete);
         fetchAndPopulateMetrics();
     });
 
     document.addEventListener("click", (event) => {
         if (!event.target.closest(".search-wrapper")) {
-            tickerAutocomplete.classList.add("hidden");
+            hideTickerSuggestions(tickerAutocomplete);
         }
     });
 

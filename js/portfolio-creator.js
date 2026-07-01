@@ -1,7 +1,7 @@
 import { apiCall, setButtonState } from "./api.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
-import { debounce, fetchTickers, isValidTicker, showTickerSuggestions } from "./ticker.js";
+import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, hideTickerSuggestions } from "./ticker.js";
 
 window.addEventListener("DOMContentLoaded", () => {
     const els = {
@@ -413,6 +413,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }, 200);
 
         els.tickerInput.addEventListener("input", (e) => {
+            hideTickerSuggestions(els.autocomplete);
             debouncedSuggestions(String(e.target.value || "").trim());
             maybeAutofillEntryFromTicker(true);
         });
@@ -434,13 +435,13 @@ window.addEventListener("DOMContentLoaded", () => {
             const suggestion = event.target.closest(".ticker-suggestion");
             if (!suggestion) return;
             els.tickerInput.value = suggestion.dataset.symbol;
-            els.autocomplete.classList.add("hidden");
+            hideTickerSuggestions(els.autocomplete);
             await refreshCurrentPrices(true);
             maybeAutofillEntryFromTicker(false);
         });
         document.addEventListener("click", (event) => {
             if (!event.target.closest(".portfolio-search-wrapper")) {
-                els.autocomplete.classList.add("hidden");
+                hideTickerSuggestions(els.autocomplete);
             }
         });
 
