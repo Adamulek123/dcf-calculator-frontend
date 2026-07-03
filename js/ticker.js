@@ -85,25 +85,30 @@ function getLogoUrl(ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is C
     return `https://img.logo.dev/ticker/${ticker}?token=${token}`;
 }
 
-function onLogoLoad(img, ticker) {
+async function onLogoLoad(img, ticker) {
     const imgUrl = img.src;
     if (imgUrl.startsWith("data:")) {
-        return;
+        return imgUrl;
     }
 
-    fetch(imgUrl)
-        .then((response) => response.blob())
-        .then((blob) => {
+    try {
+        const response = await fetch(imgUrl);
+        if (!response.ok) {
+            throw new Error(`Logo request failed with ${response.status}`);
+        }
+        const blob = await response.blob();
+        const base64 = await new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64 = reader.result;
-                setCachedLogo(ticker, base64);
-            };
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error("Unable to read logo data"));
             reader.readAsDataURL(blob);
-        })
-        .catch((e) => {
-            console.warn(`[Logo Cache] Failed to cache ${ticker}:`, e);
         });
+        setCachedLogo(ticker, base64);
+        return base64;
+    } catch (e) {
+        console.warn(`[Logo Cache] Failed to cache ${ticker}:`, e);
+        return null;
+    }
 }
 
 function onLogoError(img, ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is CORS-restricted to the production domain — acceptable risk
@@ -157,8 +162,8 @@ async function showTickerSuggestions(query, tickerAutocomplete = document.getEle
         img.alt = ticker.symbol;
         logoLoads.push(new Promise((resolve) => {
             let triedFallback = false;
-            img.onload = () => {
-                onLogoLoad(img, ticker.symbol);
+            img.onload = async () => {
+                await onLogoLoad(img, ticker.symbol);
                 resolve();
             };
             img.onerror = () => {

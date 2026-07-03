@@ -1,136 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
-    <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self';
-                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-                   font-src https://fonts.gstatic.com;
-                   img-src 'self' https://img.logo.dev data:;
-                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
-    <meta name="theme-color" content="#f4f7fb">
-    <title>Portfolio Creator | DCF Calculator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
+<meta name="theme-color" content="#f5f7fb"><title>Portfolio Creator | DCF Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css">
 </head>
 <body class="portfolio-page">
-    <a class="skip-link" href="#main-content">Skip to content</a>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="app-layout"><main id="main-content" class="app-main"><div class="portfolio-page-container">
+<header class="portfolio-page-header">
+<div class="portfolio-heading-copy"><p class="portfolio-eyebrow">Portfolio workspace</p><h1 class="portfolio-title">Your investments, clearly understood.</h1><p class="portfolio-subtitle">Build positions, follow live prices, and see portfolio performance at a glance.</p></div>
+<div class="portfolio-header-tools">
+<div class="portfolio-sync-control" aria-live="polite"><span id="portfolioSaveStatus" class="portfolio-save-status is-loading">Loading portfolio…</span><button id="portfolioSyncRetryBtn" class="portfolio-text-button hidden" type="button">Retry</button></div>
+<div class="portfolio-currency-control"><label for="portfolioCurrencySelect">Display currency</label><div class="portfolio-inline-control"><select id="portfolioCurrencySelect" class="portfolio-select" aria-describedby="currencyHelp"></select><button id="refreshRatesBtn" class="portfolio-icon-button" type="button" title="Refresh exchange rates" aria-label="Refresh exchange rates"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/></svg></button></div><span id="currencyHelp" class="sr-only">Changes how portfolio values are displayed and saves automatically.</span></div>
+</div></header>
 
-    <div class="app-layout">
-        <main id="main-content" class="app-main">
-            <div class="portfolio-page-container">
-                <header class="portfolio-page-header">
-                    <div>
-                        <p class="portfolio-eyebrow">Portfolio workspace</p>
-                        <h1 class="portfolio-title">Build and track your portfolio</h1>
-                        <p class="portfolio-subtitle">Add positions in plain language and see how each investment is performing.</p>
-                    </div>
-                    <div class="portfolio-header-actions">
-                        <div class="portfolio-currency-control">
-                            <label for="portfolioCurrencySelect">Display currency</label>
-                            <div class="portfolio-inline-control">
-                                <select id="portfolioCurrencySelect" class="portfolio-select" aria-describedby="currencyHelp"></select>
-                                <button id="refreshRatesBtn" class="portfolio-icon-button" type="button" title="Refresh exchange rates" aria-label="Refresh exchange rates"><span aria-hidden="true">↻</span></button>
-                            </div>
-                            <span id="currencyHelp" class="sr-only">Changes how portfolio values are displayed.</span>
-                        </div>
-                        <div class="portfolio-save-actions">
-                            <span id="portfolioSaveStatus" class="portfolio-save-status" aria-live="polite">Loading portfolio…</span>
-                            <button id="loadPortfolioBtn" class="portfolio-button portfolio-button-secondary" type="button">Reload saved</button>
-                            <button id="savePortfolioBtn" class="portfolio-button portfolio-button-primary" type="button">Save changes</button>
-                        </div>
-                    </div>
-                </header>
+<section class="portfolio-summary-grid" aria-label="Portfolio summary">
+<article class="portfolio-summary-card"><span class="portfolio-summary-icon">◫</span><div><span class="portfolio-summary-label">Open positions</span><strong id="summaryPositionCount" class="portfolio-summary-value">0</strong><span class="portfolio-summary-help">Investments being tracked</span></div></article>
+<article class="portfolio-summary-card"><span class="portfolio-summary-icon">◇</span><div><span class="portfolio-summary-label">Gross exposure</span><strong id="summaryExposure" class="portfolio-summary-value">—</strong><span class="portfolio-summary-help">Market exposure after leverage</span></div></article>
+<article class="portfolio-summary-card"><span class="portfolio-summary-icon">↗</span><div><span class="portfolio-summary-label">Total P&amp;L</span><strong id="summaryPnl" class="portfolio-summary-value">—</strong><span class="portfolio-summary-help">From positions with live prices</span></div></article>
+<article class="portfolio-summary-card"><span class="portfolio-summary-icon">%</span><div><span class="portfolio-summary-label">Portfolio return</span><strong id="summaryReturn" class="portfolio-summary-value">—</strong><span class="portfolio-summary-help">P&amp;L compared with entry value</span></div></article>
+</section>
 
-                <section class="portfolio-summary-grid" aria-label="Portfolio summary">
-                    <article class="portfolio-summary-card"><span class="portfolio-summary-label">Positions</span><strong id="summaryPositionCount" class="portfolio-summary-value">0</strong><span class="portfolio-summary-help">Open investments</span></article>
-                    <article class="portfolio-summary-card"><span class="portfolio-summary-label">Gross exposure</span><strong id="summaryExposure" class="portfolio-summary-value">—</strong><span class="portfolio-summary-help">Including leverage</span></article>
-                    <article class="portfolio-summary-card"><span class="portfolio-summary-label">Total P&amp;L</span><strong id="summaryPnl" class="portfolio-summary-value">—</strong><span class="portfolio-summary-help">From available prices</span></article>
-                    <article class="portfolio-summary-card"><span class="portfolio-summary-label">Portfolio return</span><strong id="summaryReturn" class="portfolio-summary-value">—</strong><span class="portfolio-summary-help">P&amp;L ÷ entry value</span></article>
-                </section>
+<div class="portfolio-workspace-grid">
+<section class="portfolio-panel portfolio-form-panel" aria-labelledby="positionFormTitle">
+<div class="portfolio-panel-heading"><div><p class="portfolio-step-label">Position builder</p><h2 id="positionFormTitle">Add a position</h2><p id="positionFormDescription">Enter an investment and preview its exposure before adding it.</p></div><button id="cancelEditBtn" class="portfolio-text-button hidden" type="button">Cancel edit</button></div>
+<form id="positionForm" novalidate>
+<div class="portfolio-builder-section">
+<div class="portfolio-builder-heading"><span>1</span><div><h3>Choose an asset</h3><p>Search by company name or ticker.</p></div></div>
+<div class="portfolio-form-field"><label for="portfolioTickerInput">Company or ticker</label>
+<div class="portfolio-search-wrapper"><span class="portfolio-search-icon" aria-hidden="true">⌕</span><input class="portfolio-input portfolio-search-input" type="text" id="portfolioTickerInput" autocomplete="off" placeholder="Try AAPL or Apple" aria-describedby="tickerHelp tickerPriceStatus tickerError" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="portfolioTickerAutocomplete"><div id="portfolioTickerAutocomplete" class="ticker-autocomplete hidden" role="listbox" aria-label="Ticker suggestions"></div></div>
+<div class="portfolio-field-meta"><span id="tickerHelp">Select a result to load the latest price.</span><span id="tickerPriceStatus" class="portfolio-price-status" aria-live="polite">Latest price will appear here.</span></div><span id="tickerError" class="portfolio-field-error hidden"></span>
+<div id="selectedAssetCard" class="portfolio-selected-asset hidden" aria-live="polite"><span id="selectedAssetLogo" class="portfolio-logo-shell" aria-hidden="true"></span><div><strong id="selectedAssetName"></strong><span id="selectedAssetTicker"></span></div><span class="portfolio-selected-check" aria-hidden="true">✓</span></div>
+</div></div>
 
-                <div class="portfolio-workspace-grid">
-                    <section class="portfolio-panel portfolio-form-panel" aria-labelledby="positionFormTitle">
-                        <div class="portfolio-panel-heading">
-                            <div><p class="portfolio-step-label">Position setup</p><h2 id="positionFormTitle">Add a position</h2><p id="positionFormDescription">Tell us what you own and where you entered.</p></div>
-                            <button id="cancelEditBtn" class="portfolio-text-button hidden" type="button">Cancel edit</button>
-                        </div>
+<div class="portfolio-builder-section">
+<div class="portfolio-builder-heading"><span>2</span><div><h3>Position details</h3><p>Define direction, size, and entry price.</p></div></div>
+<fieldset class="portfolio-form-field"><legend>Direction</legend><div class="portfolio-segmented-control"><label><input type="radio" name="positionSide" value="buy" checked><span>↑ Long</span></label><label><input type="radio" name="positionSide" value="sell"><span>↓ Short</span></label></div><span class="portfolio-field-help">Long benefits from rising prices; short benefits from falling prices.</span></fieldset>
+<div class="portfolio-form-grid">
+<div class="portfolio-form-field"><label for="sizingModeSelect">Size entered as</label><select id="sizingModeSelect" class="portfolio-select"><option value="shares">Number of shares</option><option value="notional">Cash amount</option></select></div>
+<div class="portfolio-form-field"><label id="positionSizeLabel" for="positionSizeInput">Shares of market exposure</label><div class="portfolio-input-with-suffix"><input id="positionSizeInput" class="portfolio-input" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="0" aria-describedby="positionSizeError"><span id="positionSizeSuffix">shares</span></div><span id="positionSizeError" class="portfolio-field-error hidden"></span></div>
+<div class="portfolio-form-field"><label for="entryPriceInput">Entry price per share</label><div class="portfolio-input-with-suffix portfolio-input-with-prefix"><span id="entryCurrencyPrefix">USD</span><input id="entryPriceInput" class="portfolio-input" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="0.00" aria-describedby="entryPriceHelp entryPriceError"></div><span id="entryPriceHelp" class="portfolio-field-help">Autofilled from the latest price, but editable.</span><span id="entryPriceError" class="portfolio-field-error hidden"></span></div>
+</div>
+<details id="advancedPositionOptions" class="portfolio-advanced-options"><summary>Advanced options <span id="advancedSummaryValue">1× leverage</span></summary><div class="portfolio-form-field"><label for="leverageInput">Leverage multiplier</label><div class="portfolio-input-with-suffix"><input id="leverageInput" class="portfolio-input" type="number" min="0.01" step="0.01" inputmode="decimal" value="1" aria-describedby="leverageHelp leverageError"><span>×</span></div><span id="leverageHelp" class="portfolio-field-help">Leverage increases both potential gains and losses.</span><span id="leverageError" class="portfolio-field-error hidden"></span></div></details>
+</div>
 
-                        <form id="positionForm" novalidate>
-                            <div class="portfolio-form-field portfolio-form-field-wide">
-                                <label for="portfolioTickerInput">Company or ticker</label>
-                                <div class="portfolio-search-wrapper">
-                                    <input class="portfolio-input" type="text" id="portfolioTickerInput" autocomplete="off" placeholder="Search, for example AAPL" aria-describedby="tickerHelp tickerPriceStatus" aria-autocomplete="list" aria-controls="portfolioTickerAutocomplete">
-                                    <div id="portfolioTickerAutocomplete" class="ticker-autocomplete hidden" role="listbox"></div>
-                                </div>
-                                <div class="portfolio-field-meta"><span id="tickerHelp">Choose a company from the search results.</span><span id="tickerPriceStatus" class="portfolio-price-status" aria-live="polite">Latest price will appear here.</span></div>
-                            </div>
+<div class="portfolio-builder-section portfolio-review-section"><div class="portfolio-builder-heading"><span>3</span><div><h3>Review</h3><p>Calculated from the details above.</p></div></div><div id="positionPreview" class="portfolio-position-preview" aria-live="polite"><div><span id="previewSharesLabel">Shares purchased</span><strong id="previewShares">—</strong></div><div><span id="previewEntryValueLabel">Capital required</span><strong id="previewEntryValue">—</strong></div><div><span>Gross exposure</span><strong id="previewExposure">—</strong></div></div></div>
+<div class="portfolio-form-actions"><button id="deletePositionBtn" class="portfolio-text-button portfolio-delete-text hidden" type="button">Delete position</button><button id="addPositionBtn" class="portfolio-button portfolio-button-primary portfolio-submit-button" type="submit"><span id="positionSubmitLabel">Add position</span><span aria-hidden="true">＋</span></button></div>
+</form></section>
 
-                            <fieldset class="portfolio-form-field">
-                                <legend>Direction</legend>
-                                <div class="portfolio-segmented-control">
-                                    <label><input type="radio" name="positionSide" value="buy" checked><span>Long</span></label>
-                                    <label><input type="radio" name="positionSide" value="sell"><span>Short</span></label>
-                                </div>
-                                <span class="portfolio-field-help">Long gains when price rises; short gains when it falls.</span>
-                            </fieldset>
+<section class="portfolio-panel portfolio-positions-panel" aria-labelledby="positionsTitle">
+<div class="portfolio-panel-heading portfolio-positions-heading"><div><p class="portfolio-step-label">Portfolio</p><h2 id="positionsTitle">Your positions <span id="positionsCountBadge" class="portfolio-count-badge">0</span></h2><p id="pricesUpdatedStatus" aria-live="polite">Prices load after your portfolio is ready.</p></div><button id="refreshPricesBtn" class="portfolio-button portfolio-button-secondary" type="button"><span aria-hidden="true">↻</span><span>Refresh prices</span></button></div>
+<div id="positionsList" class="portfolio-positions-list" aria-busy="true"><div class="portfolio-loading-state" role="status"><span class="portfolio-spinner" aria-hidden="true"></span><h3>Loading your portfolio</h3><p>This can take a moment while the service wakes up.</p></div></div>
+</section></div>
+</div></main></div>
 
-                            <div class="portfolio-form-grid">
-                                <div class="portfolio-form-field"><label for="sizingModeSelect">How do you want to enter the size?</label><select id="sizingModeSelect" class="portfolio-select"><option value="shares">Number of shares</option><option value="notional">Cash amount</option></select></div>
-                                <div class="portfolio-form-field"><label id="positionSizeLabel" for="positionSizeInput">Shares of market exposure</label><div class="portfolio-input-with-suffix"><input id="positionSizeInput" class="portfolio-input" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="0"><span id="positionSizeSuffix">shares</span></div></div>
-                                <div class="portfolio-form-field"><label for="entryPriceInput">Entry price per share</label><div class="portfolio-input-with-suffix portfolio-input-with-prefix"><span id="entryCurrencyPrefix">USD</span><input id="entryPriceInput" class="portfolio-input" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="0.00"></div><span class="portfolio-field-help">Autofilled from the latest price. You can change it.</span></div>
-                            </div>
-
-                            <details id="advancedPositionOptions" class="portfolio-advanced-options">
-                                <summary>Advanced options <span id="advancedSummaryValue">1× leverage</span></summary>
-                                <div class="portfolio-form-field"><label for="leverageInput">Leverage multiplier</label><div class="portfolio-input-with-suffix"><input id="leverageInput" class="portfolio-input" type="number" min="0.01" step="0.01" inputmode="decimal" value="1"><span>×</span></div></div>
-                            </details>
-
-                            <div id="positionPreview" class="portfolio-position-preview" aria-live="polite">
-                                <div><span id="previewSharesLabel">Shares purchased</span><strong id="previewShares">—</strong></div>
-                                <div><span id="previewEntryValueLabel">Capital required</span><strong id="previewEntryValue">—</strong></div>
-                                <div><span>Gross exposure</span><strong id="previewExposure">—</strong></div>
-                            </div>
-                            <div class="portfolio-form-actions"><button id="addPositionBtn" class="portfolio-button portfolio-button-primary portfolio-submit-button" type="submit">Add position</button></div>
-                        </form>
-                    </section>
-
-                    <section class="portfolio-panel portfolio-positions-panel" aria-labelledby="positionsTitle">
-                        <div class="portfolio-panel-heading portfolio-positions-heading">
-                            <div><p class="portfolio-step-label">Your investments</p><h2 id="positionsTitle">Positions <span id="positionsCountBadge" class="portfolio-count-badge">0</span></h2><p id="pricesUpdatedStatus" aria-live="polite">Prices load after your portfolio is ready.</p></div>
-                            <button id="refreshPricesBtn" class="portfolio-button portfolio-button-secondary" type="button"><span aria-hidden="true">↻</span> Refresh prices</button>
-                        </div>
-                        <div id="positionsList" class="portfolio-positions-list">
-                            <div class="portfolio-empty-state"><span class="portfolio-empty-icon" aria-hidden="true">＋</span><h3>No positions yet</h3><p>Use the guided form to add your first investment.</p></div>
-                        </div>
-                    </section>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <dialog id="deletePositionDialog" class="portfolio-dialog" aria-labelledby="deleteDialogTitle">
-        <form method="dialog">
-            <h2 id="deleteDialogTitle">Delete this position?</h2>
-            <p id="deleteDialogDescription">This removes the position from your portfolio. Save changes afterward to update your saved portfolio.</p>
-            <div class="portfolio-dialog-actions"><button class="portfolio-button portfolio-button-secondary" value="cancel">Keep position</button><button id="confirmDeletePositionBtn" class="portfolio-button portfolio-button-danger" value="confirm">Delete position</button></div>
-        </form>
-    </dialog>
-
-    <div id="portfolioLiveStatus" class="sr-only" aria-live="polite"></div>
-    <div id="toast-container"></div>
-
-    <script type="module">
-        import { runAuthGuard } from "./js/auth-guard.js";
-        import { renderSidebar } from "./js/sidebar.js";
-        import "./js/portfolio-creator.js";
-        runAuthGuard();
-        renderSidebar();
-    </script>
-</body>
-</html>
+<dialog id="deletePositionDialog" class="portfolio-dialog" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription"><form method="dialog"><span class="portfolio-dialog-icon" aria-hidden="true">⌫</span><h2 id="deleteDialogTitle">Delete this position?</h2><p id="deleteDialogDescription">This removes the position and saves the updated portfolio automatically.</p><div class="portfolio-dialog-actions"><button class="portfolio-button portfolio-button-secondary" value="cancel">Keep position</button><button id="confirmDeletePositionBtn" class="portfolio-button portfolio-button-danger" value="confirm">Delete position</button></div></form></dialog>
+<div id="portfolioLiveStatus" class="sr-only" aria-live="polite"></div><div id="toast-container"></div>
+<script type="module">import { runAuthGuard } from "./js/auth-guard.js"; import { renderSidebar } from "./js/sidebar.js"; import "./js/portfolio-creator.js"; runAuthGuard(); renderSidebar();</script>
+</body></html>

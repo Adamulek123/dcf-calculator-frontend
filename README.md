@@ -1,384 +1,166 @@
-# Stock Price Estimator ![Static Badge](https://img.shields.io/badge/html-python-blue)
+# Stock Price Estimator — Frontend
 
-This project provides a web application for estimating stock prices using a Discounted Cash Flow (DCF) model and offers financial insights for various companies. The application features user authentication, saving and loading of calculations, and interactive charts for financial data visualization.
+Static frontend for a Firebase-authenticated stock research application with DCF calculations, financial-data charts, saved valuations, and portfolio tracking.
+
+> This repository is one half of the application. The Flask API is maintained in the separate [`Adamulek123/DCF_Calculator`](https://github.com/Adamulek123/DCF_Calculator) repository and is normally checked out locally as the sibling directory `../backend/`.
+
+## Architecture
+
+```text
+Browser (this repository)
+  ├─ Firebase Authentication
+  └─ Bearer-token API requests
+                │
+                ▼
+Flask API (../backend, deployed on Render)
+  ├─ Yahoo Finance and Frankfurter market data
+  └─ Firebase Admin / Cloud Firestore
+```
+
+The two codebases are independent Git repositories:
+
+| Component | Repository | Default branch | Hosting |
+| --- | --- | --- | --- |
+| Frontend | [`Adamulek123/dcf-calculator-frontend`](https://github.com/Adamulek123/dcf-calculator-frontend) | `master` | Static GitHub-hosted site |
+| Backend | [`Adamulek123/DCF_Calculator`](https://github.com/Adamulek123/DCF_Calculator) | `main` | Render: `https://dcf-backend.onrender.com` |
+| Database and identity | Firebase project `dcf123-b6cb1` | — | Firebase Authentication and Cloud Firestore |
+
+Changes to request or response formats often require coordinated changes and separate commits in both repositories.
 
 ## Features
 
-* **User Authentication:** Secure login and registration using email/password and Google Sign-In (powered by Firebase Authentication).
+- Email/password registration with email verification
+- Google sign-in
+- DCF valuation based on earnings or free cash flow
+- Current market metrics and company information
+- Historical prices and annual, quarterly, TTM, and segment financial charts
+- Saving, loading, and deleting user DCF calculations
+- Portfolio positions, live prices, leverage, and currency conversion
+- Responsive navigation, loading states, caching, and toast notifications
 
-* **DCF Calculator:**
+## Technology
 
-  * Estimate stock prices based on Earnings Per Share (EPS) or Free Cash Flow (FCF) models.
+- HTML5 and custom CSS
+- Browser-native JavaScript ES modules
+- [Chart.js](https://www.chartjs.org/) loaded from jsDelivr
+- Firebase JavaScript SDK 11.6.1 for Authentication
+- A separate Python/Flask API for data access and Firestore persistence
 
-  * Input custom growth rates, PE multiples, or FCF yields.
+There is no Node.js package, bundler, or frontend build step.
 
-  * Calculate projected price after 5 years, desired return, and entry price for desired return.
+## Project structure
 
-  * Visualize projected price growth with interactive charts.
-
-* **Financial Insights:**
-
-  * View historical price data (all-time).
-
-  * Analyze annual and quarterly financial statements (Revenue, Free Cash Flow, EPS, Net Income, EBITDA, Dividends) with interactive charts.
-
-  * Full-screen chart viewing for detailed analysis.
-
-* **Data Persistence:**
-
-  * Save and load your DCF calculations (stored in Firestore).
-
-  * Delete saved calculations.
-
-* **Responsive Design:** User interface adapts to various screen sizes.
-
-* **Toast Notifications:** Provides user feedback for actions and errors.
-
-## Technologies Used
-
-### Frontend
-
-* **HTML5:** Structure of the web application.
-
-* **CSS3 (Tailwind CSS):** For modern and responsive styling.
-
-* **JavaScript (ES6+):** Core logic and interactivity.
-
-* **Chart.js:** For rendering interactive financial charts.
-
-* **Firebase SDK (v11.6.1):**
-
-  * **Firebase Authentication:** User registration, login (email/password, Google Sign-In), and session management.
-
-  * **Firebase Firestore:** Database for saving and loading user calculations.
-
-### Backend
-
-* **Python (Flask):** Web framework for handling API requests.
-
-* **`yfinance`:** Python library to fetch historical market data, financial statements, and company information from Yahoo Finance.
-
-* **`flask-cors`:** Enables Cross-Origin Resource Sharing for frontend-backend communication.
-
-* **`firebase-admin`:** Python SDK for Firebase Admin, used to verify Firebase ID tokens and interact with Firestore.
-
-* **`flask-limiter`:** For rate-limiting API requests to prevent abuse.
-
-* **`pandas`:** Data manipulation and analysis.
-
-## Project Structure
-
-```
-.
-├── index.html          # Frontend: Main HTML file with all UI and JavaScript logic
-├── readme.md           # This file
-├── DCF_Backend.py      # Backend: Flask application with API endpoints
-└── requirements.txt    # Requirements file
+```text
+frontend/
+├── index.html                 # Landing page
+├── login.html                 # Sign-in page
+├── register.html              # Registration page
+├── dcf-calculator.html        # DCF calculator
+├── financial-data.html        # Financial-data dashboard
+├── portfolio-creator.html     # Portfolio tool
+├── css/
+│   └── style.css              # Shared application styles
+├── js/
+│   ├── api.js                 # API URL and authenticated fetch wrapper
+│   ├── auth.js                # Firebase sign-in and registration
+│   ├── auth-guard.js          # Protected-page handling
+│   ├── firebase-init.js       # Firebase web client configuration
+│   ├── dcf-calculator.js      # DCF workflow
+│   ├── financial-data.js      # Financial dashboard
+│   ├── portfolio-creator.js   # Portfolio workflow
+│   ├── charts.js              # Chart helpers
+│   ├── cache.js               # Browser-side response cache
+│   ├── ticker.js              # Ticker search and logos
+│   ├── sidebar.js             # Shared navigation
+│   └── toast.js               # Notifications
+├── assets/                    # Images, SVGs, and animation frames
+└── scripts/                   # Asset-processing utilities
 ```
 
-## Getting Started
+## Local development
 
-Follow these steps to set up and run the project.
+### 1. Check out both repositories
 
-### Firebase Setup
+Keep the repositories beside one another so the paths match the documentation:
 
-1. **Create a Firebase Project:**
+```bash
+mkdir website
+cd website
+git clone https://github.com/Adamulek123/dcf-calculator-frontend.git frontend
+git clone https://github.com/Adamulek123/DCF_Calculator.git backend
+```
 
-   * Go to the [Firebase Console](https://console.firebase.google.com/).
+### 2. Run the backend
 
-   * Click "Add project" and follow the steps to create a new project.
+Follow the backend repository's README. By default it listens at `http://localhost:5000`.
 
-2. **Enable Authentication Methods:**
+### 3. Serve the frontend
 
-   * In your Firebase project, navigate to **Build > Authentication**.
+Pages must be served over HTTP for ES modules and authentication flows to work reliably:
 
-   * Go to the "Sign-in method" tab.
+```bash
+cd frontend
+python -m http.server 8000
+```
 
-   * Enable **Email/Password** and **Google** sign-in providers.
+Open `http://localhost:8000/`.
 
-3. **Set up Firestore Database:**
+`js/api.js` automatically selects:
 
-   * In your Firebase project, navigate to **Build > Firestore Database**.
+- `http://localhost:5000` on `localhost` or `127.0.0.1`
+- `https://dcf-backend.onrender.com` on other hosts
 
-   * Click "Create database". Choose "Start in production mode" (you'll set up rules later).
+On localhost, `js/firebase-init.js` also connects Firebase Authentication to `http://127.0.0.1:9099`. Start a compatible Firebase Auth emulator before testing local sign-in, or adjust that development configuration intentionally.
 
-   * Select a Cloud Firestore location.
+## Authentication and data flow
 
-   * **Firestore Security Rules:** Update your Firestore rules to allow authenticated users to read/write their own data. Go to the "Rules" tab and replace the default rules with:
+The frontend uses Firebase Authentication only. After sign-in, `js/api.js` obtains the current user's Firebase ID token and sends it as:
 
-     ```firestore
-     rules_version = '2';
-     service cloud.firestore {
-       match /databases/{database}/documents {
-         // User-specific calculations
-         match /users/{userId}/calculations/{calcId} {
-           allow read, write: if request.auth != null && request.auth.uid == userId;
-         }
-         // Add any other collections you might introduce later with appropriate rules
-       }
-     }
-     ```
+```http
+Authorization: Bearer <firebase-id-token>
+```
 
-     Publish these rules.
+Saved calculations, portfolios, and financial datasets are read or written by the Flask backend through the Firebase Admin SDK. The browser does not directly perform those Firestore operations.
 
-4. **Get Firebase Web App Configuration:**
+The Firebase web configuration in `js/firebase-init.js` identifies the public web client and is not a service-account secret. Firebase Admin credentials and private keys must never be added to this repository.
 
-   * In your Firebase project, go to "Project settings" (gear icon next to "Project overview").
+## Backend API used by the frontend
 
-   * Scroll down to "Your apps" and click the web icon (`</>`) to add a new web app.
+All feature endpoints require an Authorization bearer token.
 
-   * Register your app and copy the `firebaseConfig` object.
+| Method | Route | Used for |
+| --- | --- | --- |
+| `GET` | `/get_trailing_metrics?ticker=...` | DCF inputs and trailing metrics |
+| `GET` | `/get_market_price?ticker=...` | Current and historical prices |
+| `GET` | `/get_basic_data?ticker=...` | Stored financial statement data |
+| `GET` | `/get_segment_data?ticker=...` | Stored segment data |
+| `GET` | `/get_ttm_data?ticker=...` | Stored trailing-twelve-month data |
+| `GET` | `/get_ttm_segment_data?ticker=...` | Stored TTM segment data |
+| `GET` | `/get_stock_info_data?ticker=...` | Company and valuation metrics |
+| `GET` | `/get_tickers` | Ticker search dataset |
+| `POST` | `/save_calculation` | Save a named DCF calculation |
+| `GET` | `/load_calculations` | Load the user's latest calculations |
+| `DELETE` | `/delete_calculation/<id>` | Delete one saved calculation |
+| `POST` | `/portfolio/save` | Save the user's default portfolio |
+| `GET` | `/portfolio/load` | Load the user's default portfolio |
+| `POST` | `/portfolio/current-prices` | Fetch prices for portfolio tickers |
+| `GET` | `/portfolio/conversion-rates?base=USD` | Fetch currency conversion rates |
 
-5. **Update Frontend `index.html`:**
+The backend README is the source of truth for server behavior and Firestore paths.
 
-   * Open `index.html`.
+## Deployment notes
 
-   * Locate the `firebaseConfig` object within the `<script type="module">` tag.
+- The frontend is static and can be hosted directly from its GitHub repository.
+- The production API origin is configured in `js/api.js`.
+- Every HTML page has a Content Security Policy. If the API URL or another external service changes, update the relevant CSP directives as needed.
+- The Render service may need time to wake from an idle state; frontend error and loading states should account for network delays.
 
-   * Replace the placeholder `firebaseConfig` with the one you copied from the Firebase Console.
+## Verification
 
-   ```javascript
-   const firebaseConfig = {
-       apiKey: "YOUR_API_KEY",
-       authDomain: "YOUR_AUTH_DOMAIN",
-       projectId: "YOUR_PROJECT_ID",
-       storageBucket: "YOUR_STORAGE_BUCKET",
-       messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-       appId: "YOUR_APP_ID",
-       measurementId: "YOUR_MEASUREMENT_ID" // Optional
-   };
-   ```
+There is currently no automated frontend test suite. Before committing a change:
 
-6. **Generate Firebase Service Account Key (for Backend):**
-
-   * In your Firebase project, go to "Project settings" > "Service accounts".
-
-   * Click "Generate new private key" and then "Generate key".
-
-   * A JSON file will be downloaded. **Keep this file secure.**
-
-### Backend Setup (Python Flask on Render)
-
-The backend is a Python Flask application hosted on Render.
-
-1. **Prepare your `DCF_Backend.py` file:**
-
-   * Ensure your `DCF_Backend.py` file has the Firebase Admin SDK initialization logic as provided in the uploaded file, which reads the service account key from an environment variable.
-
-2. **Create a `requirements.txt` file:**
-
-   * In the same directory as `DCF_Backend.py`, create a file named `requirements.txt` with the following content:
-
-     ```
-     Flask==2.3.2
-     yfinance==0.2.32
-     Flask-Cors==3.0.10
-     pandas==2.0.3
-     firebase-admin==6.2.0
-     PyJWT==2.8.0
-     requests==2.31.0
-     Flask-Limiter==3.5.1
-     ```
-
-     *(Note: Versions are suggestions; you might need to adjust based on compatibility.)*
-
-3. **Deploy to Render:**
-
-   * **Sign up/Log in to Render:** Go to [Render.com](https://render.com/) and create an account or log in.
-
-   * **New Web Service:** Click "New" > "Web Service".
-
-   * **Connect Git Repository:** Connect your Git repository (GitHub, GitLab, Bitbucket) where you've pushed your project files (`DCF_Backend.py`, `requirements.txt`).
-
-   * **Configuration:**
-
-     * **Name:** Choose a name for your service (e.g., `dcf-backend`).
-
-     * **Region:** Select a region close to your users.
-
-     * **Branch:** `main` (or your default branch).
-
-     * **Root Directory:** Leave empty if your files are at the root, or specify the subdirectory if they are nested.
-
-     * **Runtime:** `Python 3`
-
-     * **Build Command:** `pip install -r requirements.txt`
-
-     * **Start Command:** `gunicorn DCF_Backend:app` (assuming your Flask app instance is named `app` in `DCF_Backend.py`).
-
-     * **Instance Type:** Choose a suitable instance type (e.g., `Free` for testing).
-
-   * **Environment Variables:** This is crucial for your Firebase Service Account Key.
-
-     * Open the JSON file you downloaded from Firebase (Service Accounts).
-
-     * Copy the entire content of the JSON file.
-
-     * Go to the "Environment" section in Render's service settings.
-
-     * Add a new environment variable:
-
-       * **Key:** `FIREBASE_SERVICE_ACCOUNT_KEY_BASE64`
-
-       * **Value:** Paste the entire JSON content, then encode it to Base64. You can use an online Base64 encoder (e.g., [base64encode.org](https://www.base64encode.org/)) or a Python script:
-
-         ```python
-         import base64
-         import json
-         
-         # Replace with the actual content of your Firebase service account JSON file
-         service_account_json_content = """
-         {
-           "type": "service_account",
-           "project_id": "your-project-id",
-           "private_key_id": "...",
-           "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
-           "client_email": "...",
-           "client_id": "...",
-           "auth_uri": "...",
-           "token_uri": "...",
-           "auth_provider_x509_cert_url": "...",
-           "client_x509_cert_url": "...",
-           "universe_domain": "..."
-         }
-         """
-         
-         encoded_key = base64.b64encode(service_account_json_content.encode('utf-8')).decode('utf-8')
-         print(encoded_key)
-         ```
-
-         Paste the resulting Base64 string as the value for `FIREBASE_SERVICE_ACCOUNT_KEY_BASE64`.
-
-   * **Create Web Service:** Click "Create Web Service". Render will now build and deploy your application.
-
-4. **Get Backend URL:**
-
-   * Once deployed, Render will provide you with a public URL for your backend service (e.g., `https://your-service-name.onrender.com`).
-
-5. **Update Frontend `index.html` with Backend URL:**
-
-   * Open `index.html`.
-
-   * Locate the `backendBaseUrl` variable:
-
-     ```javascript
-     const backendBaseUrl = 'https://dcf-backend.onrender.com'; // Update this URL
-     ```
-
-   * Replace the placeholder URL with your actual Render backend URL.
-
-### Frontend Setup (HTML/CSS/JS)
-
-The frontend is a static HTML file.
-
-1. **No Server Required:** Since `index.html` is a self-contained file with all CSS and JavaScript, you can open it directly in your web browser.
-
-2. **Live Server (Recommended for Development):** For local development, you can use a simple HTTP server like Python's `http.server` or the Live Server extension in VS Code.
-
-   * **Python:** Navigate to your project directory in the terminal and run:
-
-     ```bash
-     python -m http.server
-     ```
-
-     Then open `http://localhost:8000/index.html` in your browser.
-
-## Usage
-
-1. **Access the Application:** Open `index.html` in your web browser (or the deployed URL if you've hosted it).
-
-2. **Login/Register:**
-
-   * If you're a new user, click "Register" to create an account using email/password or "Sign in with Google".
-
-   * If registering with email, check your email for a verification link. You must verify your email to log in.
-
-   * Log in with your credentials.
-
-3. **Main Menu:** After logging in, you'll see the main menu with options for "DCF Calculator" and "Insights".
-
-4. **DCF Calculator:**
-
-   * Enter a stock ticker symbol (e.g., `GOOG`, `MSFT`).
-
-   * Click "Search" to fetch current metrics.
-
-   * Choose between "Earnings" or "Cash Flow" tabs for your assumptions.
-
-   * Adjust the input fields (Growth Rate, PE Multiple/FCF Yield, Desired Return).
-
-   * Click "Calculate" to see the projected price and returns.
-
-   * Click "Save" to save your calculation (you'll be prompted for a name).
-
-   * Click "Load" to view and load previously saved calculations.
-
-5. **Insights:**
-
-   * Enter a stock ticker symbol.
-
-   * Click "Get Insights" to fetch historical price and financial statement data.
-
-   * Toggle between "Annual" and "Quarterly" data.
-
-   * Click on any chart to view it in full-screen mode.
-
-6. **Logout:** Click "Logout" from the main menu to sign out.
-
-## API Endpoints
-
-The backend Flask application exposes the following endpoints:
-
-* **`GET /get_trailing_metrics?ticker=<TICKER_SYMBOL>`**
-
-  * **Description:** Fetches trailing 12-month (TTM) financial metrics (EPS, PE, FCF/Share, FCF Yield, SBC Impact) and current stock price for a given ticker.
-
-  * **Authentication:** Requires Firebase ID Token.
-
-  * **Rate Limit:** 60 requests per minute.
-
-  * **Example:** `/get_trailing_metrics?ticker=GOOG`
-
-* **`GET /get_insights_data?ticker=<TICKER_SYMBOL>`**
-
-  * **Description:** Retrieves historical price data, annual, and quarterly financial statements (Revenue, FCF, EPS, Net Income, EBITDA, Dividends) for charting.
-
-  * **Authentication:** Requires Firebase ID Token.
-
-  * **Rate Limit:** 30 requests per minute.
-
-  * **Example:** `/get_insights_data?ticker=MSFT`
-
-* **`POST /save_calculation`**
-
-  * **Description:** Saves a user's DCF calculation data to Firestore.
-
-  * **Authentication:** Requires Firebase ID Token.
-
-  * **Request Body (JSON):**
-
-    ```json
-    {
-        "ticker": "AAPL",
-        "name": "My Apple DCF",
-        "data": { /* ... (captured calculation data from frontend) ... */ }
-    }
-    ```
-
-* **`GET /load_calculations`**
-
-  * **Description:** Loads the last 10 saved DCF calculations for the authenticated user from Firestore.
-
-  * **Authentication:** Requires Firebase ID Token.
-
-* **`DELETE /delete_calculation/<calc_id>`**
-
-  * **Description:** Deletes a specific saved calculation by its ID from Firestore.
-
-  * **Authentication:** Requires Firebase ID Token.
-
-  * **Example:** `/delete_calculation/My Apple DCF`
-
-## License
-
-This project is open-source and available under the [MIT License](https://www.google.com/search?q=LICENSE)
+1. Serve the site over HTTP.
+2. Check the browser console for module and CSP errors.
+3. Test signed-out redirects and an authenticated session.
+4. Inspect affected requests in the browser Network panel.
+5. For API-contract changes, test the matching backend route and check both repositories separately.
