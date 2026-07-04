@@ -5,7 +5,7 @@
 import { observeAuthState, isVerifiedUser } from "./auth.js";
 
 const PUBLIC_PAGES = new Set(["", "index.html", "login.html", "register.html"]);
-const PROTECTED_PAGES = new Set(["dcf-calculator.html", "financial-data.html", "portfolio-creator.html"]);
+const PROTECTED_PAGES = new Set(["dcf-calculator.html", "financial-data.html", "portfolio-creator.html", "dip-finder.html"]);
 
 function getPageName() {
     const path = window.location.pathname.split("/").pop();

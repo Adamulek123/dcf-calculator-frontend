@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
 <meta name="theme-color" content="#f5f7fb"><title>Portfolio Creator | DCF Calculator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css">
 </head>
 <body class="portfolio-page">
 <a class="skip-link" href="#main-content">Skip to content</a>
@@ -52,12 +52,25 @@
 </form></section>
 
 <section class="portfolio-panel portfolio-positions-panel" aria-labelledby="positionsTitle">
-<div class="portfolio-panel-heading portfolio-positions-heading"><div><p class="portfolio-step-label">Portfolio</p><h2 id="positionsTitle">Your positions <span id="positionsCountBadge" class="portfolio-count-badge">0</span></h2><p id="pricesUpdatedStatus" aria-live="polite">Prices load after your portfolio is ready.</p></div><button id="refreshPricesBtn" class="portfolio-button portfolio-button-secondary" type="button"><span aria-hidden="true">↻</span><span>Refresh prices</span></button></div>
+<div class="portfolio-panel-heading portfolio-positions-heading"><div><p class="portfolio-step-label">Portfolio</p><h2 id="positionsTitle">Your positions <span id="positionsCountBadge" class="portfolio-count-badge">0</span></h2><p id="pricesUpdatedStatus" aria-live="polite">Prices load after your portfolio is ready.</p></div><div class="portfolio-heading-actions"><button id="portfolioWatchlistBtn" class="portfolio-button portfolio-button-secondary" type="button" disabled><span aria-hidden="true">◎</span><span>Create watchlist</span></button><button id="refreshPricesBtn" class="portfolio-button portfolio-button-secondary" type="button"><span aria-hidden="true">↻</span><span>Refresh prices</span></button></div></div>
 <div id="positionsList" class="portfolio-positions-list" aria-busy="true"><div class="portfolio-loading-state" role="status"><span class="portfolio-spinner" aria-hidden="true"></span><h3>Loading your portfolio</h3><p>This can take a moment while the service wakes up.</p></div></div>
 </section></div>
 </div></main></div>
 
 <dialog id="deletePositionDialog" class="portfolio-dialog" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogDescription"><form method="dialog"><span class="portfolio-dialog-icon" aria-hidden="true">⌫</span><h2 id="deleteDialogTitle">Delete this position?</h2><p id="deleteDialogDescription">This removes the position and saves the updated portfolio automatically.</p><div class="portfolio-dialog-actions"><button class="portfolio-button portfolio-button-secondary" value="cancel">Keep position</button><button id="confirmDeletePositionBtn" class="portfolio-button portfolio-button-danger" value="confirm">Delete position</button></div></form></dialog>
+
+<dialog id="portfolioWatchlistDialog" class="portfolio-dialog portfolio-watchlist-dialog" aria-labelledby="portfolioWatchlistTitle">
+<form id="portfolioWatchlistForm">
+<span class="portfolio-dialog-icon" aria-hidden="true">◎</span>
+<h2 id="portfolioWatchlistTitle">Send portfolio to Dip Finder</h2>
+<p id="portfolioWatchlistSummary">Your positions will be reduced to unique ticker symbols.</p>
+<fieldset class="portfolio-watchlist-mode"><legend>Destination</legend><label><input type="radio" name="watchlistMode" value="new" checked><span>Create new watchlist</span></label><label><input type="radio" name="watchlistMode" value="existing"><span>Add to existing</span></label></fieldset>
+<div id="portfolioWatchlistNewField" class="portfolio-form-field"><label for="portfolioWatchlistName">Watchlist name</label><input id="portfolioWatchlistName" class="portfolio-input" maxlength="60" autocomplete="off" placeholder="Portfolio watch"></div>
+<div id="portfolioWatchlistExistingField" class="portfolio-form-field hidden"><label for="portfolioWatchlistSelect">Existing watchlist</label><select id="portfolioWatchlistSelect" class="portfolio-select"></select></div>
+<span id="portfolioWatchlistError" class="portfolio-field-error hidden"></span>
+<div class="portfolio-dialog-actions"><button id="cancelPortfolioWatchlistBtn" class="portfolio-button portfolio-button-secondary" type="button">Cancel</button><button id="savePortfolioWatchlistBtn" class="portfolio-button portfolio-button-primary" type="submit">Create watchlist</button></div>
+</form>
+</dialog>
 <div id="portfolioLiveStatus" class="sr-only" aria-live="polite"></div><div id="toast-container"></div>
-<script type="module">import { runAuthGuard } from "./js/auth-guard.js"; import { renderSidebar } from "./js/sidebar.js"; import "./js/portfolio-creator.js"; runAuthGuard(); renderSidebar();</script>
+<script type="module" src="js/portfolio-creator.js"></script>
 </body></html>

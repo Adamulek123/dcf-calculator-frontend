@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com https://img.logo.dev;">
+    <meta name="theme-color" content="#f1eee5">
+    <title>Dip Finder | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+    <script type="module" src="js/dip-finder.js"></script>
+</head>
+<body class="dip-page">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="app-layout">
+    <aside class="sidebar" aria-label="Main navigation">
+        <a class="sidebar-brand" href="dcf-calculator.html" aria-label="Stock Desk home">
+            <span class="sidebar-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12.5" stroke="currentColor" stroke-width="1.4"/><path d="m8.2 11 5 5 3.4-3.4 6.2 6.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M22.8 13.8v5h-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="sidebar-brand-copy"><strong>Stock Desk</strong><small>Value instruments</small></span>
+        </a>
+        <nav class="sidebar-nav">
+            <a class="sidebar-nav-item" href="dcf-calculator.html" aria-label="DCF Calculator">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h3M8.5 6.5v3M14 7h3M7 15l3 3m0-3-3 3M14 15h3m-3 3h3"/></svg></span>
+                <span class="sidebar-nav-copy"><strong>DCF Calculator</strong><small>Intrinsic value model</small></span><span class="sidebar-shortcut">01</span>
+            </a>
+            <a class="sidebar-nav-item" href="financial-data.html" aria-label="Financial Data">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10m5 10V5m6 15v-8m5 8V3"/></svg></span>
+                <span class="sidebar-nav-copy"><strong>Financial Data</strong><small>Statements &amp; trends</small></span><span class="sidebar-shortcut">02</span>
+            </a>
+            <a class="sidebar-nav-item" href="portfolio-creator.html" aria-label="Portfolio Creator">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v13H4zM8 7V4h8v3M4 12h16M10 12v2h4v-2"/></svg></span>
+                <span class="sidebar-nav-copy"><strong>Portfolio Creator</strong><small>Positions &amp; allocation</small></span><span class="sidebar-shortcut">03</span>
+            </a>
+            <a class="sidebar-nav-item active" href="dip-finder.html" aria-label="Dip Finder" aria-current="page">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5v14h18M5.5 8.5l4 4 3-3 5 5M17.5 10.5v4h-4"/></svg></span>
+                <span class="sidebar-nav-copy"><strong>Dip Finder</strong><small>Drawdown scanner</small></span><span class="sidebar-shortcut">04</span>
+            </a>
+        </nav>
+        <div class="sidebar-bottom">
+            <button class="sidebar-nav-item sidebar-logout" type="button" data-sidebar-logout aria-label="Log out">
+                <span class="sidebar-nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>
+                <span class="sidebar-nav-copy"><strong>Log out</strong><small>End this session</small></span>
+            </button>
+        </div>
+    </aside>
+    <main id="main-content" class="app-main">
+        <div class="dip-shell">
+            <header class="dip-header dip-reveal">
+                <div>
+                    <p class="dip-kicker"><span aria-hidden="true">●</span> Market scan / adjusted close</p>
+                    <h1>Dip Finder</h1>
+                    <p>Find the names under pressure before the market noise buries the signal.</p>
+                </div>
+                <div class="dip-header-status">
+                    <span id="dipServiceStatus" class="dip-service-pill is-loading" role="status">Connecting</span>
+                    <button id="dipRefreshBtn" class="dip-button dip-button-quiet" type="button">
+                        <span aria-hidden="true">↻</span> Refresh data
+                    </button>
+                </div>
+            </header>
+
+            <div class="dip-workspace">
+                <aside class="dip-watchlist-rail dip-reveal" aria-labelledby="watchlistsTitle">
+                    <div class="dip-rail-head">
+                        <div>
+                            <p class="dip-overline">Desk 01</p>
+                            <h2 id="watchlistsTitle">Watchlists</h2>
+                        </div>
+                        <button id="createWatchlistBtn" class="dip-square-button" type="button" aria-label="Create watchlist">＋</button>
+                    </div>
+                    <label class="dip-mobile-select" for="watchlistSelect">
+                        Active watchlist
+                        <select id="watchlistSelect"></select>
+                    </label>
+                    <div id="watchlistList" class="dip-watchlist-list" aria-live="polite"></div>
+                    <div class="dip-rail-footer">
+                        <span><kbd>1–6</kbd> period</span>
+                        <span><kbd>R</kbd> refresh</span>
+                    </div>
+                </aside>
+
+                <section class="dip-main-panel dip-reveal" aria-labelledby="activeWatchlistTitle">
+                    <div class="dip-panel-head">
+                        <div>
+                            <p class="dip-overline">Active scan</p>
+                            <h2 id="activeWatchlistTitle">Select a watchlist</h2>
+                            <p id="activeWatchlistMeta">Create a watchlist to begin tracking drawdowns.</p>
+                        </div>
+                        <div class="dip-panel-actions">
+                            <button id="renameWatchlistBtn" class="dip-text-button" type="button" disabled>Rename</button>
+                            <button id="deleteWatchlistBtn" class="dip-text-button is-danger" type="button" disabled>Delete</button>
+                        </div>
+                    </div>
+
+                    <div class="dip-summary-grid" aria-label="Watchlist summary">
+                        <article><span>Deepest move</span><strong id="dipDeepestValue">—</strong><small id="dipDeepestTicker">No data</small></article>
+                        <article><span>Median move</span><strong id="dipMedianValue">—</strong><small>Across available tickers</small></article>
+                        <article><span>Coverage</span><strong id="dipCoverageValue">0 / 0</strong><small>Symbols with price history</small></article>
+                        <article><span>Last close</span><strong id="dipAsOfValue">—</strong><small>Most recent market session</small></article>
+                    </div>
+
+                    <div class="dip-command-strip">
+                        <div class="dip-toggle-group" aria-label="Metric">
+                            <button class="dip-toggle is-active" type="button" data-metric="returnPct" aria-pressed="true">Period return</button>
+                            <button class="dip-toggle" type="button" data-metric="drawdownPct" aria-pressed="false">Drawdown</button>
+                        </div>
+                        <div class="dip-period-group" aria-label="Comparison period">
+                            <button type="button" data-period="1W">1W</button>
+                            <button class="is-active" type="button" data-period="1M">1M</button>
+                            <button type="button" data-period="3M">3M</button>
+                            <button type="button" data-period="6M">6M</button>
+                            <button type="button" data-period="YTD">YTD</button>
+                            <button type="button" data-period="1Y">1Y</button>
+                        </div>
+                    </div>
+
+                    <div id="dipChartState" class="dip-chart-state" role="status">
+                        <span class="dip-pulse" aria-hidden="true"></span>
+                        <h3>Waiting for a watchlist</h3>
+                        <p>Add a ticker or import your portfolio to start the scan.</p>
+                    </div>
+
+                    <div id="dipChartPanel" class="dip-chart-panel hidden">
+                        <div class="dip-chart-heading">
+                            <div>
+                                <span id="dipChartLabel">Period return · 1M</span>
+                                <small id="dipChartHint">Latest adjusted close compared with the period starting close.</small>
+                            </div>
+                            <span class="dip-chart-key"><i></i> Decline <i></i> Gain</span>
+                        </div>
+                        <div id="dipChartCanvasWrap" class="dip-chart-canvas-wrap">
+                            <canvas id="dipChart" aria-label="Ranked watchlist performance chart" role="img"></canvas>
+                        </div>
+                    </div>
+
+                    <section class="dip-roster" aria-labelledby="rosterTitle">
+                        <div class="dip-roster-head">
+                            <div>
+                                <p class="dip-overline">Symbol roster</p>
+                                <h3 id="rosterTitle">Tracked names</h3>
+                            </div>
+                            <form id="addTickerForm" class="dip-ticker-form" novalidate>
+                                <div class="dip-ticker-search">
+                                    <label class="sr-only" for="dipTickerInput">Company or ticker</label>
+                                    <input id="dipTickerInput" type="text" autocomplete="off" placeholder="ADD TICKER…" aria-autocomplete="list" aria-controls="dipTickerAutocomplete" aria-expanded="false">
+                                    <div id="dipTickerAutocomplete" class="ticker-autocomplete hidden" role="listbox"></div>
+                                </div>
+                                <button class="dip-button dip-button-primary" type="submit">Add</button>
+                            </form>
+                        </div>
+                        <div id="dipTickerChips" class="dip-ticker-chips"></div>
+                    </section>
+
+                    <div class="dip-table-wrap">
+                        <table class="dip-table">
+                            <caption class="sr-only">Dip Finder metrics for the active watchlist</caption>
+                            <thead><tr><th>Rank</th><th>Symbol</th><th>Latest close</th><th id="dipMetricColumn">1M return</th><th>Reference</th><th>Status</th></tr></thead>
+                            <tbody id="dipTableBody"><tr><td colspan="6" class="dip-table-empty">No symbols loaded.</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+</div>
+
+<dialog id="watchlistDialog" class="dip-dialog" aria-labelledby="watchlistDialogTitle">
+    <form id="watchlistForm">
+        <p class="dip-overline">Watchlist command</p>
+        <h2 id="watchlistDialogTitle">Create watchlist</h2>
+        <p id="watchlistDialogCopy">Name a new group of symbols to scan.</p>
+        <label for="watchlistNameInput">Watchlist name</label>
+        <input id="watchlistNameInput" maxlength="60" autocomplete="off" required>
+        <span id="watchlistNameError" class="dip-field-error hidden"></span>
+        <div class="dip-dialog-actions">
+            <button class="dip-button dip-button-quiet" type="button" data-close-dialog>Cancel</button>
+            <button id="saveWatchlistBtn" class="dip-button dip-button-primary" type="submit">Create watchlist</button>
+        </div>
+    </form>
+</dialog>
+
+<dialog id="deleteWatchlistDialog" class="dip-dialog" aria-labelledby="deleteWatchlistDialogTitle">
+    <form method="dialog">
+        <p class="dip-overline">Destructive command</p>
+        <h2 id="deleteWatchlistDialogTitle">Delete this watchlist?</h2>
+        <p>This removes the watchlist only. Portfolio positions are not changed.</p>
+        <div class="dip-dialog-actions">
+            <button class="dip-button dip-button-quiet" value="cancel">Keep watchlist</button>
+            <button class="dip-button dip-button-danger" value="confirm">Delete</button>
+        </div>
+    </form>
+</dialog>
+
+<div id="toast-container"></div>
+<div id="dipLiveStatus" class="sr-only" aria-live="polite"></div>
+</body>
+</html>

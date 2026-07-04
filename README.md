@@ -36,6 +36,7 @@ Changes to request or response formats often require coordinated changes and sep
 - Historical prices and annual, quarterly, TTM, and segment financial charts
 - Saving, loading, and deleting user DCF calculations
 - Portfolio positions, live prices, leverage, and currency conversion
+- Named Dip Finder watchlists with ranked period returns and drawdowns
 - Responsive navigation, loading states, caching, and toast notifications
 
 ## Technology
@@ -57,7 +58,8 @@ frontend/
 ├── register.html              # Registration page
 ├── dcf-calculator.html        # DCF calculator
 ├── financial-data.html        # Financial-data dashboard
-├── portfolio-creator.html     # Portfolio tool
+├── portfolio-creator.html     # Portfolio tool and watchlist import
+├── dip-finder.html            # Watchlist dip and drawdown scanner
 ├── css/
 │   └── style.css              # Shared application styles
 ├── js/
@@ -67,7 +69,8 @@ frontend/
 │   ├── firebase-init.js       # Firebase web client configuration
 │   ├── dcf-calculator.js      # DCF workflow
 │   ├── financial-data.js      # Financial dashboard
-│   ├── portfolio-creator.js   # Portfolio workflow
+│   ├── portfolio-creator.js   # Portfolio workflow and watchlist import
+│   ├── dip-finder.js          # Watchlist CRUD and ranked performance chart
 │   ├── charts.js              # Chart helpers
 │   ├── cache.js               # Browser-side response cache
 │   ├── ticker.js              # Ticker search and logos
@@ -110,7 +113,11 @@ Open `http://localhost:8000/`.
 - `http://localhost:5000` on `localhost` or `127.0.0.1`
 - `https://dcf-backend.onrender.com` on other hosts
 
-On localhost, `js/firebase-init.js` also connects Firebase Authentication to `http://127.0.0.1:9099`. Start a compatible Firebase Auth emulator before testing local sign-in, or adjust that development configuration intentionally.
+On localhost, js/firebase-init.js connects Firebase Authentication to http://127.0.0.1:9099. The backend's documented python 123.py entrypoint now enables matching Auth and Firestore emulator hosts automatically. Start both emulators before testing:
+
+    firebase emulators:start --only auth,firestore --project dcf123-b6cb1
+
+This keeps local watchlist and portfolio writes out of production Firestore.
 
 ## Authentication and data flow
 
@@ -145,8 +152,16 @@ All feature endpoints require an Authorization bearer token.
 | `GET` | `/portfolio/load` | Load the user's default portfolio |
 | `POST` | `/portfolio/current-prices` | Fetch prices for portfolio tickers |
 | `GET` | `/portfolio/conversion-rates?base=USD` | Fetch currency conversion rates |
+| GET | /watchlists | Load the current user's watchlists |
+| POST | /watchlists | Create a normalized watchlist |
+| PATCH | /watchlists/<id> | Rename a watchlist or replace its ticker roster |
+| POST | /watchlists/<id>/tickers | Merge unique portfolio tickers into a watchlist |
+| DELETE | /watchlists/<id> | Delete one watchlist |
+| POST | /watchlists/performance | Return all Dip Finder period metrics in one bulk response |
 
 The backend README is the source of truth for server behavior and Firestore paths.
+
+Dip Finder uses adjusted daily closes. Return compares the latest close with the last close on or before the selected boundary; drawdown compares it with the highest close in that window. Watchlists are limited to 20 per user and 50 unique validated tickers each.
 
 ## Deployment notes
 

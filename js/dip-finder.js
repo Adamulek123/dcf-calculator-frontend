@@ -1,0 +1,709 @@
+import { apiCall, setButtonState } from "./api.js";
+import { auth, logoutUser, observeAuthState } from "./auth.js";
+import { runAuthGuard } from "./auth-guard.js";
+import { renderSidebar } from "./sidebar.js";
+import { debounce, fetchTickers, hideTickerSuggestions, isValidTicker, showTickerSuggestions } from "./ticker.js";
+import { showToast } from "./toast.js";
+
+runAuthGuard();
+renderSidebar();
+
+window.addEventListener("DOMContentLoaded", () => {
+    const $ = (id) => document.getElementById(id);
+    const els = {
+        service: $("dipServiceStatus"), refresh: $("dipRefreshBtn"), list: $("watchlistList"),
+        select: $("watchlistSelect"), create: $("createWatchlistBtn"), rename: $("renameWatchlistBtn"),
+        remove: $("deleteWatchlistBtn"), title: $("activeWatchlistTitle"), meta: $("activeWatchlistMeta"),
+        deepest: $("dipDeepestValue"), deepestTicker: $("dipDeepestTicker"), median: $("dipMedianValue"),
+        coverage: $("dipCoverageValue"), asOf: $("dipAsOfValue"), chartState: $("dipChartState"),
+        chartPanel: $("dipChartPanel"), chartWrap: $("dipChartCanvasWrap"), chart: $("dipChart"),
+        chartLabel: $("dipChartLabel"), chartHint: $("dipChartHint"), tickerForm: $("addTickerForm"),
+        tickerInput: $("dipTickerInput"), autocomplete: $("dipTickerAutocomplete"), chips: $("dipTickerChips"),
+        table: $("dipTableBody"), metricColumn: $("dipMetricColumn"), dialog: $("watchlistDialog"),
+        dialogTitle: $("watchlistDialogTitle"), dialogCopy: $("watchlistDialogCopy"),
+        nameInput: $("watchlistNameInput"), nameError: $("watchlistNameError"), saveDialog: $("saveWatchlistBtn"),
+        deleteDialog: $("deleteWatchlistDialog"), deleteDialogTitle: $("deleteWatchlistDialogTitle"),
+        toast: $("toast-container"), live: $("dipLiveStatus")
+    };
+
+    const STORAGE_KEY = "dcf_dip_finder_watchlist_v1";
+    const PERIODS = ["1W", "1M", "3M", "6M", "YTD", "1Y"];
+    const apiDeps = {
+        auth,
+        handleLogout: async () => {
+            try { await logoutUser(); } finally { location.replace("login.html"); }
+        }
+    };
+
+    let watchlists = [];
+    let selectedId = localStorage.getItem(STORAGE_KEY);
+    let performance = new Map();
+    let chart = null;
+    let metric = "returnPct";
+    let period = "1M";
+    let dialogMode = "create";
+    let tickerReady = false;
+    let metadata = new Map();
+    let initializedUid = null;
+    let loadingWatchlists = false;
+    let loadingPerformance = false;
+
+    const normalizeTicker = (value) => String(value || "").trim().toUpperCase();
+    const currentWatchlist = () => watchlists.find((item) => item.id === selectedId) || null;
+    const formatPct = (value) => Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
+    const formatPrice = (value) => Number.isFinite(value)
+        ? new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(value)
+        : "—";
+    const formatDate = (value) => {
+        if (!value) return "—";
+        const parsed = new Date(`${value}T00:00:00`);
+        return Number.isNaN(parsed.getTime())
+            ? value
+            : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
+    };
+
+    async function request(endpoint, options = {}, timeout = 45000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeout);
+        try {
+            return await apiCall(endpoint, { ...options, signal: controller.signal }, apiDeps);
+        } catch (error) {
+            if (error?.name === "AbortError") {
+                throw new Error("The service took too long to respond. Try again.");
+            }
+            throw error;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    function setServiceStatus(text, state = "") {
+        els.service.textContent = text;
+        els.service.className = `dip-service-pill ${state ? `is-${state}` : ""}`.trim();
+    }
+
+    function showChartState(title, copy, actionLabel = "", action = null) {
+        els.chartPanel.classList.add("hidden");
+        els.chartState.classList.remove("hidden");
+        els.chartState.replaceChildren();
+        const pulse = document.createElement("span");
+        pulse.className = "dip-pulse";
+        pulse.setAttribute("aria-hidden", "true");
+        const heading = document.createElement("h3");
+        heading.textContent = title;
+        const paragraph = document.createElement("p");
+        paragraph.textContent = copy;
+        els.chartState.append(pulse, heading, paragraph);
+        if (actionLabel && action) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "dip-button dip-button-quiet";
+            button.textContent = actionLabel;
+            button.addEventListener("click", action, { once: true });
+            els.chartState.appendChild(button);
+        }
+    }
+
+    function renderWatchlistControls() {
+        els.list.replaceChildren();
+        els.select.replaceChildren();
+        const selected = currentWatchlist();
+
+        if (!watchlists.length && !loadingWatchlists) {
+            const empty = document.createElement("div");
+            empty.className = "dip-rail-empty";
+            empty.innerHTML = "<strong>No watchlists</strong><span>Create your first market scan.</span>";
+            els.list.appendChild(empty);
+        }
+
+        watchlists.forEach((watchlist, index) => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "dip-watchlist-item";
+            item.dataset.id = watchlist.id;
+            item.classList.toggle("is-active", watchlist.id === selectedId);
+            item.setAttribute("aria-pressed", String(watchlist.id === selectedId));
+
+            const number = document.createElement("span");
+            number.className = "dip-watchlist-number";
+            number.textContent = String(index + 1).padStart(2, "0");
+            const copy = document.createElement("span");
+            const name = document.createElement("strong");
+            name.textContent = watchlist.name;
+            const count = document.createElement("small");
+            count.textContent = `${watchlist.tickers.length} symbol${watchlist.tickers.length === 1 ? "" : "s"}`;
+            copy.append(name, count);
+            const arrow = document.createElement("span");
+            arrow.className = "dip-watchlist-arrow";
+            arrow.textContent = "↗";
+            item.append(number, copy, arrow);
+            els.list.appendChild(item);
+
+            const option = document.createElement("option");
+            option.value = watchlist.id;
+            option.textContent = `${watchlist.name} (${watchlist.tickers.length})`;
+            option.selected = watchlist.id === selectedId;
+            els.select.appendChild(option);
+        });
+
+        els.select.disabled = !watchlists.length;
+        els.rename.disabled = !selected;
+        els.remove.disabled = !selected;
+    }
+
+    function renderActiveWatchlist() {
+        const selected = currentWatchlist();
+        if (!selected) {
+            els.title.textContent = "Select a watchlist";
+            els.meta.textContent = "Create a watchlist to begin tracking drawdowns.";
+            els.tickerInput.disabled = true;
+            els.tickerForm.querySelector("button").disabled = true;
+            renderTickerChips();
+            return;
+        }
+        els.title.textContent = selected.name;
+        els.meta.textContent = `${selected.tickers.length} tracked symbol${selected.tickers.length === 1 ? "" : "s"} · sorted by deepest move`;
+        els.tickerInput.disabled = false;
+        els.tickerForm.querySelector("button").disabled = false;
+        renderTickerChips();
+    }
+
+    function renderTickerChips() {
+        els.chips.replaceChildren();
+        const selected = currentWatchlist();
+        if (!selected?.tickers.length) {
+            const copy = document.createElement("p");
+            copy.className = "dip-chip-empty";
+            copy.textContent = selected ? "No symbols yet. Add one above or import your portfolio." : "Choose a watchlist to edit its roster.";
+            els.chips.appendChild(copy);
+            return;
+        }
+
+        selected.tickers.forEach((symbol) => {
+            const chip = document.createElement("span");
+            chip.className = "dip-ticker-chip";
+            const label = document.createElement("span");
+            label.textContent = symbol;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.dataset.removeTicker = symbol;
+            button.setAttribute("aria-label", `Remove ${symbol} from ${selected.name}`);
+            button.textContent = "×";
+            chip.append(label, button);
+            els.chips.appendChild(chip);
+        });
+    }
+
+    function metricValue(result) {
+        return result?.metrics?.[period]?.[metric];
+    }
+
+    function rankedResults() {
+        const selected = currentWatchlist();
+        if (!selected) return [];
+        return selected.tickers
+            .map((symbol) => performance.get(symbol) || { ticker: symbol, status: "unavailable", metrics: {} })
+            .sort((a, b) => {
+                const aValue = metricValue(a);
+                const bValue = metricValue(b);
+                if (!Number.isFinite(aValue)) return Number.isFinite(bValue) ? 1 : a.ticker.localeCompare(b.ticker);
+                if (!Number.isFinite(bValue)) return -1;
+                return aValue - bValue;
+            });
+    }
+
+    function renderSummary(results) {
+        const selected = currentWatchlist();
+        const values = results.map(metricValue).filter(Number.isFinite).sort((a, b) => a - b);
+        const deepestResult = results.find((item) => Number.isFinite(metricValue(item)));
+        const median = values.length
+            ? values.length % 2
+                ? values[(values.length - 1) / 2]
+                : (values[values.length / 2 - 1] + values[values.length / 2]) / 2
+            : null;
+        const dates = results.map((item) => item.asOf).filter(Boolean).sort();
+
+        els.deepest.textContent = formatPct(deepestResult ? metricValue(deepestResult) : null);
+        els.deepestTicker.textContent = deepestResult?.ticker || "No data";
+        els.median.textContent = formatPct(median);
+        els.coverage.textContent = `${values.length} / ${selected?.tickers.length || 0}`;
+        els.asOf.textContent = dates.length ? formatDate(dates[dates.length - 1]) : "—";
+    }
+
+    function renderChart(results) {
+        if (chart) {
+            chart.destroy();
+            chart = null;
+        }
+
+        const available = results.filter((item) => Number.isFinite(metricValue(item)));
+        if (!available.length) {
+            const selected = currentWatchlist();
+            showChartState(
+                selected?.tickers.length ? "No market history returned" : "This scan is empty",
+                selected?.tickers.length
+                    ? "The data provider could not price these symbols. Refresh in a moment."
+                    : "Add a ticker or import your portfolio to start the scan.",
+                selected?.tickers.length ? "Retry scan" : "",
+                selected?.tickers.length ? () => loadPerformance(true) : null
+            );
+            return;
+        }
+
+        els.chartState.classList.add("hidden");
+        els.chartPanel.classList.remove("hidden");
+        els.chartWrap.style.height = "440px";
+        els.chart.style.minWidth = `${Math.max(680, available.length * 76)}px`;
+        const values = available.map(metricValue);
+        const axisPercentFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+        const metricName = metric === "returnPct" ? "Period return" : "Drawdown";
+        els.chartLabel.textContent = `${metricName} · ${period}`;
+        els.chartHint.textContent = metric === "returnPct"
+            ? "Latest adjusted close compared with the period starting close."
+            : "Latest adjusted close compared with the highest close inside the period.";
+
+        if (!globalThis.Chart) {
+            showChartState("Chart library unavailable", "The accessible data table below still contains every result.");
+            return;
+        }
+
+        const valueLabelsPlugin = {
+            id: "dipValueLabels",
+            afterDraw(chartInstance) {
+                const { ctx } = chartInstance;
+                const bars = chartInstance.getDatasetMeta(0).data;
+                ctx.save();
+                ctx.font = '600 11px "IBM Plex Mono", monospace';
+                ctx.textBaseline = "middle";
+                values.forEach((value, index) => {
+                    const bar = bars[index];
+                    if (!bar) return;
+                    const isNegative = value < 0;
+                    ctx.fillStyle = "#14211f";
+                    ctx.textAlign = "center";
+                    const preferredY = bar.y + (isNegative ? 14 : -14);
+                    const labelY = Math.max(chartInstance.chartArea.top + 8, Math.min(chartInstance.chartArea.bottom - 8, preferredY));
+                    ctx.fillText(formatPct(value), bar.x, labelY);
+                });
+                ctx.restore();
+            }
+        };
+
+        const zeroLinePlugin = {
+            id: "dipZeroLine",
+            beforeDatasetsDraw(chartInstance) {
+                const { ctx, chartArea, scales } = chartInstance;
+                const zeroY = scales.y.getPixelForValue(0);
+                ctx.save();
+                ctx.strokeStyle = "#46504d";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(chartArea.left, zeroY);
+                ctx.lineTo(chartArea.right, zeroY);
+                ctx.stroke();
+                ctx.restore();
+            }
+        };
+
+        chart = new globalThis.Chart(els.chart, {
+            type: "bar",
+            data: {
+                labels: available.map((item) => item.ticker),
+                datasets: [{
+                    data: values,
+                    backgroundColor: values.map((value) => value < 0 ? "#d85b51" : "#168b78"),
+                    borderColor: values.map((value) => value < 0 ? "#a73f37" : "#0d6558"),
+                    borderWidth: 1,
+                    borderRadius: 2,
+                    maxBarThickness: 72,
+                    categoryPercentage: .8,
+                    barPercentage: .9
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                animation: { duration: 420, easing: "easeOutQuart" },
+                events: [],
+                interaction: { mode: null },
+                layout: { padding: { left: 6, right: 8 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: {
+                            color: "#14211f",
+                            font: { family: "IBM Plex Mono", size: 12, weight: "600" },
+                            autoSkip: false,
+                            padding: 8,
+                            maxRotation: 0,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: (context) => Number(context.tick.value) === 0 ? "transparent" : "rgba(20, 33, 31, .1)",
+                            drawTicks: false
+                        },
+                        border: { display: false },
+                        ticks: {
+                            color: "#65706c",
+                            font: { family: "IBM Plex Mono", size: 10 },
+                            precision: 2,
+                            callback: (value) => `${axisPercentFormatter.format(Number(value))}%`
+                        }
+                    }
+                }
+            },
+            plugins: [zeroLinePlugin, valueLabelsPlugin]
+        });
+    }
+
+    function renderTable(results) {
+        els.table.replaceChildren();
+        els.metricColumn.textContent = `${period} ${metric === "returnPct" ? "return" : "drawdown"}`;
+        if (!results.length) {
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+            cell.colSpan = 6;
+            cell.className = "dip-table-empty";
+            cell.textContent = "No symbols loaded.";
+            row.appendChild(cell);
+            els.table.appendChild(row);
+            return;
+        }
+
+        results.forEach((result, index) => {
+            const periodMetric = result.metrics?.[period] || {};
+            const value = metricValue(result);
+            const row = document.createElement("tr");
+            const values = [
+                String(index + 1).padStart(2, "0"),
+                result.ticker,
+                formatPrice(result.lastClose),
+                formatPct(value),
+                metric === "returnPct" ? formatPrice(periodMetric.referenceClose) : formatPrice(periodMetric.periodHigh),
+                result.status === "ready" ? "Ready" : result.status === "partial" ? "Partial" : "Unavailable"
+            ];
+            values.forEach((text, cellIndex) => {
+                const cell = document.createElement("td");
+                cell.textContent = text;
+                if (cellIndex === 1) {
+                    const meta = metadata.get(result.ticker);
+                    if (meta?.name) cell.title = meta.name;
+                }
+                if (cellIndex === 3 && Number.isFinite(value)) {
+                    cell.className = value < 0 ? "is-negative" : "is-positive";
+                }
+                if (cellIndex === 5) cell.className = `dip-status-cell is-${result.status || "unavailable"}`;
+                row.appendChild(cell);
+            });
+            els.table.appendChild(row);
+        });
+    }
+
+    function renderPerformance() {
+        const results = rankedResults();
+        renderSummary(results);
+        renderChart(results);
+        renderTable(results);
+    }
+
+    function renderAll() {
+        renderWatchlistControls();
+        renderActiveWatchlist();
+        renderPerformance();
+    }
+
+    async function loadWatchlists() {
+        loadingWatchlists = true;
+        setServiceStatus("Loading lists", "loading");
+        renderWatchlistControls();
+        try {
+            const response = await request("/watchlists");
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
+            watchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
+            if (!watchlists.some((item) => item.id === selectedId)) {
+                selectedId = watchlists[0]?.id || null;
+            }
+            if (selectedId) localStorage.setItem(STORAGE_KEY, selectedId);
+            else localStorage.removeItem(STORAGE_KEY);
+            setServiceStatus("Lists synced", "ready");
+            renderAll();
+            await loadPerformance();
+        } catch (error) {
+            setServiceStatus("Service unavailable", "error");
+            showChartState("Watchlists could not load", error.message, "Retry", loadWatchlists);
+            showToast(error.message, true, 4000, els.toast);
+        } finally {
+            loadingWatchlists = false;
+            renderWatchlistControls();
+        }
+    }
+
+    async function loadPerformance(force = false) {
+        const selected = currentWatchlist();
+        performance = new Map();
+        if (!selected?.tickers.length) {
+            renderPerformance();
+            return;
+        }
+
+        loadingPerformance = true;
+        setServiceStatus(force ? "Refreshing scan" : "Scanning market", "loading");
+        showChartState("Scanning adjusted closes", "Ranking every symbol across all six time windows.");
+        setButtonState(els.refresh, "Refreshing…", true);
+        try {
+            const response = await request("/watchlists/performance", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tickers: selected.tickers, force })
+            }, 60000);
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Unable to load market history.");
+            performance = new Map((data.results || []).map((result) => [result.ticker, result]));
+            const unavailable = (data.results || []).filter((result) => result.status === "unavailable").length;
+            setServiceStatus(unavailable ? `${unavailable} unavailable` : "Scan current", unavailable ? "partial" : "ready");
+            renderPerformance();
+            els.live.textContent = `${selected.name} market scan updated.`;
+        } catch (error) {
+            setServiceStatus("Scan failed", "error");
+            showChartState("Market scan failed", error.message, "Retry scan", () => loadPerformance(true));
+            showToast(error.message, true, 4000, els.toast);
+        } finally {
+            loadingPerformance = false;
+            setButtonState(els.refresh, "↻ Refresh data", false);
+        }
+    }
+
+    async function selectWatchlist(id) {
+        if (!watchlists.some((item) => item.id === id) || id === selectedId) return;
+        selectedId = id;
+        localStorage.setItem(STORAGE_KEY, selectedId);
+        performance = new Map();
+        renderAll();
+        await loadPerformance();
+    }
+
+    function openWatchlistDialog(mode) {
+        dialogMode = mode;
+        const selected = currentWatchlist();
+        els.nameError.textContent = "";
+        els.nameError.classList.add("hidden");
+        els.dialogTitle.textContent = mode === "create" ? "Create watchlist" : "Rename watchlist";
+        els.dialogCopy.textContent = mode === "create"
+            ? "Name a new group of symbols to scan."
+            : "Change the desk label without changing its symbols.";
+        els.saveDialog.textContent = mode === "create" ? "Create watchlist" : "Save name";
+        els.nameInput.value = mode === "rename" ? selected?.name || "" : "";
+        if (typeof els.dialog.showModal === "function") els.dialog.showModal();
+        els.nameInput.focus();
+        els.nameInput.select();
+    }
+
+    async function saveWatchlist(event) {
+        event.preventDefault();
+        const name = els.nameInput.value.trim().replace(/\s+/g, " ");
+        if (!name) {
+            els.nameError.textContent = "Enter a watchlist name.";
+            els.nameError.classList.remove("hidden");
+            els.nameInput.focus();
+            return;
+        }
+        setButtonState(els.saveDialog, "Saving…", true);
+        try {
+            const selected = currentWatchlist();
+            const endpoint = dialogMode === "create" ? "/watchlists" : `/watchlists/${selected.id}`;
+            const response = await request(endpoint, {
+                method: dialogMode === "create" ? "POST" : "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, ...(dialogMode === "create" ? { tickers: [] } : {}) })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Unable to save watchlist.");
+            if (dialogMode === "create") {
+                watchlists.unshift(data);
+                selectedId = data.id;
+                localStorage.setItem(STORAGE_KEY, selectedId);
+                performance = new Map();
+            } else {
+                watchlists = watchlists.map((item) => item.id === data.id ? data : item);
+            }
+            els.dialog.close();
+            renderAll();
+            showToast(dialogMode === "create" ? "Watchlist created." : "Watchlist renamed.", false, 2500, els.toast);
+        } catch (error) {
+            els.nameError.textContent = error.message;
+            els.nameError.classList.remove("hidden");
+        } finally {
+            setButtonState(els.saveDialog, dialogMode === "create" ? "Create watchlist" : "Save name", false);
+        }
+    }
+
+    async function deleteSelectedWatchlist() {
+        const selected = currentWatchlist();
+        if (!selected) return;
+        try {
+            const response = await request(`/watchlists/${selected.id}`, { method: "DELETE" });
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || "Unable to delete watchlist.");
+            }
+            watchlists = watchlists.filter((item) => item.id !== selected.id);
+            selectedId = watchlists[0]?.id || null;
+            performance = new Map();
+            if (selectedId) localStorage.setItem(STORAGE_KEY, selectedId);
+            else localStorage.removeItem(STORAGE_KEY);
+            renderAll();
+            await loadPerformance();
+            showToast(`${selected.name} deleted.`, false, 2500, els.toast);
+        } catch (error) {
+            showToast(error.message, true, 4000, els.toast);
+        }
+    }
+
+    async function updateTickers(nextTickers, message) {
+        const selected = currentWatchlist();
+        if (!selected) return;
+        try {
+            const response = await request(`/watchlists/${selected.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ tickers: nextTickers })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Unable to update watchlist.");
+            watchlists = watchlists.map((item) => item.id === data.id ? data : item);
+            performance = new Map();
+            renderAll();
+            showToast(message, false, 2400, els.toast);
+            await loadPerformance();
+        } catch (error) {
+            showToast(error.message, true, 4000, els.toast);
+        }
+    }
+
+    async function addTicker(rawSymbol) {
+        const selected = currentWatchlist();
+        const symbol = normalizeTicker(rawSymbol);
+        const valid = tickerReady ? isValidTicker(symbol) : /^[A-Z0-9.-]{1,15}$/.test(symbol);
+        if (!selected || !valid) {
+            showToast("Choose a valid ticker from the results.", true, 3000, els.toast);
+            return;
+        }
+        if (selected.tickers.includes(symbol)) {
+            showToast(`${symbol} is already in this watchlist.`, true, 2800, els.toast);
+            return;
+        }
+        els.tickerInput.value = "";
+        hideTickerSuggestions(els.autocomplete);
+        els.tickerInput.setAttribute("aria-expanded", "false");
+        await updateTickers([...selected.tickers, symbol], `${symbol} added.`);
+    }
+
+    const suggestTickers = debounce(async (query) => {
+        await showTickerSuggestions(query, els.autocomplete);
+        els.tickerInput.setAttribute("aria-expanded", String(!els.autocomplete.classList.contains("hidden")));
+    }, 180);
+
+    els.list.addEventListener("click", (event) => selectWatchlist(event.target.closest("[data-id]")?.dataset.id));
+    els.select.addEventListener("change", () => selectWatchlist(els.select.value));
+    els.create.addEventListener("click", () => openWatchlistDialog("create"));
+    els.rename.addEventListener("click", () => openWatchlistDialog("rename"));
+    els.remove.addEventListener("click", () => {
+        const selected = currentWatchlist();
+        if (!selected) return;
+        els.deleteDialogTitle.textContent = `Delete “${selected.name}”?`;
+        if (typeof els.deleteDialog.showModal === "function") els.deleteDialog.showModal();
+    });
+    els.dialog.querySelector("[data-close-dialog]").addEventListener("click", () => els.dialog.close());
+    els.dialog.addEventListener("close", () => {
+        els.nameError.textContent = "";
+        els.nameError.classList.add("hidden");
+    });
+    els.watchlistForm = $("watchlistForm");
+    els.watchlistForm.addEventListener("submit", saveWatchlist);
+    els.deleteDialog.addEventListener("close", () => {
+        if (els.deleteDialog.returnValue === "confirm") deleteSelectedWatchlist();
+    });
+
+    document.querySelectorAll("[data-metric]").forEach((button) => {
+        button.addEventListener("click", () => {
+            metric = button.dataset.metric;
+            document.querySelectorAll("[data-metric]").forEach((item) => {
+                const active = item === button;
+                item.classList.toggle("is-active", active);
+                item.setAttribute("aria-pressed", String(active));
+            });
+            renderPerformance();
+        });
+    });
+    document.querySelectorAll("[data-period]").forEach((button) => {
+        button.addEventListener("click", () => {
+            period = button.dataset.period;
+            document.querySelectorAll("[data-period]").forEach((item) => item.classList.toggle("is-active", item === button));
+            renderPerformance();
+        });
+    });
+
+    els.refresh.addEventListener("click", () => {
+        if (!loadingPerformance) loadPerformance(true);
+    });
+    els.tickerForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        addTicker(els.tickerInput.value);
+    });
+    els.tickerInput.addEventListener("input", () => {
+        const query = els.tickerInput.value.trim();
+        if (query.length >= 2) suggestTickers(query);
+        else {
+            hideTickerSuggestions(els.autocomplete);
+            els.tickerInput.setAttribute("aria-expanded", "false");
+        }
+    });
+    els.autocomplete.addEventListener("click", (event) => {
+        const suggestion = event.target.closest(".ticker-suggestion");
+        if (suggestion) addTicker(suggestion.dataset.symbol);
+    });
+    els.chips.addEventListener("click", (event) => {
+        const symbol = event.target.closest("[data-remove-ticker]")?.dataset.removeTicker;
+        const selected = currentWatchlist();
+        if (symbol && selected) updateTickers(selected.tickers.filter((item) => item !== symbol), `${symbol} removed.`);
+    });
+    document.addEventListener("click", (event) => {
+        if (!event.target.closest(".dip-ticker-search")) {
+            hideTickerSuggestions(els.autocomplete);
+            els.tickerInput.setAttribute("aria-expanded", "false");
+        }
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.target.matches("input, select, textarea") || document.querySelector("dialog[open]")) return;
+        if (event.key.toLowerCase() === "r") {
+            event.preventDefault();
+            loadPerformance(true);
+        }
+        const index = Number(event.key) - 1;
+        if (index >= 0 && index < PERIODS.length) {
+            document.querySelector(`[data-period="${PERIODS[index]}"]`)?.click();
+        }
+    });
+
+    renderAll();
+    observeAuthState((user) => {
+        if (!user || initializedUid === user.uid) return;
+        initializedUid = user.uid;
+        fetchTickers((endpoint) => request(endpoint))
+            .then((items) => {
+                tickerReady = Array.isArray(items) && items.length > 0;
+                metadata = new Map((items || []).map((item) => [normalizeTicker(item.symbol), item]));
+                renderTable(rankedResults());
+            })
+            .catch(() => { tickerReady = false; });
+        loadWatchlists();
+    });
+});

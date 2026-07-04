@@ -1,7 +1,12 @@
 import { apiCall, setButtonState } from "./api.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
+import { runAuthGuard } from "./auth-guard.js";
+import { renderSidebar } from "./sidebar.js";
 import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, hideTickerSuggestions, getLogoUrl, onLogoLoad } from "./ticker.js";
+
+runAuthGuard();
+renderSidebar();
 
 window.addEventListener("DOMContentLoaded", () => {
     const $ = (id) => document.getElementById(id);
@@ -21,14 +26,19 @@ window.addEventListener("DOMContentLoaded", () => {
         summaryPnl: $("summaryPnl"), summaryReturn: $("summaryReturn"), previewSharesLabel: $("previewSharesLabel"),
         previewShares: $("previewShares"), previewEntryLabel: $("previewEntryValueLabel"), previewEntry: $("previewEntryValue"),
         previewExposure: $("previewExposure"), dialog: $("deletePositionDialog"), dialogTitle: $("deleteDialogTitle"),
-        live: $("portfolioLiveStatus"), toast: $("toast-container")
+        live: $("portfolioLiveStatus"), toast: $("toast-container"), watchlistBtn: $("portfolioWatchlistBtn"),
+        watchlistDialog: $("portfolioWatchlistDialog"), watchlistForm: $("portfolioWatchlistForm"),
+        watchlistSummary: $("portfolioWatchlistSummary"), watchlistName: $("portfolioWatchlistName"),
+        watchlistSelect: $("portfolioWatchlistSelect"), watchlistNewField: $("portfolioWatchlistNewField"),
+        watchlistExistingField: $("portfolioWatchlistExistingField"), watchlistError: $("portfolioWatchlistError"),
+        watchlistCancel: $("cancelPortfolioWatchlistBtn"), watchlistSave: $("savePortfolioWatchlistBtn")
     };
     const apiDeps = { auth, handleLogout: async () => { try { await logoutUser(); } finally { location.replace("login.html"); } } };
     const QUOTE_TTL = 60000, QUOTE_KEY = "dcf_portfolio_quote_cache_v1";
     let positions = [], rates = { USD: 1 }, currency = "USD", tickerReady = false, metadata = new Map();
     let editingId = null, deletingId = null, entryDirty = false, loadState = "loading";
     let autoSave = false, revision = 0, savedRevision = 0, saveTimer = null, saving = false, saveFailed = false;
-    let activeSuggestion = -1, initializedUid = null;
+    let activeSuggestion = -1, initializedUid = null, availableWatchlists = [];
     const quotes = new Map(), inFlight = new Map();
 
     const num = (v) => Number.isFinite(Number(v)) ? Number(v) : null;
@@ -167,7 +177,10 @@ window.addEventListener("DOMContentLoaded", () => {
         else if (revision > savedRevision) { els.syncStatus.textContent = "Waiting to save…"; els.syncStatus.classList.add("is-loading"); }
         else { els.syncStatus.textContent = "Saved automatically"; els.syncStatus.classList.add("is-saved"); }
     }
-    function render() { renderSummary(); renderPositions(); renderPriceStatus(); renderSync(); updateDraftStatus(); updatePreview(); }
+    function render() {
+        renderSummary(); renderPositions(); renderPriceStatus(); renderSync(); updateDraftStatus(); updatePreview();
+        els.watchlistBtn.disabled = loadState !== "ready" || positions.length === 0;
+    }
 
     function clearErrors() {
         [[els.ticker, els.tickerError], [els.size, els.sizeError], [els.entry, els.entryError], [els.leverage, els.leverageError]].forEach(([input, error]) => { input.removeAttribute("aria-invalid"); error.textContent = ""; error.classList.add("hidden"); });
@@ -270,6 +283,104 @@ window.addEventListener("DOMContentLoaded", () => {
         } catch (e) { loadState = "error"; saveFailed = false; render(); showToast(e.message, true, 3500, els.toast); }
     }
 
+    function uniquePortfolioTickers() {
+        return [...new Set(positions.map((position) => ticker(position.ticker)).filter(Boolean))];
+    }
+
+    function renderWatchlistDestination() {
+        const mode = els.watchlistForm.querySelector('[name="watchlistMode"]:checked')?.value || "new";
+        const existing = mode === "existing";
+        els.watchlistNewField.classList.toggle("hidden", existing);
+        els.watchlistExistingField.classList.toggle("hidden", !existing);
+        els.watchlistSave.textContent = existing ? "Add to watchlist" : "Create watchlist";
+        els.watchlistSave.disabled = existing && !availableWatchlists.length;
+    }
+
+    async function openWatchlistDialog() {
+        const symbols = uniquePortfolioTickers();
+        if (!symbols.length) return;
+        const duplicates = positions.length - symbols.length;
+        els.watchlistSummary.textContent = positions.length + " position" + (positions.length === 1 ? "" : "s") + " → " + symbols.length + " unique ticker" + (symbols.length === 1 ? "" : "s") + (duplicates ? " · " + duplicates + " duplicate" + (duplicates === 1 ? "" : "s") + " removed" : "") + ".";
+        els.watchlistError.textContent = "";
+        els.watchlistError.classList.add("hidden");
+        els.watchlistName.value = "Portfolio watch";
+        availableWatchlists = [];
+        els.watchlistSelect.replaceChildren(Object.assign(document.createElement("option"), { textContent: "Loading watchlists…", value: "" }));
+        renderWatchlistDestination();
+        if (typeof els.watchlistDialog.showModal === "function") els.watchlistDialog.showModal();
+
+        try {
+            const response = await request("/watchlists");
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
+            availableWatchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
+            els.watchlistSelect.replaceChildren(...availableWatchlists.map((watchlist) => Object.assign(document.createElement("option"), {
+                value: watchlist.id,
+                textContent: watchlist.name + " (" + watchlist.tickers.length + ")"
+            })));
+            renderWatchlistDestination();
+        } catch (error) {
+            els.watchlistSelect.replaceChildren(Object.assign(document.createElement("option"), { textContent: "Watchlists unavailable", value: "" }));
+            els.watchlistError.textContent = error.message;
+            els.watchlistError.classList.remove("hidden");
+            renderWatchlistDestination();
+        }
+    }
+
+    async function savePortfolioWatchlist(event) {
+        event.preventDefault();
+        const symbols = uniquePortfolioTickers();
+        const mode = els.watchlistForm.querySelector('[name="watchlistMode"]:checked')?.value || "new";
+        if (!symbols.length) return;
+
+        let endpoint = "/watchlists";
+        const method = "POST";
+        let body;
+        if (mode === "new") {
+            const name = els.watchlistName.value.trim().replace(/\s+/g, " ");
+            if (!name) {
+                els.watchlistError.textContent = "Enter a watchlist name.";
+                els.watchlistError.classList.remove("hidden");
+                els.watchlistName.focus();
+                return;
+            }
+            body = { name, tickers: symbols };
+        } else {
+            const watchlistId = els.watchlistSelect.value;
+            if (!watchlistId) {
+                els.watchlistError.textContent = "Choose an existing watchlist.";
+                els.watchlistError.classList.remove("hidden");
+                return;
+            }
+            endpoint = "/watchlists/" + watchlistId + "/tickers";
+            body = { tickers: symbols };
+        }
+
+        els.watchlistError.textContent = "";
+        els.watchlistError.classList.add("hidden");
+        setButtonState(els.watchlistSave, mode === "new" ? "Creating…" : "Adding…", true);
+        try {
+            const response = await request(endpoint, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || "Unable to update watchlist.");
+            els.watchlistDialog.close();
+            const message = mode === "new"
+                ? symbols.length + " unique ticker" + (symbols.length === 1 ? "" : "s") + " added to the new watchlist."
+                : data.addedCount + " ticker" + (data.addedCount === 1 ? "" : "s") + " added · " + data.skippedCount + " already present.";
+            showToast(message, false, 3500, els.toast);
+            els.live.textContent = message;
+        } catch (error) {
+            els.watchlistError.textContent = error.message;
+            els.watchlistError.classList.remove("hidden");
+        } finally {
+            renderWatchlistDestination();
+        }
+    }
+
     function setActiveSuggestion(index) {
         const items = [...els.autocomplete.querySelectorAll(".ticker-suggestion")]; if (!items.length) return;
         activeSuggestion = (index + items.length) % items.length; items.forEach((item, i) => { item.setAttribute("role", "option"); item.setAttribute("aria-selected", String(i === activeSuggestion)); item.classList.toggle("is-active", i === activeSuggestion); }); items[activeSuggestion].scrollIntoView({ block: "nearest" });
@@ -294,6 +405,10 @@ window.addEventListener("DOMContentLoaded", () => {
     els.cancel.addEventListener("click", resetForm); els.deleteBtn.addEventListener("click", () => askDelete(editingId)); els.dialog.addEventListener("close", () => { if (els.dialog.returnValue === "confirm") deletePosition(); });
     els.positions.addEventListener("click", (e) => { const action = e.target.closest("[data-action]")?.dataset.action, row = e.target.closest("tr"); if (action === "edit") editPosition(row?.dataset.id); else if (action === "delete") askDelete(row?.dataset.id); else if (action === "focus-builder") { els.ticker.scrollIntoView({ behavior: "smooth", block: "center" }); els.ticker.focus(); } else if (action === "retry-load") loadPortfolio(); });
     els.refreshPrices.addEventListener("click", async () => { if (!positions.length) return; setButtonState(els.refreshPrices, "Refreshing…", true); try { await requestQuotes(positions.map((p) => p.ticker), { force: true }); showToast("Prices updated.", false, 2500, els.toast); } catch (e) { showToast(e.message, true, 3500, els.toast); } finally { setButtonState(els.refreshPrices, "↻ Refresh prices", false); } });
+    els.watchlistBtn.addEventListener("click", openWatchlistDialog);
+    els.watchlistForm.addEventListener("submit", savePortfolioWatchlist);
+    els.watchlistCancel.addEventListener("click", () => els.watchlistDialog.close());
+    els.watchlistForm.querySelectorAll('[name="watchlistMode"]').forEach((radio) => radio.addEventListener("change", renderWatchlistDestination));
     els.refreshRates.addEventListener("click", () => loadRates(true)); els.syncRetry.addEventListener("click", () => saveFailed ? runSave() : loadPortfolio());
     els.currency.addEventListener("change", () => { const old = rate(), entry = num(els.entry.value), size = num(els.size.value); currency = ticker(els.currency.value) || "USD"; const next = rate(); if (Number.isFinite(entry)) els.entry.value = (entry / old * next).toFixed(4); if (els.sizing.value === "notional" && Number.isFinite(size)) els.size.value = (size / old * next).toFixed(2); updateCurrencyOptions(); changed("Display currency changed."); render(); });
     window.addEventListener("beforeunload", (e) => { if (revision > savedRevision || saving || saveFailed) { e.preventDefault(); e.returnValue = ""; } });
