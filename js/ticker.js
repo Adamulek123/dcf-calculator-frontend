@@ -4,8 +4,8 @@ import { getCachedLogo, setCachedLogo } from "./cache.js";
 let cachedTickers = [];
 const autocompleteRequestIds = new WeakMap();
 
-const TICKER_CACHE_KEY = "dcf_tickers_cache";
-const TICKER_CACHE_EXPIRY_KEY = "dcf_tickers_cache_expiry";
+const TICKER_CACHE_KEY = "dcf_tickers_cache_v2";
+const TICKER_CACHE_EXPIRY_KEY = "dcf_tickers_cache_expiry_v2";
 const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function debounce(func, wait) {
@@ -123,89 +123,91 @@ function hideTickerSuggestions(tickerAutocomplete = document.getElementById("tic
     tickerAutocomplete.classList.add("hidden");
 }
 
-async function showTickerSuggestions(query, tickerAutocomplete = document.getElementById("tickerAutocomplete"), tickers = cachedTickers) {
-    if (!tickerAutocomplete) {
-        return;
-    }
+async function showTickerSuggestions(
+    query,
+    tickerAutocomplete = document.getElementById("tickerAutocomplete"),
+    tickers = cachedTickers,
+    options = {}
+) {
+    if (!tickerAutocomplete) return;
 
     const requestId = (autocompleteRequestIds.get(tickerAutocomplete) || 0) + 1;
     autocompleteRequestIds.set(tickerAutocomplete, requestId);
     tickerAutocomplete.classList.add("hidden");
+    tickerAutocomplete.classList.toggle(
+        "ticker-autocomplete-terminal",
+        options.variant === "terminal"
+    );
 
-    if (!query || query.length < 2) {
-        tickerAutocomplete.classList.add("hidden");
-        return;
-    }
+    if (!query || query.length < 2) return;
 
     const queryUpper = query.toUpperCase();
     const queryLower = query.toLowerCase();
-
-    const symbolMatches = tickers.filter((t) => t.symbol && t.symbol.toUpperCase().startsWith(queryUpper));
-    const nameMatches = tickers.filter((t) => t.name && t.name.toLowerCase().includes(queryLower) && !symbolMatches.includes(t));
+    const symbolMatches = tickers.filter(
+        (item) => item.symbol && item.symbol.toUpperCase().startsWith(queryUpper)
+    );
+    const nameMatches = tickers.filter(
+        (item) => item.name
+            && item.name.toLowerCase().includes(queryLower)
+            && !symbolMatches.includes(item)
+    );
     const suggestions = [...symbolMatches, ...nameMatches].slice(0, 5);
-
-    if (suggestions.length === 0) {
-        tickerAutocomplete.classList.add("hidden");
-        return;
-    }
+    if (!suggestions.length) return;
 
     const fragment = document.createDocumentFragment();
     const logoLoads = [];
-
-    suggestions.forEach((ticker) => {
-        const div = document.createElement("div");
-        div.className = "ticker-suggestion";
-        div.dataset.symbol = ticker.symbol;
+    suggestions.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "ticker-suggestion";
+        row.dataset.symbol = item.symbol;
 
         const img = document.createElement("img");
         img.className = "ticker-suggestion-logo";
-        img.alt = ticker.symbol;
+        img.alt = "";
         logoLoads.push(new Promise((resolve) => {
             let triedFallback = false;
             img.onload = async () => {
-                await onLogoLoad(img, ticker.symbol);
+                await onLogoLoad(img, item.symbol);
                 resolve();
             };
             img.onerror = () => {
                 if (!triedFallback) {
                     triedFallback = true;
-                    img.src = `https://img.logo.dev/${ticker.symbol.toLowerCase()}.com?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
+                    img.src = `https://img.logo.dev/${item.symbol.toLowerCase()}.com?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
                     return;
                 }
                 img.style.visibility = "hidden";
                 resolve();
             };
-            img.src = getLogoUrl(ticker.symbol);
+            img.src = getLogoUrl(item.symbol);
         }));
 
-        const symbolSpan = document.createElement("span");
-        symbolSpan.className = "ticker-suggestion-symbol";
-        symbolSpan.textContent = ticker.symbol;
+        const info = document.createElement("div");
+        info.className = "ticker-suggestion-info";
+        const symbol = document.createElement("span");
+        symbol.className = "ticker-suggestion-symbol";
+        symbol.textContent = item.symbol;
+        const name = document.createElement("span");
+        name.className = "ticker-suggestion-name";
+        name.textContent = item.name || "Listed instrument";
+        const exchange = document.createElement("span");
+        exchange.className = "ticker-suggestion-exchange";
+        exchange.textContent = options.variant === "terminal"
+            ? (item.exchange || "Listed")
+            : `${item.exchange || ""} USD`.trim();
 
-        const infoDiv = document.createElement("div");
-        infoDiv.className = "ticker-suggestion-info";
-
-        const nameSpan = document.createElement("span");
-        nameSpan.className = "ticker-suggestion-name";
-        nameSpan.textContent = ticker.name || "";
-
-        const exchangeSpan = document.createElement("span");
-        exchangeSpan.className = "ticker-suggestion-exchange";
-        exchangeSpan.textContent = (ticker.exchange || "") + " USD";
-
-        infoDiv.appendChild(nameSpan);
-        infoDiv.appendChild(exchangeSpan);
-
-        div.appendChild(img);
-        div.appendChild(symbolSpan);
-        div.appendChild(infoDiv);
-
-        fragment.appendChild(div);
+        if (options.variant === "terminal") {
+            info.append(symbol, name);
+            row.append(img, info, exchange);
+        } else {
+            info.append(name, exchange);
+            row.append(img, symbol, info);
+        }
+        fragment.appendChild(row);
     });
 
     await Promise.all(logoLoads);
     if (autocompleteRequestIds.get(tickerAutocomplete) !== requestId) return;
-
     tickerAutocomplete.replaceChildren(fragment);
     tickerAutocomplete.classList.remove("hidden");
 }
