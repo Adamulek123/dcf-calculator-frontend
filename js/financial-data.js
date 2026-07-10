@@ -855,7 +855,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             const [filings, stockInfoData, priceData] = await Promise.all([
                 fetchWithCache(ticker, "filings_bundle", `/financial-filings?ticker=${ticker}`, true),
                 fetchWithCache(ticker, "stock_info_data", `/get_stock_info_data?ticker=${ticker}`),
-                fetchWithCache(ticker, "price_data", `/get_market_price?ticker=${ticker}`)
+                fetchWithCache(ticker, "price_data", `/get_market_price?ticker=${ticker}&include=history`)
             ]);
             const basicData = filings?.sections?.basic?.data;
             const segmentData = filings?.sections?.segment?.data || null;
