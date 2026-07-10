@@ -1,4 +1,5 @@
 import { apiCall, setButtonState } from "./api.js";
+import { CACHE_TTL, createUserDataStore } from "./data-store.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { runAuthGuard } from "./auth-guard.js";
 import { renderSidebar } from "./sidebar.js";
@@ -45,6 +46,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let tickerReady = false;
     let metadata = new Map();
     let initializedUid = null;
+    let dataStore = null;
     let loadingWatchlists = false;
     let loadingPerformance = false;
 
@@ -428,6 +430,11 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             watchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
+            void dataStore?.set(dataStore.keys.watchlists(), { watchlists }, {
+                ttlMs: CACHE_TTL.watchlists,
+                serverUpdatedAt: data.updatedAt || null,
+                version: data.version || null,
+            });
             if (!watchlists.some((item) => item.id === selectedId)) {
                 selectedId = watchlists[0]?.id || null;
             }
@@ -467,6 +474,17 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load market history.");
             performance = new Map((data.results || []).map((result) => [result.ticker, result]));
+            void dataStore?.set(dataStore.keys.dipPerformance(selected.id), {
+                watchlistId: selected.id,
+                watchlistUpdatedAt: selected.updatedAt || null,
+                tickers: [...selected.tickers],
+                results: data.results || [],
+                asOf: data.asOf || null,
+            }, {
+                ttlMs: CACHE_TTL.dipPerformance,
+                serverUpdatedAt: data.asOf || null,
+                version: selected.updatedAt || data.version || null,
+            });
             const unavailable = (data.results || []).filter((result) => result.status === "unavailable").length;
             setServiceStatus(unavailable ? `${unavailable} unavailable` : "Scan current", unavailable ? "partial" : "ready");
             renderPerformance();
@@ -697,6 +715,7 @@ window.addEventListener("DOMContentLoaded", () => {
     observeAuthState((user) => {
         if (!user || initializedUid === user.uid) return;
         initializedUid = user.uid;
+        dataStore = createUserDataStore(user.uid);
         fetchTickers((endpoint) => request(endpoint))
             .then((items) => {
                 tickerReady = Array.isArray(items) && items.length > 0;

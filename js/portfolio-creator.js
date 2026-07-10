@@ -1,4 +1,5 @@
 import { apiCall } from "./api.js";
+import { CACHE_TTL, createUserDataStore } from "./data-store.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { runAuthGuard } from "./auth-guard.js";
@@ -95,6 +96,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let activeSuggestion = -1;
     let logoRefreshNonce = Date.now();
     let initializedUid = null;
+    let dataStore = null;
     let availableWatchlists = [];
     const quotes = new Map();
     const inFlight = new Map();
@@ -874,6 +876,11 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to load exchange rates.");
             rates = { ...(data.rates || {}), USD: 1 };
+            void dataStore?.set(dataStore.keys.fxRates("USD"), data, {
+                ttlMs: CACHE_TTL.fxRates,
+                serverUpdatedAt: data.date || data.fetchedAt || null,
+                version: data.version || null,
+            });
             if (!rates[currency]) currency = "USD";
             updateCurrencyOptions();
             render();
@@ -921,6 +928,15 @@ window.addEventListener("DOMContentLoaded", () => {
                 metadata.set(ticker(symbol), { ...(metadata.get(ticker(symbol)) || {}), ...item });
             });
             currency = ticker(data.baseCurrency) || "USD";
+            void dataStore?.set(dataStore.keys.portfolio(data.portfolioId), {
+                ...data,
+                positions,
+                baseCurrency: currency,
+            }, {
+                ttlMs: CACHE_TTL.portfolioDetail,
+                serverUpdatedAt: data.updatedAt || null,
+                version: data.version || data.revision || null,
+            });
             const active = portfolios.find((item) => item.id === activePortfolioId);
             if (active) {
                 active.name = activePortfolioName;
@@ -956,6 +972,14 @@ window.addEventListener("DOMContentLoaded", () => {
             if (!response.ok) throw new Error(data.message || "Unable to load portfolios.");
             portfolios = Array.isArray(data.portfolios) ? data.portfolios : [];
             activePortfolioId = data.activePortfolioId || portfolios[0]?.id || null;
+            void dataStore?.set(dataStore.keys.portfolioIndex(), {
+                portfolios,
+                activePortfolioId,
+            }, {
+                ttlMs: CACHE_TTL.portfolioIndex,
+                serverUpdatedAt: data.updatedAt || null,
+                version: data.version || null,
+            });
             renderPicker();
             return loadPortfolio(activePortfolioId);
         } catch (error) {
@@ -1133,6 +1157,11 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             availableWatchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
+            void dataStore?.set(dataStore.keys.watchlists(), { watchlists: availableWatchlists }, {
+                ttlMs: CACHE_TTL.watchlists,
+                serverUpdatedAt: data.updatedAt || null,
+                version: data.version || null,
+            });
             els.watchlistSelect.replaceChildren(...availableWatchlists.map((watchlist) => Object.assign(document.createElement("option"), {
                 value: watchlist.id,
                 textContent: `${watchlist.name} (${watchlist.tickers.length})`,
@@ -1418,6 +1447,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         if (initializedUid === user.uid) return;
         initializedUid = user.uid;
+        dataStore = createUserDataStore(user.uid);
         fetchTickers((endpoint) => request(endpoint)).then((items) => {
             tickerReady = Array.isArray(items) && items.length > 0;
             metadata = new Map((items || []).map((item) => [ticker(item.symbol), item]));
