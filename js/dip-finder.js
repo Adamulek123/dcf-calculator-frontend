@@ -37,7 +37,8 @@ window.addEventListener("DOMContentLoaded", () => {
     };
 
     let watchlists = [];
-    let selectedId = localStorage.getItem(STORAGE_KEY);
+    let selectedStorageKey = STORAGE_KEY;
+    let selectedId = null;
     let performance = new Map();
     let chart = null;
     let metric = "returnPct";
@@ -47,6 +48,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let metadata = new Map();
     let initializedUid = null;
     let dataStore = null;
+    let revalidationPromise = null;
     let loadingWatchlists = false;
     let loadingPerformance = false;
 
@@ -421,29 +423,59 @@ window.addEventListener("DOMContentLoaded", () => {
         renderPerformance();
     }
 
-    async function loadWatchlists() {
+    const sameCachedPayload = (entry, data, version = null) => {
+        if (!entry) return false;
+        if (entry.version !== null && version !== null) return entry.version === version;
+        try { return JSON.stringify(entry.data) === JSON.stringify(data); } catch { return false; }
+    };
+
+    function saveSelectedId() {
+        if (selectedId) localStorage.setItem(selectedStorageKey, selectedId);
+        else localStorage.removeItem(selectedStorageKey);
+    }
+
+    function applyWatchlists(data) {
+        watchlists = Array.isArray(data?.watchlists) ? data.watchlists : [];
+        if (!watchlists.some((item) => item.id === selectedId)) selectedId = watchlists[0]?.id || null;
+        saveSelectedId();
+        renderAll();
+    }
+
+    async function loadWatchlists(force = false) {
+        const cacheKey = dataStore?.keys.watchlists();
+        const cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        if (cached) {
+            applyWatchlists(cached.data);
+            if (cached.isFresh && !force) {
+                setServiceStatus("Lists ready", "ready");
+                return loadPerformance();
+            }
+        }
+
         loadingWatchlists = true;
-        setServiceStatus("Loading lists", "loading");
+        setServiceStatus(cached ? "Refreshing lists" : "Loading lists", "loading");
         renderWatchlistControls();
         try {
             const response = await request("/watchlists");
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
-            watchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
-            void dataStore?.set(dataStore.keys.watchlists(), { watchlists }, {
+            const next = { watchlists: Array.isArray(data.watchlists) ? data.watchlists : [] };
+            const version = data.version || data.updatedAt || null;
+            void dataStore?.set(dataStore.keys.watchlists(), next, {
                 ttlMs: CACHE_TTL.watchlists,
                 serverUpdatedAt: data.updatedAt || null,
-                version: data.version || null,
+                version,
             });
-            if (!watchlists.some((item) => item.id === selectedId)) {
-                selectedId = watchlists[0]?.id || null;
-            }
-            if (selectedId) localStorage.setItem(STORAGE_KEY, selectedId);
-            else localStorage.removeItem(STORAGE_KEY);
+            if (!sameCachedPayload(cached, next, version)) applyWatchlists(next);
             setServiceStatus("Lists synced", "ready");
-            renderAll();
             await loadPerformance();
         } catch (error) {
+            if (cached) {
+                setServiceStatus("Saved lists", "partial");
+                await loadPerformance();
+                showToast("Showing saved watchlists while the service is unavailable.", true, 4000, els.toast);
+                return;
+            }
             setServiceStatus("Service unavailable", "error");
             showChartState("Watchlists could not load", error.message, "Retry", loadWatchlists);
             showToast(error.message, true, 4000, els.toast);
@@ -455,15 +487,32 @@ window.addEventListener("DOMContentLoaded", () => {
 
     async function loadPerformance(force = false) {
         const selected = currentWatchlist();
-        performance = new Map();
         if (!selected?.tickers.length) {
+            performance = new Map();
             renderPerformance();
             return;
         }
 
+        const cacheKey = dataStore?.keys.dipPerformance(selected.id);
+        let cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        const tickerKey = selected.tickers.map(normalizeTicker).sort().join(",");
+        const cachedTickerKey = cached?.data?.tickers?.map(normalizeTicker).sort().join(",");
+        if (cached && cachedTickerKey !== tickerKey) cached = null;
+        if (cached) {
+            performance = new Map((cached.data.results || []).map((result) => [result.ticker, result]));
+            renderPerformance();
+            if (cached.isFresh && !force) {
+                const unavailable = (cached.data.results || []).filter((result) => result.status === "unavailable").length;
+                setServiceStatus(unavailable ? `${unavailable} unavailable` : "Scan ready", unavailable ? "partial" : "ready");
+                return;
+            }
+        } else {
+            performance = new Map();
+        }
+
         loadingPerformance = true;
         setServiceStatus(force ? "Refreshing scan" : "Scanning market", "loading");
-        showChartState("Scanning adjusted closes", "Ranking every symbol across all six time windows.");
+        if (!cached) showChartState("Scanning adjusted closes", "Ranking every symbol across all six time windows.");
         setButtonState(els.refresh, "Refreshing…", true);
         try {
             const response = await request("/watchlists/performance", {
@@ -473,23 +522,32 @@ window.addEventListener("DOMContentLoaded", () => {
             }, 60000);
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load market history.");
-            performance = new Map((data.results || []).map((result) => [result.ticker, result]));
-            void dataStore?.set(dataStore.keys.dipPerformance(selected.id), {
+            const next = {
                 watchlistId: selected.id,
                 watchlistUpdatedAt: selected.updatedAt || null,
                 tickers: [...selected.tickers],
                 results: data.results || [],
                 asOf: data.asOf || null,
-            }, {
+            };
+            const version = data.version || data.asOf || null;
+            void dataStore?.set(dataStore.keys.dipPerformance(selected.id), next, {
                 ttlMs: CACHE_TTL.dipPerformance,
                 serverUpdatedAt: data.asOf || null,
-                version: selected.updatedAt || data.version || null,
+                version,
             });
+            if (!sameCachedPayload(cached, next, version)) {
+                performance = new Map(next.results.map((result) => [result.ticker, result]));
+                renderPerformance();
+            }
             const unavailable = (data.results || []).filter((result) => result.status === "unavailable").length;
             setServiceStatus(unavailable ? `${unavailable} unavailable` : "Scan current", unavailable ? "partial" : "ready");
-            renderPerformance();
             els.live.textContent = `${selected.name} market scan updated.`;
         } catch (error) {
+            if (cached) {
+                setServiceStatus("Saved scan", "partial");
+                showToast("Showing saved scan results while refresh is unavailable.", true, 4000, els.toast);
+                return;
+            }
             setServiceStatus("Scan failed", "error");
             showChartState("Market scan failed", error.message, "Retry scan", () => loadPerformance(true));
             showToast(error.message, true, 4000, els.toast);
@@ -502,7 +560,7 @@ window.addEventListener("DOMContentLoaded", () => {
     async function selectWatchlist(id) {
         if (!watchlists.some((item) => item.id === id) || id === selectedId) return;
         selectedId = id;
-        localStorage.setItem(STORAGE_KEY, selectedId);
+        saveSelectedId();
         performance = new Map();
         renderAll();
         await loadPerformance();
@@ -547,7 +605,7 @@ window.addEventListener("DOMContentLoaded", () => {
             if (dialogMode === "create") {
                 watchlists.unshift(data);
                 selectedId = data.id;
-                localStorage.setItem(STORAGE_KEY, selectedId);
+                saveSelectedId();
                 performance = new Map();
             } else {
                 watchlists = watchlists.map((item) => item.id === data.id ? data : item);
@@ -575,8 +633,7 @@ window.addEventListener("DOMContentLoaded", () => {
             watchlists = watchlists.filter((item) => item.id !== selected.id);
             selectedId = watchlists[0]?.id || null;
             performance = new Map();
-            if (selectedId) localStorage.setItem(STORAGE_KEY, selectedId);
-            else localStorage.removeItem(STORAGE_KEY);
+            saveSelectedId();
             renderAll();
             await loadPerformance();
             showToast(`${selected.name} deleted.`, false, 2500, els.toast);
@@ -711,11 +768,27 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    function revalidateStaleData() {
+        if (!dataStore || document.visibilityState === "hidden") return;
+        if (revalidationPromise) return revalidationPromise;
+        revalidationPromise = loadWatchlists(false)
+            .finally(() => { revalidationPromise = null; });
+        return revalidationPromise;
+    }
+
+    window.addEventListener("pageshow", () => { void revalidateStaleData(); });
+    window.addEventListener("focus", () => { void revalidateStaleData(); });
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") void revalidateStaleData();
+    });
+
     renderAll();
     observeAuthState((user) => {
         if (!user || initializedUid === user.uid) return;
         initializedUid = user.uid;
         dataStore = createUserDataStore(user.uid);
+        selectedStorageKey = `${STORAGE_KEY}:${user.uid}`;
+        selectedId = localStorage.getItem(selectedStorageKey);
         fetchTickers((endpoint) => request(endpoint))
             .then((items) => {
                 tickerReady = Array.isArray(items) && items.length > 0;
@@ -723,6 +796,6 @@ window.addEventListener("DOMContentLoaded", () => {
                 renderTable(rankedResults());
             })
             .catch(() => { tickerReady = false; });
-        loadWatchlists();
+        void loadWatchlists();
     });
 });
