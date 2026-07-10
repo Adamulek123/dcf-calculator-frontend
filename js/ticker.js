@@ -1,11 +1,11 @@
 import { apiCall } from "./api.js";
 import { getCachedLogo, setCachedLogo } from "./cache.js";
+import { getPublicRecord, setPublicRecord } from "./public-data-store.js";
 
 let cachedTickers = [];
 const autocompleteRequestIds = new WeakMap();
 
-const TICKER_CACHE_KEY = "dcf_tickers_cache_v2";
-const TICKER_CACHE_EXPIRY_KEY = "dcf_tickers_cache_expiry_v2";
+const TICKER_CACHE_KEY = "ticker-directory:v1";
 const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function debounce(func, wait) {
@@ -26,26 +26,10 @@ async function fetchTickers(fetchApi = apiCall) {
         return cachedTickers;
     }
 
-    const cachedData = localStorage.getItem(TICKER_CACHE_KEY);
-    const cacheExpiry = localStorage.getItem(TICKER_CACHE_EXPIRY_KEY);
-
-    if (cachedData && cacheExpiry) {
-        const expiryTime = parseInt(cacheExpiry, 10);
-        if (Date.now() < expiryTime) {
-            try {
-                cachedTickers = JSON.parse(cachedData);
-                console.log(`Loaded ${cachedTickers.length} tickers from localStorage cache`);
-                return cachedTickers;
-            } catch (e) {
-                console.error("Error parsing cached tickers:", e);
-                localStorage.removeItem(TICKER_CACHE_KEY);
-                localStorage.removeItem(TICKER_CACHE_EXPIRY_KEY);
-            }
-        } else {
-            console.log("Ticker cache expired, fetching fresh data");
-            localStorage.removeItem(TICKER_CACHE_KEY);
-            localStorage.removeItem(TICKER_CACHE_EXPIRY_KEY);
-        }
+    const storedTickers = await getPublicRecord(TICKER_CACHE_KEY);
+    if (Array.isArray(storedTickers)) {
+        cachedTickers = storedTickers;
+        return cachedTickers;
     }
 
     try {
@@ -54,9 +38,7 @@ async function fetchTickers(fetchApi = apiCall) {
         if (response.ok) {
             cachedTickers = await response.json();
             console.log(`Fetched ${cachedTickers.length} tickers from API`);
-            localStorage.setItem(TICKER_CACHE_KEY, JSON.stringify(cachedTickers));
-            localStorage.setItem(TICKER_CACHE_EXPIRY_KEY, (Date.now() + CACHE_DURATION_MS).toString());
-            console.log("Tickers cached in localStorage (expires in 1 month)");
+            void setPublicRecord(TICKER_CACHE_KEY, cachedTickers, CACHE_DURATION_MS);
         } else {
             console.error("Failed to fetch tickers:", response.status);
         }
