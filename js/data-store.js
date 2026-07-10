@@ -108,6 +108,22 @@ function createKeys(uid) {
     });
 }
 
+function createDipPerformanceResultKey(watchlist) {
+    const watchlistId = String(watchlist?.id || "").trim();
+    if (!watchlistId) throw new TypeError("A watchlist ID is required for a performance cache key.");
+    const roster = [...new Set((watchlist?.tickers || [])
+        .map((ticker) => String(ticker || "").trim().toUpperCase())
+        .filter(Boolean))]
+        .sort()
+        .join(",");
+    let hash = 2166136261;
+    for (let index = 0; index < roster.length; index += 1) {
+        hash ^= roster.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `${watchlistId}:${(hash >>> 0).toString(36)}`;
+}
+
 function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
     const uid = assertUid(rawUid);
     const keys = createKeys(uid);
@@ -311,4 +327,10 @@ function createUserCacheChannel(rawUid, onMessage = () => {}, {
     return Object.freeze({ uid, publish, close });
 }
 
-export { CACHE_TTL, ENVELOPE_SCHEMA_VERSION, createUserCacheChannel, createUserDataStore };
+export {
+    CACHE_TTL,
+    ENVELOPE_SCHEMA_VERSION,
+    createDipPerformanceResultKey,
+    createUserCacheChannel,
+    createUserDataStore,
+};
