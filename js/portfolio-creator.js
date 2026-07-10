@@ -98,6 +98,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let autoSave = false;
     let revision = 0;
     let savedRevision = 0;
+    let serverRevision = null;
+    let outboxRestoredForId = null;
     let saveTimer = null;
     let savePromise = null;
     let saveFailed = false;
@@ -779,9 +781,46 @@ window.addEventListener("DOMContentLoaded", () => {
         saveFailed = false;
         updateActivePortfolioSummary();
         cacheActivePortfolio("pending");
+        persistPendingSnapshot();
         if (message) els.live.textContent = message;
         render();
         scheduleSave();
+    }
+
+    function pendingSnapshot() {
+        return {
+            portfolioId: activePortfolioId,
+            positions: positions.map((position) => ({ ...position })),
+            baseCurrency: currency,
+            baseRevision: serverRevision,
+            clientRevision: revision,
+            savedAt: new Date().toISOString(),
+        };
+    }
+
+    function persistPendingSnapshot() {
+        if (!dataStore || !activePortfolioId) return;
+        void dataStore.set(dataStore.keys.portfolioOutbox(activePortfolioId), pendingSnapshot(), {
+            ttlMs: 30 * 24 * 60 * 60 * 1000,
+            version: serverRevision,
+        });
+    }
+
+    async function restorePendingSnapshot() {
+        if (!dataStore || !activePortfolioId || outboxRestoredForId === activePortfolioId) return;
+        outboxRestoredForId = activePortfolioId;
+        const pending = await dataStore.get(dataStore.keys.portfolioOutbox(activePortfolioId));
+        if (!pending?.data || pending.data.portfolioId !== activePortfolioId) return;
+        positions = Array.isArray(pending.data.positions) ? pending.data.positions : positions;
+        currency = ticker(pending.data.baseCurrency) || currency;
+        serverRevision = pending.data.baseRevision ?? serverRevision;
+        revision = Math.max(1, Number(pending.data.clientRevision) || 1);
+        savedRevision = 0;
+        saveFailed = true;
+        cacheActivePortfolio("unsynced");
+        render();
+        showToast("Restored portfolio changes that still need to sync.", true, 3500, els.toast);
+        scheduleSave(0);
     }
 
     function scheduleSave(delay = 500) {
@@ -805,11 +844,14 @@ window.addEventListener("DOMContentLoaded", () => {
                         portfolioId: activePortfolioId,
                         positions,
                         baseCurrency: currency,
+                        baseRevision: serverRevision,
                     }),
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message || "Failed to save portfolio.");
                 savedRevision = Math.max(savedRevision, targetRevision);
+                serverRevision = data.revision ?? serverRevision;
+                if (revision <= targetRevision) void dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
                 cacheActivePortfolio(revision > targetRevision ? "pending" : "synced", {
                     version: data.version || data.revision || null,
                     serverUpdatedAt: data.updatedAt || null,
@@ -1033,6 +1075,8 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         revision = 0;
         savedRevision = 0;
+        serverRevision = data.revision ?? null;
+        if (outboxRestoredForId !== activePortfolioId) void restorePendingSnapshot();
         saveFailed = false;
         loadState = "ready";
         autoSave = true;
