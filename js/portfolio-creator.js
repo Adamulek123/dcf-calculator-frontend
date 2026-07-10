@@ -104,7 +104,6 @@ window.addEventListener("DOMContentLoaded", () => {
     let savePromise = null;
     let saveFailed = false;
     let activeSuggestion = -1;
-    let logoRefreshNonce = Date.now();
     let initializedUid = null;
     let dataStore = null;
     let cacheChannel = null;
@@ -219,10 +218,7 @@ window.addEventListener("DOMContentLoaded", () => {
         image.alt = `${name || symbol} logo`;
         image.referrerPolicy = "strict-origin-when-cross-origin";
         let fallbackTried = false;
-        image.onload = async () => {
-            const cached = await onLogoLoad(image, symbol);
-            if (cached?.startsWith("data:") && image.src !== cached) image.src = cached;
-        };
+        image.onload = () => { void onLogoLoad(image, symbol); };
         image.onerror = () => {
             if (!fallbackTried) {
                 fallbackTried = true;
@@ -231,7 +227,7 @@ window.addEventListener("DOMContentLoaded", () => {
             }
             image.remove();
         };
-        image.src = `https://img.logo.dev/ticker/${encodeURIComponent(symbol)}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA&refresh=${logoRefreshNonce}`;
+        image.src = `https://img.logo.dev/ticker/${encodeURIComponent(symbol)}?token=pk_RQ-JlIhmQEOm6yeZvHsSKA`;
         shell.appendChild(image);
         return shell;
     }
@@ -712,7 +708,6 @@ window.addEventListener("DOMContentLoaded", () => {
     function resetForm({ focus = false } = {}) {
         editingId = null;
         entryDirty = false;
-        if (focus) logoRefreshNonce = Date.now();
         els.form.reset();
         els.leverage.value = "1";
         els.formEyebrow.textContent = "New position";
