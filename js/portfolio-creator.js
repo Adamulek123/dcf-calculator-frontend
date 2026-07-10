@@ -1163,7 +1163,7 @@ window.addEventListener("DOMContentLoaded", () => {
             if (cached.isFresh && !force) return loadPortfolio(activePortfolioId);
         }
         try {
-            const response = await request("/portfolios", {}, 45000);
+            const response = await request("/portfolio/bootstrap", {}, 45000);
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load portfolios.");
             const next = {
@@ -1179,7 +1179,20 @@ window.addEventListener("DOMContentLoaded", () => {
                 version,
             });
             if (!sameCachedPayload(cached, next, version)) applyPortfolioIndex(next);
-            return loadPortfolio(activePortfolioId);
+            const activeDetail = data.activePortfolio;
+            if (!activeDetail || activeDetail.portfolioId !== activePortfolioId) {
+                return loadPortfolio(activePortfolioId);
+            }
+            const detailKey = dataStore?.keys.portfolio(activePortfolioId);
+            const cachedDetail = detailKey ? await dataStore.get(detailKey) : null;
+            const detailVersion = activeDetail.revision ?? activeDetail.updatedAt ?? null;
+            void dataStore?.set(dataStore.keys.portfolio(activePortfolioId), activeDetail, {
+                ttlMs: CACHE_TTL.portfolioDetail,
+                serverUpdatedAt: activeDetail.updatedAt || null,
+                version: detailVersion,
+            });
+            if (!sameCachedPayload(cachedDetail, activeDetail, detailVersion)) applyPortfolioData(activeDetail);
+            return true;
         } catch (error) {
             if (cached) {
                 showToast("Showing saved portfolio list while the service is unavailable.", true, 3500, els.toast);
