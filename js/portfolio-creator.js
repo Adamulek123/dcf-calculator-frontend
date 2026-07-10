@@ -107,6 +107,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let dataStore = null;
     let cacheChannel = null;
     let revalidationPromise = null;
+    let activationSequence = 0;
+    let activationPending = false;
     let availableWatchlists = [];
     const quotes = new Map();
     const inFlight = new Map();
@@ -1076,6 +1078,7 @@ window.addEventListener("DOMContentLoaded", () => {
             if (!response?.ok) throw lastError || new Error("Failed to load portfolio.");
             const normalized = normalizePortfolioData(data);
             const version = data.version || data.revision || data.updatedAt || null;
+            if (portfolioId && activePortfolioId !== portfolioId) return true;
             if (cached && revision !== revalidationRevision) return true;
             void dataStore?.set(dataStore.keys.portfolio(normalized.portfolioId), normalized, {
                 ttlMs: CACHE_TTL.portfolioDetail,
@@ -1144,7 +1147,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     async function switchPortfolio(portfolioId) {
-        if (!portfolioId || portfolioId === activePortfolioId || loadState === "loading") {
+        if (!portfolioId || portfolioId === activePortfolioId || loadState === "loading" || activationPending) {
             els.picker.open = false;
             return;
         }
@@ -1154,25 +1157,44 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
         setMenuError();
-        try {
-            const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}/activate`, { method: "POST" });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Unable to switch portfolios.");
-            els.picker.open = false;
-            activePortfolioId = data.activePortfolioId || portfolioId;
-            cachePortfolioIndex({
-                version: data.version || null,
-                serverUpdatedAt: data.updatedAt || null,
-            });
-            cacheChannel?.publish("portfolio-updated", {
-                entityId: activePortfolioId,
-                operation: "activate",
-                version: data.version || null,
-            });
-            await loadPortfolio(activePortfolioId);
-        } catch (error) {
-            setMenuError(error.message);
-        }
+        const previousPortfolioId = activePortfolioId;
+        const activationId = ++activationSequence;
+        activationPending = true;
+        els.picker.open = false;
+        activePortfolioId = portfolioId;
+        cachePortfolioIndex();
+        renderPicker();
+        void loadPortfolio(portfolioId);
+
+        void (async () => {
+            try {
+                const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}/activate`, { method: "POST" });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || "Unable to switch portfolios.");
+                if (activationId !== activationSequence) return;
+                activePortfolioId = data.activePortfolioId || portfolioId;
+                cachePortfolioIndex({
+                    version: data.version || null,
+                    serverUpdatedAt: data.updatedAt || null,
+                });
+                cacheChannel?.publish("portfolio-updated", {
+                    entityId: activePortfolioId,
+                    operation: "activate",
+                    version: data.version || null,
+                });
+                renderPicker();
+            } catch (error) {
+                if (activationId !== activationSequence) return;
+                activePortfolioId = previousPortfolioId;
+                cachePortfolioIndex();
+                renderPicker();
+                await loadPortfolio(previousPortfolioId);
+                setMenuError(error.message);
+                showToast("Portfolio switch was rolled back because it could not be saved.", true, 3500, els.toast);
+            } finally {
+                if (activationId === activationSequence) activationPending = false;
+            }
+        })();
     }
 
     function openRenamePortfolio(portfolioId) {
