@@ -915,9 +915,10 @@ window.addEventListener("DOMContentLoaded", () => {
         render();
         const promise = (async () => {
             try {
-                const response = await request("/portfolio/current-prices", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
+            const response = await request("/portfolio/current-prices", {
+                method: "POST",
+                coalesce: true,
+                headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ tickers: needed }),
                 });
                 const data = await response.json();

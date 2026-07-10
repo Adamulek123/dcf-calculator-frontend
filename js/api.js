@@ -8,6 +8,13 @@ function setButtonState(button, text, disabled) {
     button.disabled = disabled;
 }
 
+const inFlightRequests = new Map();
+
+function canonicalBody(body) {
+    if (!body) return "";
+    try { return JSON.stringify(JSON.parse(body)); } catch { return String(body); }
+}
+
 async function apiCall(endpoint, options = {}, dependencies = {}) {
     const { auth = window.auth, handleLogout = () => {}, backendBaseUrl = getBackendBaseUrl() } = dependencies;
     const user = auth?.currentUser;
@@ -29,13 +36,27 @@ async function apiCall(endpoint, options = {}, dependencies = {}) {
         throw new Error("No authentication token available. Please log in.");
     }
 
-    try {
-        const response = await fetch(`${backendBaseUrl}${endpoint}`, options);
+    const method = String(options.method || "GET").toUpperCase();
+    const coalesce = method === "GET" || options.coalesce === true;
+    const requestOptions = { ...options };
+    delete requestOptions.coalesce;
+    const key = `${user.uid}:${method}:${endpoint}:${canonicalBody(requestOptions.body)}`;
+    const execute = async () => {
+        const response = await fetch(`${backendBaseUrl}${endpoint}`, requestOptions);
         if (response.status === 401) {
             handleLogout();
             throw new Error("Session expired. Please log in again.");
         }
         return response;
+    };
+    try {
+        if (!coalesce) return await execute();
+        let pending = inFlightRequests.get(key);
+        if (!pending) {
+            pending = execute().finally(() => inFlightRequests.delete(key));
+            inFlightRequests.set(key, pending);
+        }
+        return (await pending).clone();
     } catch (error) {
         console.error(`API call to ${endpoint} failed:`, error);
         throw error;
