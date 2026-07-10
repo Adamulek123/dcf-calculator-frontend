@@ -1163,14 +1163,17 @@ window.addEventListener("DOMContentLoaded", () => {
             if (cached.isFresh && !force) return loadPortfolio(activePortfolioId);
         }
         try {
-            const response = await request("/portfolio/bootstrap", {}, 45000);
+            const response = await request("/portfolio/bootstrap", {
+                headers: cached?.version ? { "If-None-Match": cached.version } : {},
+            }, 45000);
+            if (response.status === 304 && cached) return true;
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load portfolios.");
             const next = {
                 portfolios: Array.isArray(data.portfolios) ? data.portfolios : [],
                 activePortfolioId: data.activePortfolioId || data.portfolios?.[0]?.id || null,
             };
-            const version = data.version || data.updatedAt || null;
+            const version = response.headers.get("ETag") || data.version || data.updatedAt || null;
             void dataStore?.set(dataStore.keys.portfolioIndex(), {
                 ...next,
             }, {
