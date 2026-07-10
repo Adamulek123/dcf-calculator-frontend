@@ -2,6 +2,9 @@ const DATABASE_NAME = "dcf-client-data";
 const DATABASE_VERSION = 1;
 const ENTRY_STORE = "entries";
 const ENVELOPE_SCHEMA_VERSION = 1;
+const CACHE_CHANNEL_NAME = "dcf-data-updates-v1";
+const CACHE_STORAGE_EVENT_KEY = "dcf_data_update_signal_v1";
+const CACHE_MESSAGE_TYPES = new Set(["portfolio-updated", "watchlist-updated", "signed-out"]);
 
 const CACHE_TTL = Object.freeze({
     portfolioIndex: 10 * 60 * 1000,
@@ -229,4 +232,83 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
     return Object.freeze({ uid, keys, get, set, remove, removePrefix, clearUser });
 }
 
-export { CACHE_TTL, ENVELOPE_SCHEMA_VERSION, createUserDataStore };
+function createUserCacheChannel(rawUid, onMessage = () => {}, {
+    BroadcastChannelImpl = globalThis.BroadcastChannel,
+    storage = globalThis.localStorage,
+    eventTarget = globalThis,
+    now = () => Date.now(),
+} = {}) {
+    const uid = assertUid(rawUid);
+    const channel = typeof BroadcastChannelImpl === "function"
+        ? new BroadcastChannelImpl(CACHE_CHANNEL_NAME)
+        : null;
+
+    function normalizeMessage(value) {
+        if (!value || typeof value !== "object") return null;
+        if (value.schemaVersion !== ENVELOPE_SCHEMA_VERSION) return null;
+        if (value.uid !== uid || !CACHE_MESSAGE_TYPES.has(value.type)) return null;
+        if (!Number.isFinite(value.createdAt) || typeof value.messageId !== "string") return null;
+        return {
+            schemaVersion: value.schemaVersion,
+            messageId: value.messageId,
+            type: value.type,
+            uid: value.uid,
+            entityId: typeof value.entityId === "string" ? value.entityId : null,
+            operation: typeof value.operation === "string" ? value.operation : "updated",
+            version: ["string", "number"].includes(typeof value.version) ? value.version : null,
+            createdAt: value.createdAt,
+        };
+    }
+
+    function receive(value) {
+        const message = normalizeMessage(value);
+        if (message) onMessage(message);
+    }
+
+    function onStorage(event) {
+        if (event.key !== CACHE_STORAGE_EVENT_KEY || !event.newValue) return;
+        try { receive(JSON.parse(event.newValue)); } catch { /* Ignore malformed fallback messages. */ }
+    }
+
+    if (channel) channel.addEventListener("message", (event) => receive(event.data));
+    else eventTarget?.addEventListener?.("storage", onStorage);
+
+    function publish(type, {
+        entityId = null,
+        operation = "updated",
+        version = null,
+    } = {}) {
+        if (!CACHE_MESSAGE_TYPES.has(type)) throw new TypeError(`Unsupported cache message type: ${type}`);
+        const createdAt = now();
+        const message = {
+            schemaVersion: ENVELOPE_SCHEMA_VERSION,
+            messageId: `${uid}:${createdAt}:${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+            type,
+            uid,
+            entityId: entityId === null ? null : String(entityId),
+            operation: String(operation || "updated"),
+            version: ["string", "number"].includes(typeof version) ? version : null,
+            createdAt,
+        };
+        if (channel) {
+            channel.postMessage(message);
+        } else if (storage) {
+            try {
+                storage.setItem(CACHE_STORAGE_EVENT_KEY, JSON.stringify(message));
+                storage.removeItem(CACHE_STORAGE_EVENT_KEY);
+            } catch (error) {
+                console.warn("Unable to publish cache update through the storage fallback", error);
+            }
+        }
+        return message;
+    }
+
+    function close() {
+        channel?.close();
+        if (!channel) eventTarget?.removeEventListener?.("storage", onStorage);
+    }
+
+    return Object.freeze({ uid, publish, close });
+}
+
+export { CACHE_TTL, ENVELOPE_SCHEMA_VERSION, createUserCacheChannel, createUserDataStore };

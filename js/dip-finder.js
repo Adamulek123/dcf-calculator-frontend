@@ -1,5 +1,5 @@
 import { apiCall, setButtonState } from "./api.js";
-import { CACHE_TTL, createUserDataStore } from "./data-store.js";
+import { CACHE_TTL, createUserCacheChannel, createUserDataStore } from "./data-store.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { runAuthGuard } from "./auth-guard.js";
 import { renderSidebar } from "./sidebar.js";
@@ -32,7 +32,10 @@ window.addEventListener("DOMContentLoaded", () => {
     const apiDeps = {
         auth,
         handleLogout: async () => {
-            try { await logoutUser(); } finally { location.replace("login.html"); }
+            try {
+                cacheChannel?.publish("signed-out", { operation: "logout" });
+                await logoutUser();
+            } finally { location.replace("login.html"); }
         }
     };
 
@@ -48,6 +51,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let metadata = new Map();
     let initializedUid = null;
     let dataStore = null;
+    let cacheChannel = null;
     let revalidationPromise = null;
     let loadingWatchlists = false;
     let loadingPerformance = false;
@@ -656,6 +660,11 @@ window.addEventListener("DOMContentLoaded", () => {
                 version: data.version || null,
                 serverUpdatedAt: data.updatedAt || null,
             });
+            cacheChannel?.publish("watchlist-updated", {
+                entityId: data.id,
+                operation: dialogMode === "create" ? "create" : "rename",
+                version: data.version || null,
+            });
             els.dialog.close();
             renderAll();
             showToast(dialogMode === "create" ? "Watchlist created." : "Watchlist renamed.", false, 2500, els.toast);
@@ -691,6 +700,10 @@ window.addEventListener("DOMContentLoaded", () => {
                 throw new Error(data.message || "Unable to delete watchlist.");
             }
             void dataStore?.remove(dataStore.keys.dipPerformance(selected.id));
+            cacheChannel?.publish("watchlist-updated", {
+                entityId: selected.id,
+                operation: "delete",
+            });
             await loadPerformance();
             showToast(`${selected.name} deleted.`, false, 2500, els.toast);
         } catch (error) {
@@ -734,6 +747,11 @@ window.addEventListener("DOMContentLoaded", () => {
                 serverUpdatedAt: data.updatedAt || null,
             });
             void dataStore?.remove(dataStore.keys.dipPerformance(selected.id));
+            cacheChannel?.publish("watchlist-updated", {
+                entityId: data.id,
+                operation: "tickers",
+                version: data.version || null,
+            });
             renderAll();
             showToast(message, false, 2400, els.toast);
             await loadPerformance();
@@ -859,6 +877,14 @@ window.addEventListener("DOMContentLoaded", () => {
         return revalidationPromise;
     }
 
+    function handleCrossTabCacheMessage(message) {
+        if (message.type === "signed-out") {
+            location.replace("login.html");
+            return;
+        }
+        if (message.type === "watchlist-updated") void loadWatchlists(true);
+    }
+
     window.addEventListener("pageshow", () => { void revalidateStaleData(); });
     window.addEventListener("focus", () => { void revalidateStaleData(); });
     document.addEventListener("visibilitychange", () => {
@@ -870,6 +896,8 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!user || initializedUid === user.uid) return;
         initializedUid = user.uid;
         dataStore = createUserDataStore(user.uid);
+        cacheChannel?.close();
+        cacheChannel = createUserCacheChannel(user.uid, handleCrossTabCacheMessage);
         selectedStorageKey = `${STORAGE_KEY}:${user.uid}`;
         selectedId = localStorage.getItem(selectedStorageKey);
         fetchTickers((endpoint) => request(endpoint))

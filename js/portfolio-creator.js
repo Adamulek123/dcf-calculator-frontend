@@ -1,5 +1,5 @@
 import { apiCall } from "./api.js";
-import { CACHE_TTL, createUserDataStore } from "./data-store.js";
+import { CACHE_TTL, createUserCacheChannel, createUserDataStore } from "./data-store.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { runAuthGuard } from "./auth-guard.js";
@@ -68,7 +68,10 @@ window.addEventListener("DOMContentLoaded", () => {
     const apiDeps = {
         auth,
         handleLogout: async () => {
-            try { await logoutUser(); } finally { location.replace("login.html"); }
+            try {
+                cacheChannel?.publish("signed-out", { operation: "logout" });
+                await logoutUser();
+            } finally { location.replace("login.html"); }
         },
     };
     const QUOTE_TTL = 60000;
@@ -97,6 +100,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let logoRefreshNonce = Date.now();
     let initializedUid = null;
     let dataStore = null;
+    let cacheChannel = null;
     let revalidationPromise = null;
     let availableWatchlists = [];
     const quotes = new Map();
@@ -803,6 +807,11 @@ window.addEventListener("DOMContentLoaded", () => {
                     version: data.version || data.revision || null,
                     serverUpdatedAt: data.updatedAt || null,
                 });
+                cacheChannel?.publish("portfolio-updated", {
+                    entityId: activePortfolioId,
+                    operation: "save",
+                    version: data.version || data.revision || null,
+                });
                 return true;
             } catch (error) {
                 saveFailed = true;
@@ -1150,6 +1159,11 @@ window.addEventListener("DOMContentLoaded", () => {
                 version: data.version || null,
                 serverUpdatedAt: data.updatedAt || null,
             });
+            cacheChannel?.publish("portfolio-updated", {
+                entityId: activePortfolioId,
+                operation: "activate",
+                version: data.version || null,
+            });
             await loadPortfolio(activePortfolioId);
         } catch (error) {
             setMenuError(error.message);
@@ -1210,6 +1224,11 @@ window.addEventListener("DOMContentLoaded", () => {
                 version: data.version || null,
                 serverUpdatedAt: data.portfolio.updatedAt || null,
             });
+            cacheChannel?.publish("portfolio-updated", {
+                entityId: data.portfolio.id,
+                operation: "create",
+                version: data.version || null,
+            });
             await loadPortfolio(activePortfolioId);
             showToast(`${data.portfolio.name} created.`, false, 2500, els.toast);
         } catch (error) {
@@ -1249,6 +1268,11 @@ window.addEventListener("DOMContentLoaded", () => {
                     serverUpdatedAt: data.updatedAt || null,
                 });
             }
+            cacheChannel?.publish("portfolio-updated", {
+                entityId: managingPortfolioId,
+                operation: "rename",
+                version: data.version || null,
+            });
             els.renameDialog.close();
             renderPicker();
             showToast("Portfolio renamed.", false, 2500, els.toast);
@@ -1277,6 +1301,11 @@ window.addEventListener("DOMContentLoaded", () => {
             managingPortfolioId = null;
             activePortfolioId = data.activePortfolioId;
             cachePortfolioIndex({ version: data.version || null, serverUpdatedAt: data.updatedAt || null });
+            cacheChannel?.publish("portfolio-updated", {
+                entityId: portfolioId,
+                operation: "delete",
+                version: data.version || null,
+            });
             await loadPortfolio(activePortfolioId);
             showToast("Portfolio deleted.", false, 2500, els.toast);
         } catch (error) {
@@ -1401,12 +1430,22 @@ window.addEventListener("DOMContentLoaded", () => {
             if (mode === "new") {
                 availableWatchlists = availableWatchlists.map((watchlist) => watchlist.id === optimisticId ? data : watchlist);
                 cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.updatedAt || null });
+                cacheChannel?.publish("watchlist-updated", {
+                    entityId: data.id,
+                    operation: "create",
+                    version: data.version || null,
+                });
             } else if (data.watchlist) {
                 availableWatchlists = availableWatchlists.map((watchlist) => (
                     watchlist.id === data.watchlist.id ? data.watchlist : watchlist
                 ));
                 cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.watchlist.updatedAt || null });
                 void dataStore?.remove(dataStore.keys.dipPerformance(data.watchlist.id));
+                cacheChannel?.publish("watchlist-updated", {
+                    entityId: data.watchlist.id,
+                    operation: "merge",
+                    version: data.watchlist.version || null,
+                });
             }
             els.watchlistDialog.close();
             const message = mode === "new"
@@ -1644,6 +1683,21 @@ window.addEventListener("DOMContentLoaded", () => {
         return revalidationPromise;
     }
 
+    function handleCrossTabCacheMessage(message) {
+        if (message.type === "signed-out") {
+            location.replace("login.html");
+            return;
+        }
+        if (message.type !== "portfolio-updated") return;
+        if (revision > savedRevision || savePromise) return;
+        if (message.entityId && message.entityId === activePortfolioId) {
+            void loadPortfolio(message.entityId, { force: true });
+        }
+        if (["create", "rename", "delete", "activate", "save"].includes(message.operation)) {
+            void loadPortfolioIndex(true);
+        }
+    }
+
     window.addEventListener("pageshow", () => { void revalidateStaleData(); });
     window.addEventListener("focus", () => { void revalidateStaleData(); });
     document.addEventListener("visibilitychange", () => {
@@ -1661,6 +1715,8 @@ window.addEventListener("DOMContentLoaded", () => {
         if (initializedUid === user.uid) return;
         initializedUid = user.uid;
         dataStore = createUserDataStore(user.uid);
+        cacheChannel?.close();
+        cacheChannel = createUserCacheChannel(user.uid, handleCrossTabCacheMessage);
         fetchTickers((endpoint) => request(endpoint)).then((items) => {
             tickerReady = Array.isArray(items) && items.length > 0;
             metadata = new Map((items || []).map((item) => [ticker(item.symbol), item]));
