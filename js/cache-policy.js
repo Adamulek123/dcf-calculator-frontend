@@ -98,6 +98,20 @@ const CACHE_POLICIES = Object.freeze({
         maxEntries: 10,
         invalidatedBy: ["currency-change", "manual-refresh", "expiry"],
     }),
+    savedCalculations: policy({
+        ownership: "uid",
+        ttlMs: 30 * DAY,
+        staleTtlMs: 30 * DAY,
+        maxEntries: 100,
+        invalidatedBy: ["calculation-save", "calculation-delete", "account-change"],
+    }),
+    calculationOutbox: policy({
+        ownership: "uid",
+        ttlMs: 30 * DAY,
+        staleTtlMs: 30 * DAY,
+        maxEntries: 100,
+        invalidatedBy: ["calculation-sync-success", "account-change"],
+    }),
 });
 
 export { CACHE_POLICIES };

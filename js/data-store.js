@@ -15,6 +15,8 @@ const CACHE_TTL = Object.freeze({
     watchlists: CACHE_POLICIES.watchlists.ttlMs,
     dipPerformance: CACHE_POLICIES.dipPerformance.ttlMs,
     fxRates: CACHE_POLICIES.fxRates.ttlMs,
+    savedCalculations: CACHE_POLICIES.savedCalculations.ttlMs,
+    calculationOutbox: CACHE_POLICIES.calculationOutbox.ttlMs,
 });
 
 const CACHE_STALE_TTL = Object.freeze({
@@ -24,6 +26,8 @@ const CACHE_STALE_TTL = Object.freeze({
     watchlists: CACHE_POLICIES.watchlists.staleTtlMs,
     dipPerformance: CACHE_POLICIES.dipPerformance.staleTtlMs,
     fxRates: CACHE_POLICIES.fxRates.staleTtlMs,
+    savedCalculations: CACHE_POLICIES.savedCalculations.staleTtlMs,
+    calculationOutbox: CACHE_POLICIES.calculationOutbox.staleTtlMs,
 });
 
 const memoryEntries = new Map();
@@ -118,6 +122,8 @@ function createKeys(uid) {
         watchlists: () => `watchlists:${uid}`,
         fxRates: (base = "USD") => `fx-rates:${uid}:${encode(String(base).toUpperCase())}`,
         dipPerformance: (resultKey) => `dip-performance:${uid}:${encode(resultKey)}`,
+        calculations: () => `saved-calculations:${uid}`,
+        calculationOutbox: () => `calculation-outbox:${uid}`,
     });
 }
 
