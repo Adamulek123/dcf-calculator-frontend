@@ -370,7 +370,9 @@ window.addEventListener("DOMContentLoaded", () => {
             const stale = Date.now() - Date.parse(item.quote.asOf || 0) > QUOTE_TTL;
             return [
                 money(item.quote.price * rate()),
-                item.quote.status === "loading" ? "Refreshing…" : `Updated ${relative(item.quote.asOf)}`,
+                item.quote.status === "loading"
+                    ? "Refreshing…"
+                    : `${item.quote.cacheStatus === "hit" ? "Cached" : "Updated"} ${relative(item.quote.asOf)}`,
                 stale ? "stale" : "ready",
             ];
         }
@@ -984,6 +986,8 @@ window.addEventListener("DOMContentLoaded", () => {
                     quotes.set(symbol, {
                         price,
                         asOf: (data.quoteTimestamps || [])[index] || data.requestedAt || new Date().toISOString(),
+                        cacheStatus: (data.quoteCacheStatuses || [])[index] || data.cacheStatus || "live",
+                        requestedAt: data.requestedAt || null,
                         status: Number.isFinite(price) ? "ready" : "error",
                     });
                 });
