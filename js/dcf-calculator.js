@@ -3,6 +3,7 @@ import { showToast } from "./toast.js";
 import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, hideTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
 import { createChart } from "./charts.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
+import { CACHE_STALE_TTL, CACHE_TTL, createUserDataStore } from "./data-store.js";
 
 window.addEventListener("DOMContentLoaded", async () => {
     const tickerInput = document.getElementById("tickerInput");
@@ -59,7 +60,6 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     };
 
-    const LOCAL_STORAGE_KEY = "dcf_saved_calculations_local";
     const SAFE_TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 
     let currentStockPrice = 0;
@@ -68,6 +68,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     let dcfProjectionChart = null;
     let hasTickerDataset = false;
     let modalCallback = null;
+    let calculationStore = null;
+    let savedCalculations = [];
+    let syncingCalculationOutbox = false;
 
     const formatNum = (num, prefix = "", suffix = "") => (typeof num === "number" && !Number.isNaN(num) ? `${prefix}${num.toFixed(2)}${suffix}` : "N/A");
     const formatPercent = (num) => (typeof num === "number" && !Number.isNaN(num) ? `${(num * 100).toFixed(2)}%` : "N/A");
@@ -145,17 +148,79 @@ window.addEventListener("DOMContentLoaded", async () => {
         cashFlowSection.classList.toggle("hidden", earningsActive);
     }
 
-    function readSavedCalculations() {
-        try {
-            const parsed = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]");
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
+    async function readSavedCalculations(store = calculationStore) {
+        if (!store) return [];
+        const entry = await store.get(store.keys.calculations());
+        return Array.isArray(entry?.data?.calculations) ? entry.data.calculations : [];
     }
 
-    function writeSavedCalculations(items) {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+    async function writeSavedCalculations(items) {
+        savedCalculations = Array.isArray(items) ? items : [];
+        if (!calculationStore) return;
+        await calculationStore.set(calculationStore.keys.calculations(), {
+            calculations: savedCalculations,
+        }, {
+            ttlMs: CACHE_TTL.savedCalculations,
+            staleTtlMs: CACHE_STALE_TTL.savedCalculations,
+        });
+    }
+
+    async function readCalculationOutbox(store = calculationStore) {
+        if (!store) return [];
+        const entry = await store.get(store.keys.calculationOutbox());
+        return Array.isArray(entry?.data?.operations) ? entry.data.operations : [];
+    }
+
+    async function writeCalculationOutbox(operations, store = calculationStore) {
+        if (!store) return;
+        await store.set(store.keys.calculationOutbox(), {
+            operations: Array.isArray(operations) ? operations : [],
+        }, {
+            ttlMs: CACHE_TTL.calculationOutbox,
+            staleTtlMs: CACHE_STALE_TTL.calculationOutbox,
+        });
+    }
+
+    async function queueCalculationOperation(operation) {
+        const operations = await readCalculationOutbox();
+        const withoutSameCalculation = operations.filter((item) => item.calculationId !== operation.calculationId);
+        withoutSameCalculation.push({ ...operation, queuedAt: new Date().toISOString() });
+        await writeCalculationOutbox(withoutSameCalculation);
+    }
+
+    async function syncCalculationOutbox() {
+        if (!calculationStore || syncingCalculationOutbox) return false;
+        const store = calculationStore;
+        syncingCalculationOutbox = true;
+        try {
+            let operations = await readCalculationOutbox(store);
+            while (operations.length) {
+                const operation = operations[0];
+                const response = operation.type === "save"
+                    ? await guardedApiCall("/save_calculation", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            ticker: operation.snapshot.ticker,
+                            name: operation.calculationId,
+                            data: operation.snapshot,
+                        }),
+                    })
+                    : await guardedApiCall(`/delete_calculation/${encodeURIComponent(operation.calculationId)}`, {
+                        method: "DELETE",
+                    });
+                if (!response || !response.ok) break;
+                if (calculationStore !== store) return false;
+                operations = operations.slice(1);
+                await writeCalculationOutbox(operations, store);
+            }
+            return operations.length === 0;
+        } catch (error) {
+            console.warn("Calculation sync is unavailable; preserving the outbox.", error);
+            return false;
+        } finally {
+            syncingCalculationOutbox = false;
+        }
     }
 
     function captureCalculationData() {
@@ -185,7 +250,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         };
     }
 
-    function renderSavedCalculations(calculations = readSavedCalculations()) {
+    function renderSavedCalculations(calculations = savedCalculations) {
         if (!savedCalculationsContainer) {
             return;
         }
@@ -392,26 +457,28 @@ window.addEventListener("DOMContentLoaded", async () => {
             showToast("Search a ticker and calculate first.", true, 3000, toastContainer);
             return;
         }
-        const snapshot = captureCalculationData();
-        const existing = readSavedCalculations();
-        existing.push(snapshot);
-        writeSavedCalculations(existing);
-        renderSavedCalculations(existing);
-
-        const response = await guardedApiCall("/save_calculation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ticker: currentTicker, name: snapshot.id, data: snapshot })
-        });
-        if (!response) {
-            showToast("Saved locally (backend unavailable).", false, 3000, toastContainer);
+        if (!calculationStore) {
+            showToast("Sign in before saving calculations.", true, 3000, toastContainer);
             return;
         }
-        showToast("Saved successfully.", false, 3000, toastContainer);
+        const snapshot = captureCalculationData();
+        const existing = [...savedCalculations];
+        existing.push(snapshot);
+        await writeSavedCalculations(existing);
+        renderSavedCalculations(existing);
+        await queueCalculationOperation({
+            type: "save",
+            calculationId: snapshot.id,
+            snapshot,
+        });
+        const synced = await syncCalculationOutbox();
+        showToast(synced ? "Saved successfully." : "Saved locally; waiting to sync.", false, 3000, toastContainer);
     }
 
     async function loadSavedCalculations() {
-        renderSavedCalculations();
+        if (!calculationStore) return;
+        await syncCalculationOutbox();
+        renderSavedCalculations(savedCalculations);
 
         const response = await guardedApiCall("/load_calculations");
         if (!response) {
@@ -429,17 +496,20 @@ window.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        const local = readSavedCalculations();
+        const local = [...savedCalculations];
         const localIds = new Set(local.map((c) => c.id));
+        const pendingDeletes = new Set((await readCalculationOutbox())
+            .filter((operation) => operation.type === "delete")
+            .map((operation) => operation.calculationId));
         let added = 0;
         backendItems.forEach((item) => {
-            if (item.data && !localIds.has(item.data.id)) {
+            if (item.data && !pendingDeletes.has(item.data.id) && !localIds.has(item.data.id)) {
                 local.push(item.data);
                 added++;
             }
         });
         if (added > 0) {
-            writeSavedCalculations(local);
+            await writeSavedCalculations(local);
             renderSavedCalculations(local);
             showToast(`Synced ${added} calculation(s) from backend.`, false, 3000, toastContainer);
         } else {
@@ -460,21 +530,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function deleteCalculation(calcId) {
-        const existing = readSavedCalculations();
+        if (!calculationStore) return;
+        const existing = [...savedCalculations];
         const updated = existing.filter((c) => c.id !== calcId);
-        writeSavedCalculations(updated);
+        await writeSavedCalculations(updated);
         renderSavedCalculations(updated);
-
-        const response = await guardedApiCall(`/delete_calculation/${calcId}`, { method: "DELETE" });
-        if (!response) {
-            showToast("Deleted locally (backend unavailable).", false, 3000, toastContainer);
-            return;
-        }
-        if (!response.ok) {
-            showToast("Deleted locally. Backend sync failed.", true, 3000, toastContainer);
-            return;
-        }
-        showToast("Deleted successfully.", false, 3000, toastContainer);
+        await queueCalculationOperation({ type: "delete", calculationId: calcId });
+        const synced = await syncCalculationOutbox();
+        showToast(synced ? "Deleted successfully." : "Deleted locally; waiting to sync.", false, 3000, toastContainer);
     }
 
     function populateFormWithCalculationData(data) {
@@ -548,8 +611,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         savedCalculationsContainer.addEventListener("click", (event) => {
             const loadBtn = event.target.closest(".load-local-btn");
             if (loadBtn) {
-                const calculations = readSavedCalculations();
-                const selected = calculations.find((calc) => calc.id === loadBtn.dataset.id);
+                const selected = savedCalculations.find((calc) => calc.id === loadBtn.dataset.id);
                 if (!selected) {
                     showToast("Saved calculation not found.", true, 2500, toastContainer);
                     return;
@@ -591,13 +653,26 @@ window.addEventListener("DOMContentLoaded", async () => {
     saveCalculationBtn?.addEventListener("click", saveCalculation);
     clearBtn?.addEventListener("click", clearAllFields);
     loadCalculationsBtn?.addEventListener("click", loadSavedCalculations);
+    window.addEventListener("online", () => { void syncCalculationOutbox(); });
 
     renderSavedCalculations();
 
     observeAuthState(async (user) => {
         if (!user) {
+            calculationStore = null;
+            savedCalculations = [];
+            renderSavedCalculations([]);
             return;
         }
+        const storeForUser = createUserDataStore(user.uid);
+        calculationStore = storeForUser;
+        savedCalculations = await readSavedCalculations(storeForUser);
+        if (calculationStore !== storeForUser) return;
+        renderSavedCalculations(savedCalculations);
+        await syncCalculationOutbox();
+        if (calculationStore !== storeForUser) return;
+        await loadSavedCalculations();
+        if (calculationStore !== storeForUser) return;
         const tickerResult = await fetchTickers(async (endpoint) => {
             const response = await guardedApiCall(endpoint);
             if (response) {
