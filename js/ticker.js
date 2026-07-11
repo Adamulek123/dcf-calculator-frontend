@@ -1,5 +1,4 @@
 import { apiCall } from "./api.js";
-import { getCachedLogo, setCachedLogo } from "./cache.js";
 import { getPublicRecord, setPublicRecord } from "./public-data-store.js";
 
 let cachedTickers = [];
@@ -58,40 +57,10 @@ function isValidTicker(query, tickers = cachedTickers) {
 }
 
 function getLogoUrl(ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is CORS-restricted to the production domain — acceptable risk
-    const cached = getCachedLogo(ticker);
-    if (cached) {
-        console.log(`[Logo Cache] HIT for ${ticker}`);
-        return cached;
-    }
-    console.log(`[Logo Cache] MISS for ${ticker}`);
     return `https://img.logo.dev/ticker/${ticker}?token=${token}`;
 }
 
-async function onLogoLoad(img, ticker) {
-    const imgUrl = img.src;
-    if (imgUrl.startsWith("data:")) {
-        return imgUrl;
-    }
-
-    try {
-        const response = await fetch(imgUrl);
-        if (!response.ok) {
-            throw new Error(`Logo request failed with ${response.status}`);
-        }
-        const blob = await response.blob();
-        const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(reader.error || new Error("Unable to read logo data"));
-            reader.readAsDataURL(blob);
-        });
-        setCachedLogo(ticker, base64);
-        return base64;
-    } catch (e) {
-        console.warn(`[Logo Cache] Failed to cache ${ticker}:`, e);
-        return null;
-    }
-}
+async function onLogoLoad() { return null; }
 
 function onLogoError(img, ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is CORS-restricted to the production domain — acceptable risk
     const fallbackUrl = `https://img.logo.dev/${ticker.toLowerCase()}.com?token=${token}`;
