@@ -22,7 +22,7 @@ function sizeOf(value) {
     try { return new Blob([JSON.stringify(value)]).size; } catch { return 0; }
 }
 
-async function getPublicRecord(key) {
+async function getPublicEntry(key, { allowExpired = false } = {}) {
     const database = await openDatabase();
     if (!database) return null;
     return new Promise((resolve) => {
@@ -31,23 +31,44 @@ async function getPublicRecord(key) {
         const request = store.get(key);
         request.onsuccess = () => {
             const record = request.result;
-            if (!record || record.expiresAt <= Date.now()) {
+            const now = Date.now();
+            const isFresh = record?.expiresAt > now;
+            const staleExpiresAt = record?.staleExpiresAt || record?.expiresAt || 0;
+            if (!record || (!isFresh && (!allowExpired || staleExpiresAt <= now))) {
                 if (record) store.delete(key);
                 return resolve(null);
             }
-            record.lastAccessed = Date.now();
+            record.lastAccessed = now;
             store.put(record);
-            resolve(record.data);
+            resolve({ ...record, isFresh });
         };
         request.onerror = () => resolve(null);
     });
 }
 
-async function setPublicRecord(key, data, ttlMs) {
+async function getPublicRecord(key) {
+    return (await getPublicEntry(key))?.data || null;
+}
+
+async function setPublicRecord(key, data, ttlMs, {
+    staleTtlMs = 0,
+    version = null,
+    serverUpdatedAt = null,
+} = {}) {
     const database = await openDatabase();
-    if (!database) return;
+    if (!database) return null;
     const now = Date.now();
-    const record = { key, data, expiresAt: now + ttlMs, lastAccessed: now, bytes: sizeOf(data) };
+    const record = {
+        key,
+        data,
+        cachedAt: now,
+        expiresAt: now + ttlMs,
+        staleExpiresAt: now + ttlMs + Math.max(0, staleTtlMs),
+        lastAccessed: now,
+        bytes: sizeOf(data),
+        version,
+        serverUpdatedAt,
+    };
     const tx = database.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
     store.put(record);
@@ -62,6 +83,14 @@ async function setPublicRecord(key, data, ttlMs) {
             total -= item.bytes || 0;
         }
     };
+    return record;
 }
 
-export { getPublicRecord, setPublicRecord };
+async function deletePublicRecord(key) {
+    const database = await openDatabase();
+    if (!database) return;
+    const tx = database.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(key);
+}
+
+export { deletePublicRecord, getPublicEntry, getPublicRecord, setPublicRecord };

@@ -1,5 +1,6 @@
 import { apiCall } from "./api.js";
 import {
+    CACHE_STALE_TTL,
     CACHE_TTL,
     createDipPerformanceResultKey,
     createUserCacheChannel,
@@ -552,6 +553,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!dataStore) return;
         void dataStore.set(dataStore.keys.portfolioIndex(), portfolioIndexSnapshot(), {
             ttlMs: CACHE_TTL.portfolioIndex,
+            staleTtlMs: CACHE_STALE_TTL.portfolioIndex,
             version,
             serverUpdatedAt,
         });
@@ -579,6 +581,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!dataStore || !activePortfolioId) return;
         void dataStore.set(dataStore.keys.portfolio(activePortfolioId), portfolioDetailSnapshot(syncState), {
             ttlMs: CACHE_TTL.portfolioDetail,
+            staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
             version,
             serverUpdatedAt,
         });
@@ -597,6 +600,7 @@ window.addEventListener("DOMContentLoaded", () => {
             })),
         }, {
             ttlMs: CACHE_TTL.watchlists,
+            staleTtlMs: CACHE_STALE_TTL.watchlists,
             version,
             serverUpdatedAt,
         });
@@ -796,7 +800,8 @@ window.addEventListener("DOMContentLoaded", () => {
     function persistPendingSnapshot() {
         if (!dataStore || !activePortfolioId) return;
         void dataStore.set(dataStore.keys.portfolioOutbox(activePortfolioId), pendingSnapshot(), {
-            ttlMs: 30 * 24 * 60 * 60 * 1000,
+            ttlMs: CACHE_TTL.portfolioOutbox,
+            staleTtlMs: CACHE_STALE_TTL.portfolioOutbox,
             version: serverRevision,
         });
     }
@@ -1022,6 +1027,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const version = data.version || data.date || null;
             void dataStore?.set(dataStore.keys.fxRates("USD"), data, {
                 ttlMs: CACHE_TTL.fxRates,
+                staleTtlMs: CACHE_STALE_TTL.fxRates,
                 serverUpdatedAt: data.date || data.fetchedAt || null,
                 version,
             });
@@ -1124,6 +1130,7 @@ window.addEventListener("DOMContentLoaded", () => {
             if (cached && revision !== revalidationRevision) return true;
             void dataStore?.set(dataStore.keys.portfolio(normalized.portfolioId), normalized, {
                 ttlMs: CACHE_TTL.portfolioDetail,
+                staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
             });
@@ -1174,6 +1181,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 ...next,
             }, {
                 ttlMs: CACHE_TTL.portfolioIndex,
+                staleTtlMs: CACHE_STALE_TTL.portfolioIndex,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
             });
@@ -1187,6 +1195,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const detailVersion = activeDetail.revision ?? activeDetail.updatedAt ?? null;
             void dataStore?.set(dataStore.keys.portfolio(activePortfolioId), activeDetail, {
                 ttlMs: CACHE_TTL.portfolioDetail,
+                staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
                 serverUpdatedAt: activeDetail.updatedAt || null,
                 version: detailVersion,
             });

@@ -786,7 +786,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     async function fetchWithCache(ticker, cacheKey, endpoint, required = false) {
-        const cached = getCachedFinancialData(ticker, cacheKey);
+        const cached = await getCachedFinancialData(ticker, cacheKey);
         if (cached) return cached;
         try {
             const response = await apiCall(endpoint, {}, apiDeps);
@@ -795,7 +795,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                 if (required) throw new Error(data.error || `Failed to fetch ${cacheKey}`);
                 return null;
             }
-            setCachedFinancialData(ticker, cacheKey, data);
+            await setCachedFinancialData(ticker, cacheKey, data);
             return data;
         } catch (error) {
             if (!required) return null;
@@ -861,10 +861,12 @@ window.addEventListener("DOMContentLoaded", async () => {
             const segmentData = filings?.sections?.segment?.data || null;
             const ttmData = filings?.sections?.ttm?.data || null;
             const ttmSegmentData = filings?.sections?.ttmSegment?.data || null;
-            setCachedFinancialData(ticker, "basic_data", basicData);
-            setCachedFinancialData(ticker, "segment_data", segmentData);
-            setCachedFinancialData(ticker, "ttm_data", ttmData);
-            setCachedFinancialData(ticker, "ttm_segment_data", ttmSegmentData);
+            await Promise.all([
+                setCachedFinancialData(ticker, "basic_data", basicData),
+                setCachedFinancialData(ticker, "segment_data", segmentData),
+                setCachedFinancialData(ticker, "ttm_data", ttmData),
+                setCachedFinancialData(ticker, "ttm_segment_data", ttmSegmentData),
+            ]);
 
             // Cache all data for period toggle re-rendering
             cachedBasicData = basicData;

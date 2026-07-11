@@ -1,3 +1,5 @@
+import { CACHE_POLICIES } from "./cache-policy.js";
+
 const DATABASE_NAME = "dcf-client-data";
 const DATABASE_VERSION = 1;
 const ENTRY_STORE = "entries";
@@ -7,11 +9,21 @@ const CACHE_STORAGE_EVENT_KEY = "dcf_data_update_signal_v1";
 const CACHE_MESSAGE_TYPES = new Set(["portfolio-updated", "watchlist-updated", "signed-out"]);
 
 const CACHE_TTL = Object.freeze({
-    portfolioIndex: 10 * 60 * 1000,
-    portfolioDetail: 10 * 60 * 1000,
-    watchlists: 10 * 60 * 1000,
-    dipPerformance: 5 * 60 * 1000,
-    fxRates: 6 * 60 * 60 * 1000,
+    portfolioIndex: CACHE_POLICIES.portfolioIndex.ttlMs,
+    portfolioDetail: CACHE_POLICIES.portfolioDetail.ttlMs,
+    portfolioOutbox: CACHE_POLICIES.portfolioOutbox.ttlMs,
+    watchlists: CACHE_POLICIES.watchlists.ttlMs,
+    dipPerformance: CACHE_POLICIES.dipPerformance.ttlMs,
+    fxRates: CACHE_POLICIES.fxRates.ttlMs,
+});
+
+const CACHE_STALE_TTL = Object.freeze({
+    portfolioIndex: CACHE_POLICIES.portfolioIndex.staleTtlMs,
+    portfolioDetail: CACHE_POLICIES.portfolioDetail.staleTtlMs,
+    portfolioOutbox: CACHE_POLICIES.portfolioOutbox.staleTtlMs,
+    watchlists: CACHE_POLICIES.watchlists.staleTtlMs,
+    dipPerformance: CACHE_POLICIES.dipPerformance.staleTtlMs,
+    fxRates: CACHE_POLICIES.fxRates.staleTtlMs,
 });
 
 const memoryEntries = new Map();
@@ -159,19 +171,31 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
             return null;
         }
         memoryEntries.set(scopedKey, entry);
-        const isFresh = entry.expiresAt > now();
+        const timestamp = now();
+        const isFresh = entry.expiresAt > timestamp;
+        const staleExpiresAt = Number.isFinite(entry.staleExpiresAt)
+            ? entry.staleExpiresAt
+            : entry.expiresAt;
+        if (!isFresh && staleExpiresAt <= timestamp) {
+            await remove(scopedKey);
+            return null;
+        }
         if (!allowExpired && !isFresh) return null;
         return { ...entry, isFresh };
     }
 
     async function set(key, data, {
         ttlMs,
+        staleTtlMs = 0,
         serverUpdatedAt = null,
         version = null,
     } = {}) {
         const scopedKey = assertScopedKey(uid, key);
         if (!Number.isFinite(ttlMs) || ttlMs < 0) {
             throw new TypeError("Client cache entries require a non-negative ttlMs.");
+        }
+        if (!Number.isFinite(staleTtlMs) || staleTtlMs < 0) {
+            throw new TypeError("Client cache entries require a non-negative staleTtlMs.");
         }
         const cachedAt = now();
         const entry = {
@@ -180,6 +204,7 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
             uid,
             cachedAt,
             expiresAt: cachedAt + ttlMs,
+            staleExpiresAt: cachedAt + ttlMs + staleTtlMs,
             serverUpdatedAt,
             version,
             data,
@@ -329,6 +354,7 @@ function createUserCacheChannel(rawUid, onMessage = () => {}, {
 }
 
 export {
+    CACHE_STALE_TTL,
     CACHE_TTL,
     ENVELOPE_SCHEMA_VERSION,
     createDipPerformanceResultKey,
