@@ -1,11 +1,10 @@
 import { apiCall } from "./api.js";
-import { getPublicRecord, setPublicRecord } from "./public-data-store.js";
+import { createCacheRegistry } from "./cache-registry.js";
 
 let cachedTickers = [];
 const autocompleteRequestIds = new WeakMap();
 
-const TICKER_CACHE_KEY = "ticker-directory:v1";
-const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+const publicCache = createCacheRegistry();
 
 function debounce(func, wait) {
     let timeout;
@@ -25,9 +24,10 @@ async function fetchTickers(fetchApi = apiCall) {
         return cachedTickers;
     }
 
-    const storedTickers = await getPublicRecord(TICKER_CACHE_KEY);
-    if (Array.isArray(storedTickers)) {
-        cachedTickers = storedTickers;
+    const cacheKey = publicCache.key("tickerDirectory");
+    const storedTickers = await publicCache.get("tickerDirectory", cacheKey, { allowStale: false });
+    if (Array.isArray(storedTickers?.data)) {
+        cachedTickers = storedTickers.data;
         return cachedTickers;
     }
 
@@ -37,7 +37,7 @@ async function fetchTickers(fetchApi = apiCall) {
         if (response.ok) {
             cachedTickers = await response.json();
             console.log(`Fetched ${cachedTickers.length} tickers from API`);
-            void setPublicRecord(TICKER_CACHE_KEY, cachedTickers, CACHE_DURATION_MS);
+            void publicCache.set("tickerDirectory", cacheKey, cachedTickers);
         } else {
             console.error("Failed to fetch tickers:", response.status);
         }

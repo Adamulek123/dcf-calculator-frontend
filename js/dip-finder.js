@@ -1,5 +1,6 @@
 import { apiCall, setButtonState } from "./api.js";
 import {
+    CACHE_STALE_TTL,
     CACHE_TTL,
     createDipPerformanceResultKey,
     createUserCacheChannel,
@@ -463,6 +464,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!dataStore) return;
         void dataStore.set(dataStore.keys.watchlists(), watchlistSnapshot(), {
             ttlMs: CACHE_TTL.watchlists,
+            staleTtlMs: CACHE_STALE_TTL.watchlists,
             version,
             serverUpdatedAt,
         });
@@ -490,6 +492,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const version = data.version || data.updatedAt || null;
             void dataStore?.set(dataStore.keys.watchlists(), next, {
                 ttlMs: CACHE_TTL.watchlists,
+                staleTtlMs: CACHE_STALE_TTL.watchlists,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
             });
@@ -561,6 +564,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const version = data.version || data.asOf || null;
             void dataStore?.set(dataStore.keys.dipPerformance(resultKey), next, {
                 ttlMs: CACHE_TTL.dipPerformance,
+                staleTtlMs: CACHE_STALE_TTL.dipPerformance,
                 serverUpdatedAt: data.asOf || null,
                 version,
             });
