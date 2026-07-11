@@ -545,6 +545,7 @@ window.addEventListener("DOMContentLoaded", () => {
         try {
             const response = await request("/watchlists/performance", {
                 method: "POST",
+                coalesce: true,
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ tickers: selected.tickers, force })
             }, 60000);
