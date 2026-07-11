@@ -1,5 +1,10 @@
 import { apiCall, setButtonState } from "./api.js";
-import { CACHE_TTL, createUserCacheChannel, createUserDataStore } from "./data-store.js";
+import {
+    CACHE_TTL,
+    createDipPerformanceResultKey,
+    createUserCacheChannel,
+    createUserDataStore,
+} from "./data-store.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { runAuthGuard } from "./auth-guard.js";
 import { renderSidebar } from "./sidebar.js";
@@ -515,7 +520,8 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        const cacheKey = dataStore?.keys.dipPerformance(selected.id);
+        const resultKey = createDipPerformanceResultKey(selected);
+        const cacheKey = dataStore?.keys.dipPerformance(resultKey);
         let cached = cacheKey ? await dataStore.get(cacheKey) : null;
         const tickerKey = selected.tickers.map(normalizeTicker).sort().join(",");
         const cachedTickerKey = cached?.data?.tickers?.map(normalizeTicker).sort().join(",");
@@ -552,7 +558,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 asOf: data.asOf || null,
             };
             const version = data.version || data.asOf || null;
-            void dataStore?.set(dataStore.keys.dipPerformance(selected.id), next, {
+            void dataStore?.set(dataStore.keys.dipPerformance(resultKey), next, {
                 ttlMs: CACHE_TTL.dipPerformance,
                 serverUpdatedAt: data.asOf || null,
                 version,
@@ -687,6 +693,7 @@ window.addEventListener("DOMContentLoaded", () => {
         const previousWatchlists = watchlistSnapshot().watchlists;
         const previousSelectedId = selectedId;
         const previousPerformance = performance;
+        const performanceResultKey = createDipPerformanceResultKey(selected);
         watchlists = watchlists.filter((item) => item.id !== selected.id);
         selectedId = watchlists[0]?.id || null;
         performance = new Map();
@@ -699,7 +706,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 const data = await response.json();
                 throw new Error(data.message || "Unable to delete watchlist.");
             }
-            void dataStore?.remove(dataStore.keys.dipPerformance(selected.id));
+            void dataStore?.remove(dataStore.keys.dipPerformance(performanceResultKey));
             cacheChannel?.publish("watchlist-updated", {
                 entityId: selected.id,
                 operation: "delete",
@@ -722,6 +729,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!selected) return;
         const previousWatchlists = watchlistSnapshot().watchlists;
         const previousPerformance = performance;
+        const previousPerformanceResultKey = createDipPerformanceResultKey(selected);
         watchlists = watchlists.map((item) => item.id === selected.id
             ? {
                 ...item,
@@ -746,7 +754,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 version: data.version || null,
                 serverUpdatedAt: data.updatedAt || null,
             });
-            void dataStore?.remove(dataStore.keys.dipPerformance(selected.id));
+            void dataStore?.remove(dataStore.keys.dipPerformance(previousPerformanceResultKey));
             cacheChannel?.publish("watchlist-updated", {
                 entityId: data.id,
                 operation: "tickers",

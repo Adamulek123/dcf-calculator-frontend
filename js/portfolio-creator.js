@@ -1,5 +1,10 @@
 import { apiCall } from "./api.js";
-import { CACHE_TTL, createUserCacheChannel, createUserDataStore } from "./data-store.js";
+import {
+    CACHE_TTL,
+    createDipPerformanceResultKey,
+    createUserCacheChannel,
+    createUserDataStore,
+} from "./data-store.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { runAuthGuard } from "./auth-guard.js";
@@ -1396,6 +1401,9 @@ window.addEventListener("DOMContentLoaded", () => {
             ...watchlist,
             tickers: [...(watchlist.tickers || [])],
         }));
+        const previousDestination = mode === "existing"
+            ? previousWatchlists.find((watchlist) => watchlist.id === els.watchlistSelect.value)
+            : null;
         let optimisticId = null;
         if (mode === "new") {
             optimisticId = `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
@@ -1440,7 +1448,11 @@ window.addEventListener("DOMContentLoaded", () => {
                     watchlist.id === data.watchlist.id ? data.watchlist : watchlist
                 ));
                 cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.watchlist.updatedAt || null });
-                void dataStore?.remove(dataStore.keys.dipPerformance(data.watchlist.id));
+                if (previousDestination) {
+                    void dataStore?.remove(dataStore.keys.dipPerformance(
+                        createDipPerformanceResultKey(previousDestination),
+                    ));
+                }
                 cacheChannel?.publish("watchlist-updated", {
                     entityId: data.watchlist.id,
                     operation: "merge",
