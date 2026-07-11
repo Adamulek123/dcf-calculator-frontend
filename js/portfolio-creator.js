@@ -532,6 +532,67 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function portfolioIndexSnapshot() {
+        return {
+            portfolios: portfolios.map((portfolio) => ({ ...portfolio })),
+            activePortfolioId,
+        };
+    }
+
+    function cachePortfolioIndex({ version = null, serverUpdatedAt = null } = {}) {
+        if (!dataStore) return;
+        void dataStore.set(dataStore.keys.portfolioIndex(), portfolioIndexSnapshot(), {
+            ttlMs: CACHE_TTL.portfolioIndex,
+            version,
+            serverUpdatedAt,
+        });
+    }
+
+    function portfolioDetailSnapshot(syncState = "synced") {
+        const symbols = new Set(positions.map((position) => ticker(position.ticker)));
+        return {
+            portfolioId: activePortfolioId,
+            name: activePortfolioName,
+            positions: positions.map((position) => ({ ...position })),
+            baseCurrency: currency,
+            tickerMetadata: Object.fromEntries(
+                [...metadata.entries()].filter(([symbol]) => symbols.has(symbol)),
+            ),
+            syncState,
+            clientUpdatedAt: new Date().toISOString(),
+        };
+    }
+
+    function cacheActivePortfolio(syncState = "synced", {
+        version = null,
+        serverUpdatedAt = null,
+    } = {}) {
+        if (!dataStore || !activePortfolioId) return;
+        void dataStore.set(dataStore.keys.portfolio(activePortfolioId), portfolioDetailSnapshot(syncState), {
+            ttlMs: CACHE_TTL.portfolioDetail,
+            version,
+            serverUpdatedAt,
+        });
+        cachePortfolioIndex({ version, serverUpdatedAt });
+    }
+
+    function cacheWatchlists(watchlistItems = availableWatchlists, {
+        version = null,
+        serverUpdatedAt = null,
+    } = {}) {
+        if (!dataStore) return;
+        void dataStore.set(dataStore.keys.watchlists(), {
+            watchlists: watchlistItems.map((watchlist) => ({
+                ...watchlist,
+                tickers: [...(watchlist.tickers || [])],
+            })),
+        }, {
+            ttlMs: CACHE_TTL.watchlists,
+            version,
+            serverUpdatedAt,
+        });
+    }
+
     function clearErrors() {
         [[els.ticker, els.tickerError], [els.size, els.sizeError], [els.entry, els.entryError], [els.leverage, els.leverageError]]
             .forEach(([input, output]) => {
@@ -706,6 +767,7 @@ window.addEventListener("DOMContentLoaded", () => {
         revision += 1;
         saveFailed = false;
         updateActivePortfolioSummary();
+        cacheActivePortfolio("pending");
         if (message) els.live.textContent = message;
         render();
         scheduleSave();
@@ -737,9 +799,14 @@ window.addEventListener("DOMContentLoaded", () => {
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message || "Failed to save portfolio.");
                 savedRevision = Math.max(savedRevision, targetRevision);
+                cacheActivePortfolio(revision > targetRevision ? "pending" : "synced", {
+                    version: data.version || data.revision || null,
+                    serverUpdatedAt: data.updatedAt || null,
+                });
                 return true;
             } catch (error) {
                 saveFailed = true;
+                cacheActivePortfolio("unsynced");
                 showToast(error.message, true, 3500, els.toast);
                 return false;
             } finally {
@@ -1079,6 +1146,10 @@ window.addEventListener("DOMContentLoaded", () => {
             if (!response.ok) throw new Error(data.message || "Unable to switch portfolios.");
             els.picker.open = false;
             activePortfolioId = data.activePortfolioId || portfolioId;
+            cachePortfolioIndex({
+                version: data.version || null,
+                serverUpdatedAt: data.updatedAt || null,
+            });
             await loadPortfolio(activePortfolioId);
         } catch (error) {
             setMenuError(error.message);
@@ -1135,6 +1206,10 @@ window.addEventListener("DOMContentLoaded", () => {
             els.newPortfolioName.value = "";
             els.picker.open = false;
             activePortfolioId = data.activePortfolioId || data.portfolio.id;
+            cachePortfolioIndex({
+                version: data.version || null,
+                serverUpdatedAt: data.portfolio.updatedAt || null,
+            });
             await loadPortfolio(activePortfolioId);
             showToast(`${data.portfolio.name} created.`, false, 2500, els.toast);
         } catch (error) {
@@ -1164,6 +1239,16 @@ window.addEventListener("DOMContentLoaded", () => {
             const portfolio = portfolios.find((item) => item.id === managingPortfolioId);
             if (portfolio) Object.assign(portfolio, data);
             if (managingPortfolioId === activePortfolioId) activePortfolioName = data.name;
+            cachePortfolioIndex({
+                version: data.version || null,
+                serverUpdatedAt: data.updatedAt || null,
+            });
+            if (managingPortfolioId === activePortfolioId) {
+                cacheActivePortfolio("synced", {
+                    version: data.version || null,
+                    serverUpdatedAt: data.updatedAt || null,
+                });
+            }
             els.renameDialog.close();
             renderPicker();
             showToast("Portfolio renamed.", false, 2500, els.toast);
@@ -1188,8 +1273,10 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to delete portfolio.");
             portfolios = portfolios.filter((item) => item.id !== portfolioId);
+            void dataStore?.remove(dataStore.keys.portfolio(portfolioId));
             managingPortfolioId = null;
             activePortfolioId = data.activePortfolioId;
+            cachePortfolioIndex({ version: data.version || null, serverUpdatedAt: data.updatedAt || null });
             await loadPortfolio(activePortfolioId);
             showToast("Portfolio deleted.", false, 2500, els.toast);
         } catch (error) {
@@ -1229,8 +1316,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             availableWatchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
-            void dataStore?.set(dataStore.keys.watchlists(), { watchlists: availableWatchlists }, {
-                ttlMs: CACHE_TTL.watchlists,
+            cacheWatchlists(availableWatchlists, {
                 serverUpdatedAt: data.updatedAt || null,
                 version: data.version || null,
             });
@@ -1277,6 +1363,33 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         els.watchlistError.classList.add("hidden");
         setBusy(els.watchlistSave, true, mode === "new" ? "Creating…" : "Adding…");
+        const previousWatchlists = availableWatchlists.map((watchlist) => ({
+            ...watchlist,
+            tickers: [...(watchlist.tickers || [])],
+        }));
+        let optimisticId = null;
+        if (mode === "new") {
+            optimisticId = `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+            const now = new Date().toISOString();
+            availableWatchlists = [{
+                id: optimisticId,
+                name: body.name,
+                tickers: [...symbols],
+                createdAt: now,
+                updatedAt: now,
+                syncState: "pending",
+            }, ...availableWatchlists];
+        } else {
+            const watchlistId = els.watchlistSelect.value;
+            availableWatchlists = availableWatchlists.map((watchlist) => watchlist.id === watchlistId
+                ? {
+                    ...watchlist,
+                    tickers: [...new Set([...(watchlist.tickers || []), ...symbols])],
+                    syncState: "pending",
+                }
+                : watchlist);
+        }
+        cacheWatchlists();
         try {
             const response = await request(endpoint, {
                 method: "POST",
@@ -1285,6 +1398,16 @@ window.addEventListener("DOMContentLoaded", () => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to update watchlist.");
+            if (mode === "new") {
+                availableWatchlists = availableWatchlists.map((watchlist) => watchlist.id === optimisticId ? data : watchlist);
+                cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.updatedAt || null });
+            } else if (data.watchlist) {
+                availableWatchlists = availableWatchlists.map((watchlist) => (
+                    watchlist.id === data.watchlist.id ? data.watchlist : watchlist
+                ));
+                cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.watchlist.updatedAt || null });
+                void dataStore?.remove(dataStore.keys.dipPerformance(data.watchlist.id));
+            }
             els.watchlistDialog.close();
             const message = mode === "new"
                 ? `${symbols.length} ticker${symbols.length === 1 ? "" : "s"} added to the new watchlist.`
@@ -1292,6 +1415,8 @@ window.addEventListener("DOMContentLoaded", () => {
             showToast(message, false, 3500, els.toast);
             els.live.textContent = message;
         } catch (error) {
+            availableWatchlists = previousWatchlists;
+            cacheWatchlists();
             els.watchlistError.textContent = error.message;
             els.watchlistError.classList.remove("hidden");
         } finally {

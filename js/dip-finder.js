@@ -441,6 +441,24 @@ window.addEventListener("DOMContentLoaded", () => {
         renderAll();
     }
 
+    function watchlistSnapshot() {
+        return {
+            watchlists: watchlists.map((watchlist) => ({
+                ...watchlist,
+                tickers: [...(watchlist.tickers || [])],
+            })),
+        };
+    }
+
+    function cacheWatchlistCollection({ version = null, serverUpdatedAt = null } = {}) {
+        if (!dataStore) return;
+        void dataStore.set(dataStore.keys.watchlists(), watchlistSnapshot(), {
+            ttlMs: CACHE_TTL.watchlists,
+            version,
+            serverUpdatedAt,
+        });
+    }
+
     async function loadWatchlists(force = false) {
         const cacheKey = dataStore?.keys.watchlists();
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
@@ -592,8 +610,32 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
         setButtonState(els.saveDialog, "Saving…", true);
+        const previousWatchlists = watchlistSnapshot().watchlists;
+        const previousSelectedId = selectedId;
+        const selected = currentWatchlist();
+        let optimisticId = null;
+        const now = new Date().toISOString();
+        if (dialogMode === "create") {
+            optimisticId = `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
+            watchlists = [{
+                id: optimisticId,
+                name,
+                tickers: [],
+                createdAt: now,
+                updatedAt: now,
+                syncState: "pending",
+            }, ...watchlists];
+            selectedId = optimisticId;
+            performance = new Map();
+        } else {
+            watchlists = watchlists.map((item) => item.id === selected.id
+                ? { ...item, name, updatedAt: now, syncState: "pending" }
+                : item);
+        }
+        saveSelectedId();
+        cacheWatchlistCollection();
+        renderAll();
         try {
-            const selected = currentWatchlist();
             const endpoint = dialogMode === "create" ? "/watchlists" : `/watchlists/${selected.id}`;
             const response = await request(endpoint, {
                 method: dialogMode === "create" ? "POST" : "PATCH",
@@ -603,17 +645,26 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to save watchlist.");
             if (dialogMode === "create") {
-                watchlists.unshift(data);
+                watchlists = watchlists.map((item) => item.id === optimisticId ? data : item);
                 selectedId = data.id;
                 saveSelectedId();
                 performance = new Map();
             } else {
                 watchlists = watchlists.map((item) => item.id === data.id ? data : item);
             }
+            cacheWatchlistCollection({
+                version: data.version || null,
+                serverUpdatedAt: data.updatedAt || null,
+            });
             els.dialog.close();
             renderAll();
             showToast(dialogMode === "create" ? "Watchlist created." : "Watchlist renamed.", false, 2500, els.toast);
         } catch (error) {
+            watchlists = previousWatchlists;
+            selectedId = previousSelectedId;
+            saveSelectedId();
+            cacheWatchlistCollection();
+            renderAll();
             els.nameError.textContent = error.message;
             els.nameError.classList.remove("hidden");
         } finally {
@@ -624,20 +675,31 @@ window.addEventListener("DOMContentLoaded", () => {
     async function deleteSelectedWatchlist() {
         const selected = currentWatchlist();
         if (!selected) return;
+        const previousWatchlists = watchlistSnapshot().watchlists;
+        const previousSelectedId = selectedId;
+        const previousPerformance = performance;
+        watchlists = watchlists.filter((item) => item.id !== selected.id);
+        selectedId = watchlists[0]?.id || null;
+        performance = new Map();
+        saveSelectedId();
+        cacheWatchlistCollection();
+        renderAll();
         try {
             const response = await request(`/watchlists/${selected.id}`, { method: "DELETE" });
             if (!response.ok) {
                 const data = await response.json();
                 throw new Error(data.message || "Unable to delete watchlist.");
             }
-            watchlists = watchlists.filter((item) => item.id !== selected.id);
-            selectedId = watchlists[0]?.id || null;
-            performance = new Map();
-            saveSelectedId();
-            renderAll();
+            void dataStore?.remove(dataStore.keys.dipPerformance(selected.id));
             await loadPerformance();
             showToast(`${selected.name} deleted.`, false, 2500, els.toast);
         } catch (error) {
+            watchlists = previousWatchlists;
+            selectedId = previousSelectedId;
+            performance = previousPerformance;
+            saveSelectedId();
+            cacheWatchlistCollection();
+            renderAll();
             showToast(error.message, true, 4000, els.toast);
         }
     }
@@ -645,6 +707,19 @@ window.addEventListener("DOMContentLoaded", () => {
     async function updateTickers(nextTickers, message) {
         const selected = currentWatchlist();
         if (!selected) return;
+        const previousWatchlists = watchlistSnapshot().watchlists;
+        const previousPerformance = performance;
+        watchlists = watchlists.map((item) => item.id === selected.id
+            ? {
+                ...item,
+                tickers: [...nextTickers],
+                updatedAt: new Date().toISOString(),
+                syncState: "pending",
+            }
+            : item);
+        performance = new Map();
+        cacheWatchlistCollection();
+        renderAll();
         try {
             const response = await request(`/watchlists/${selected.id}`, {
                 method: "PATCH",
@@ -654,11 +729,19 @@ window.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to update watchlist.");
             watchlists = watchlists.map((item) => item.id === data.id ? data : item);
-            performance = new Map();
+            cacheWatchlistCollection({
+                version: data.version || null,
+                serverUpdatedAt: data.updatedAt || null,
+            });
+            void dataStore?.remove(dataStore.keys.dipPerformance(selected.id));
             renderAll();
             showToast(message, false, 2400, els.toast);
             await loadPerformance();
         } catch (error) {
+            watchlists = previousWatchlists;
+            performance = previousPerformance;
+            cacheWatchlistCollection();
+            renderAll();
             showToast(error.message, true, 4000, els.toast);
         }
     }
