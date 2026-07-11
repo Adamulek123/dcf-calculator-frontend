@@ -97,6 +97,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let logoRefreshNonce = Date.now();
     let initializedUid = null;
     let dataStore = null;
+    let revalidationPromise = null;
     let availableWatchlists = [];
     const quotes = new Map();
     const inFlight = new Map();
@@ -869,33 +870,111 @@ window.addEventListener("DOMContentLoaded", () => {
         updateLabels();
     }
 
-    async function loadRates(noisy = false) {
-        setBusy(els.refreshRates, true, "Loading…");
+    const sameCachedPayload = (entry, data, version = null) => {
+        if (!entry) return false;
+        if (entry.version !== null && version !== null) return entry.version === version;
+        try { return JSON.stringify(entry.data) === JSON.stringify(data); } catch { return false; }
+    };
+
+    function applyRates(data) {
+        rates = { ...(data?.rates || {}), USD: 1 };
+        if (!rates[currency]) currency = "USD";
+        updateCurrencyOptions();
+        render();
+    }
+
+    async function loadRates(noisy = false, force = noisy) {
+        const cacheKey = dataStore?.keys.fxRates("USD");
+        const cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        if (cached) {
+            applyRates(cached.data);
+            if (cached.isFresh && !force) return true;
+        }
+
+        setBusy(els.refreshRates, true, cached ? "Refreshing…" : "Loading…");
         try {
             const response = await request("/portfolio/conversion-rates?base=USD");
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to load exchange rates.");
-            rates = { ...(data.rates || {}), USD: 1 };
+            const version = data.version || data.date || null;
             void dataStore?.set(dataStore.keys.fxRates("USD"), data, {
                 ttlMs: CACHE_TTL.fxRates,
                 serverUpdatedAt: data.date || data.fetchedAt || null,
-                version: data.version || null,
+                version,
             });
-            if (!rates[currency]) currency = "USD";
-            updateCurrencyOptions();
-            render();
+            if (!sameCachedPayload(cached, data, version)) applyRates(data);
             if (noisy) showToast("Exchange rates updated.", false, 2500, els.toast);
+            return true;
         } catch (error) {
             if (noisy) showToast(error.message, true, 3500, els.toast);
+            return Boolean(cached);
         } finally {
             setBusy(els.refreshRates, false);
         }
     }
 
-    async function loadPortfolio(portfolioId = null) {
-        loadState = "loading";
-        autoSave = false;
-        positions = [];
+    function normalizePortfolioData(data) {
+        const normalizedPositions = (Array.isArray(data?.positions) ? data.positions : [])
+            .filter((item) => item?.ticker && item?.side && item?.sizingMode)
+            .map((item, index) => ({
+                ...item,
+                id: String(item.id || `loaded-${index}-${ticker(item.ticker)}`),
+                ticker: ticker(item.ticker),
+                leverage: num(item.leverage) || 1,
+            }));
+        return {
+            ...data,
+            portfolioId: data?.portfolioId || activePortfolioId,
+            name: data?.name || "Core portfolio",
+            positions: normalizedPositions,
+            baseCurrency: ticker(data?.baseCurrency) || "USD",
+        };
+    }
+
+    function applyPortfolioData(rawData) {
+        const data = normalizePortfolioData(rawData);
+        activePortfolioId = data.portfolioId;
+        activePortfolioName = data.name;
+        positions = data.positions;
+        Object.entries(data.tickerMetadata || {}).forEach(([symbol, item]) => {
+            metadata.set(ticker(symbol), { ...(metadata.get(ticker(symbol)) || {}), ...item });
+        });
+        currency = data.baseCurrency;
+        const active = portfolios.find((item) => item.id === activePortfolioId);
+        if (active) {
+            active.name = activePortfolioName;
+            active.positionCount = positions.length;
+            active.baseCurrency = currency;
+        }
+        revision = 0;
+        savedRevision = 0;
+        saveFailed = false;
+        loadState = "ready";
+        autoSave = true;
+        updateCurrencyOptions();
+        resetForm();
+        render();
+        if (positions.length) {
+            requestQuotes(positions.map((item) => item.ticker))
+                .catch((error) => showToast(error.message, true, 3500, els.toast));
+        }
+        return data;
+    }
+
+    async function loadPortfolio(portfolioId = null, { force = false } = {}) {
+        const cacheKey = portfolioId && dataStore ? dataStore.keys.portfolio(portfolioId) : null;
+        const cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        if (cached) {
+            applyPortfolioData(cached.data);
+            if (cached.isFresh && !force) return true;
+        }
+
+        const revalidationRevision = revision;
+        if (!cached) {
+            loadState = "loading";
+            positions = [];
+            autoSave = false;
+        }
         render();
         try {
             let response;
@@ -914,49 +993,24 @@ window.addEventListener("DOMContentLoaded", () => {
                 if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 900));
             }
             if (!response?.ok) throw lastError || new Error("Failed to load portfolio.");
-            activePortfolioId = data.portfolioId;
-            activePortfolioName = data.name || "Core portfolio";
-            positions = (Array.isArray(data.positions) ? data.positions : [])
-                .filter((item) => item?.ticker && item?.side && item?.sizingMode)
-                .map((item, index) => ({
-                    ...item,
-                    id: String(item.id || `loaded-${index}-${Date.now()}`),
-                    ticker: ticker(item.ticker),
-                    leverage: num(item.leverage) || 1,
-                }));
-            Object.entries(data.tickerMetadata || {}).forEach(([symbol, item]) => {
-                metadata.set(ticker(symbol), { ...(metadata.get(ticker(symbol)) || {}), ...item });
-            });
-            currency = ticker(data.baseCurrency) || "USD";
-            void dataStore?.set(dataStore.keys.portfolio(data.portfolioId), {
-                ...data,
-                positions,
-                baseCurrency: currency,
-            }, {
+            const normalized = normalizePortfolioData(data);
+            const version = data.version || data.revision || data.updatedAt || null;
+            if (cached && revision !== revalidationRevision) return true;
+            void dataStore?.set(dataStore.keys.portfolio(normalized.portfolioId), normalized, {
                 ttlMs: CACHE_TTL.portfolioDetail,
                 serverUpdatedAt: data.updatedAt || null,
-                version: data.version || data.revision || null,
+                version,
             });
-            const active = portfolios.find((item) => item.id === activePortfolioId);
-            if (active) {
-                active.name = activePortfolioName;
-                active.positionCount = positions.length;
-                active.baseCurrency = currency;
-            }
-            revision = 0;
-            savedRevision = 0;
-            saveFailed = false;
-            loadState = "ready";
-            autoSave = true;
-            updateCurrencyOptions();
-            resetForm();
-            render();
-            if (positions.length) {
-                requestQuotes(positions.map((item) => item.ticker))
-                    .catch((error) => showToast(error.message, true, 3500, els.toast));
-            }
+            if (!sameCachedPayload(cached, normalized, version)) applyPortfolioData(normalized);
             return true;
         } catch (error) {
+            if (cached) {
+                autoSave = true;
+                loadState = "ready";
+                render();
+                showToast("Showing saved portfolio data while the service is unavailable.", true, 3500, els.toast);
+                return true;
+            }
             loadState = "error";
             saveFailed = false;
             render();
@@ -965,24 +1019,42 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function loadPortfolioIndex() {
+    function applyPortfolioIndex(data) {
+        portfolios = Array.isArray(data?.portfolios) ? data.portfolios : [];
+        activePortfolioId = data?.activePortfolioId || portfolios[0]?.id || null;
+        renderPicker();
+    }
+
+    async function loadPortfolioIndex(force = false) {
+        const cacheKey = dataStore?.keys.portfolioIndex();
+        const cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        if (cached) {
+            applyPortfolioIndex(cached.data);
+            if (cached.isFresh && !force) return loadPortfolio(activePortfolioId);
+        }
         try {
             const response = await request("/portfolios", {}, 45000);
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load portfolios.");
-            portfolios = Array.isArray(data.portfolios) ? data.portfolios : [];
-            activePortfolioId = data.activePortfolioId || portfolios[0]?.id || null;
+            const next = {
+                portfolios: Array.isArray(data.portfolios) ? data.portfolios : [],
+                activePortfolioId: data.activePortfolioId || data.portfolios?.[0]?.id || null,
+            };
+            const version = data.version || data.updatedAt || null;
             void dataStore?.set(dataStore.keys.portfolioIndex(), {
-                portfolios,
-                activePortfolioId,
+                ...next,
             }, {
                 ttlMs: CACHE_TTL.portfolioIndex,
                 serverUpdatedAt: data.updatedAt || null,
-                version: data.version || null,
+                version,
             });
-            renderPicker();
+            if (!sameCachedPayload(cached, next, version)) applyPortfolioIndex(next);
             return loadPortfolio(activePortfolioId);
         } catch (error) {
+            if (cached) {
+                showToast("Showing saved portfolio list while the service is unavailable.", true, 3500, els.toast);
+                return loadPortfolio(activePortfolioId);
+            }
             loadState = "error";
             render();
             showToast(error.message, true, 3500, els.toast);
@@ -1368,7 +1440,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (action === "edit") editPosition(row?.dataset.id);
         else if (action === "delete") askDeletePosition(row?.dataset.id);
         else if (action === "focus-ticket") resetForm({ focus: true });
-        else if (action === "retry-load") loadPortfolio(activePortfolioId);
+        else if (action === "retry-load") loadPortfolio(activePortfolioId, { force: true });
         else if (action === "clear-filter") {
             filterSide = "all";
             els.filter.value = "all";
@@ -1393,7 +1465,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     });
     els.refreshRates.addEventListener("click", () => loadRates(true));
-    els.syncRetry.addEventListener("click", () => saveFailed ? runSave() : loadPortfolio(activePortfolioId));
+    els.syncRetry.addEventListener("click", () => saveFailed ? runSave() : loadPortfolio(activePortfolioId, { force: true }));
     els.currency.addEventListener("change", () => {
         const oldRate = rate();
         const entry = num(els.entry.value);
@@ -1437,6 +1509,22 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    function revalidateStaleData() {
+        if (!dataStore || document.visibilityState === "hidden") return;
+        if (revalidationPromise) return revalidationPromise;
+        revalidationPromise = Promise.allSettled([
+            loadRates(false),
+            loadPortfolioIndex(false),
+        ]).finally(() => { revalidationPromise = null; });
+        return revalidationPromise;
+    }
+
+    window.addEventListener("pageshow", () => { void revalidateStaleData(); });
+    window.addEventListener("focus", () => { void revalidateStaleData(); });
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") void revalidateStaleData();
+    });
+
     hydrateQuoteCache();
     updateCurrencyOptions();
     render();
@@ -1453,7 +1541,6 @@ window.addEventListener("DOMContentLoaded", () => {
             metadata = new Map((items || []).map((item) => [ticker(item.symbol), item]));
             render();
         });
-        loadRates(false);
-        loadPortfolioIndex();
+        void Promise.allSettled([loadRates(false), loadPortfolioIndex(false)]);
     });
 });
