@@ -1,4 +1,5 @@
 import { CACHE_POLICIES } from "./cache-policy.js";
+import { recordCacheEvent } from "./cache-metrics.js";
 
 const DATABASE_NAME = "dcf-client-data";
 const DATABASE_VERSION = 1;
@@ -174,6 +175,7 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
 
         if (!validEnvelope(entry, uid, scopedKey)) {
             if (entry) await remove(scopedKey);
+            recordCacheEvent("uid", "miss");
             return null;
         }
         memoryEntries.set(scopedKey, entry);
@@ -184,9 +186,14 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
             : entry.expiresAt;
         if (!isFresh && staleExpiresAt <= timestamp) {
             await remove(scopedKey);
+            recordCacheEvent("uid", "expired");
             return null;
         }
-        if (!allowExpired && !isFresh) return null;
+        if (!allowExpired && !isFresh) {
+            recordCacheEvent("uid", "stale-rejected");
+            return null;
+        }
+        recordCacheEvent("uid", isFresh ? "hit" : "stale");
         return { ...entry, isFresh };
     }
 
