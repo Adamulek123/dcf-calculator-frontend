@@ -102,6 +102,7 @@ function createKeys(uid) {
     return Object.freeze({
         portfolioIndex: () => `portfolio-index:${uid}`,
         portfolio: (portfolioId) => `portfolio:${uid}:${encode(portfolioId)}`,
+        portfolioOutbox: (portfolioId) => `portfolio-outbox:${uid}:${encode(portfolioId)}`,
         watchlists: () => `watchlists:${uid}`,
         fxRates: (base = "USD") => `fx-rates:${uid}:${encode(String(base).toUpperCase())}`,
         dipPerformance: (resultKey) => `dip-performance:${uid}:${encode(resultKey)}`,
