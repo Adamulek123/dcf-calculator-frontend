@@ -852,14 +852,19 @@ window.addEventListener("DOMContentLoaded", async () => {
         els.chartsGrid.classList.remove("visible");
 
         try {
-            const [basicData, segmentData, stockInfoData, priceData, ttmData, ttmSegmentData] = await Promise.all([
-                fetchWithCache(ticker, "basic_data", `/get_basic_data?ticker=${ticker}`, true),
-                fetchWithCache(ticker, "segment_data", `/get_segment_data?ticker=${ticker}`),
+            const [filings, stockInfoData, priceData] = await Promise.all([
+                fetchWithCache(ticker, "filings_bundle", `/financial-filings?ticker=${ticker}`, true),
                 fetchWithCache(ticker, "stock_info_data", `/get_stock_info_data?ticker=${ticker}`),
-                fetchWithCache(ticker, "price_data", `/get_market_price?ticker=${ticker}`),
-                fetchWithCache(ticker, "ttm_data", `/get_ttm_data?ticker=${ticker}`),
-                fetchWithCache(ticker, "ttm_segment_data", `/get_ttm_segment_data?ticker=${ticker}`)
+                fetchWithCache(ticker, "price_data", `/get_market_price?ticker=${ticker}`)
             ]);
+            const basicData = filings?.sections?.basic?.data;
+            const segmentData = filings?.sections?.segment?.data || null;
+            const ttmData = filings?.sections?.ttm?.data || null;
+            const ttmSegmentData = filings?.sections?.ttmSegment?.data || null;
+            setCachedFinancialData(ticker, "basic_data", basicData);
+            setCachedFinancialData(ticker, "segment_data", segmentData);
+            setCachedFinancialData(ticker, "ttm_data", ttmData);
+            setCachedFinancialData(ticker, "ttm_segment_data", ttmSegmentData);
 
             // Cache all data for period toggle re-rendering
             cachedBasicData = basicData;
