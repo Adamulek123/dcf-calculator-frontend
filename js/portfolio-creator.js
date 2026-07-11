@@ -976,7 +976,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
         setBusy(els.refreshRates, true, cached ? "Refreshing…" : "Loading…");
         try {
-            const response = await request("/portfolio/conversion-rates?base=USD");
+            const query = new URLSearchParams({ base: "USD" });
+            if (force) query.set("refresh", "1");
+            const response = await request(`/portfolio/conversion-rates?${query}`);
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to load exchange rates.");
             const version = data.version || data.date || null;
