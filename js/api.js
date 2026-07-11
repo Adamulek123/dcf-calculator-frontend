@@ -1,3 +1,5 @@
+import { recordRequest } from "./cache-metrics.js";
+
 function getBackendBaseUrl() {
     const isLocalDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
     return isLocalDev ? "http://localhost:5000" : "https://dcf-backend.onrender.com";
@@ -80,7 +82,15 @@ async function apiCall(endpoint, options = {}, dependencies = {}) {
     const execute = async () => {
         for (let attempt = 0; ; attempt += 1) {
             try {
+                const startedAt = performance.now();
                 const response = await fetch(`${backendBaseUrl}${endpoint}`, requestOptions);
+                recordRequest({
+                    route: endpoint.split("?")[0],
+                    method,
+                    status: response.status,
+                    durationMs: performance.now() - startedAt,
+                    bytes: Number(response.headers.get("Content-Length")) || null,
+                });
                 if (response.status === 401) {
                     handleLogout();
                     throw new Error("Session expired. Please log in again.");

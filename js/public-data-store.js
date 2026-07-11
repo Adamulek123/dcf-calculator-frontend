@@ -1,3 +1,5 @@
+import { recordCacheEvent } from "./cache-metrics.js";
+
 const DATABASE_NAME = "dcf-public-data";
 const STORE_NAME = "records";
 const MAX_BYTES = 12 * 1024 * 1024;
@@ -36,10 +38,12 @@ async function getPublicEntry(key, { allowExpired = false } = {}) {
             const staleExpiresAt = record?.staleExpiresAt || record?.expiresAt || 0;
             if (!record || (!isFresh && (!allowExpired || staleExpiresAt <= now))) {
                 if (record) store.delete(key);
+                recordCacheEvent("public", record ? "expired" : "miss");
                 return resolve(null);
             }
             record.lastAccessed = now;
             store.put(record);
+            recordCacheEvent("public", isFresh ? "hit" : "stale");
             resolve({ ...record, isFresh });
         };
         request.onerror = () => resolve(null);
