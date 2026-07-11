@@ -104,6 +104,9 @@ window.addEventListener("DOMContentLoaded", () => {
     let saveTimer = null;
     let savePromise = null;
     let saveFailed = false;
+    let pendingMutationId = null;
+    let conflictPortfolio = null;
+    let pendingPortfolioCreate = null;
     let activeSuggestion = -1;
     let initializedUid = null;
     let dataStore = null;
@@ -466,6 +469,10 @@ window.addEventListener("DOMContentLoaded", () => {
             els.syncStatus.textContent = "Portfolio unavailable";
             els.syncStatus.classList.add("is-error");
             els.syncRetry.classList.remove("hidden");
+        } else if (conflictPortfolio) {
+            els.syncStatus.textContent = "Portfolio changed elsewhere — review and resolve";
+            els.syncStatus.classList.add("is-error");
+            els.syncRetry.classList.remove("hidden");
         } else if (savePromise) {
             els.syncStatus.textContent = "Saving changes…";
             els.syncStatus.classList.add("is-loading");
@@ -778,6 +785,7 @@ window.addEventListener("DOMContentLoaded", () => {
     function changed(message = "") {
         revision += 1;
         saveFailed = false;
+        pendingMutationId = newClientOperationId();
         updateActivePortfolioSummary();
         cacheActivePortfolio("pending");
         persistPendingSnapshot();
@@ -793,6 +801,7 @@ window.addEventListener("DOMContentLoaded", () => {
             baseCurrency: currency,
             baseRevision: serverRevision,
             clientRevision: revision,
+            mutationId: pendingMutationId || newClientOperationId(),
             savedAt: new Date().toISOString(),
         };
     }
@@ -815,6 +824,7 @@ window.addEventListener("DOMContentLoaded", () => {
         currency = ticker(pending.data.baseCurrency) || currency;
         serverRevision = pending.data.baseRevision ?? serverRevision;
         revision = Math.max(1, Number(pending.data.clientRevision) || 1);
+        pendingMutationId = pending.data.mutationId || newClientOperationId();
         savedRevision = 0;
         saveFailed = true;
         cacheActivePortfolio("unsynced");
@@ -831,8 +841,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
     async function runSave() {
         if (!autoSave || !activePortfolioId) return false;
+        if (conflictPortfolio) return false;
         if (savePromise) return savePromise;
         const targetRevision = revision;
+        const mutationId = pendingMutationId || newClientOperationId();
+        pendingMutationId = mutationId;
         saveFailed = false;
         savePromise = (async () => {
             renderSync();
@@ -845,12 +858,26 @@ window.addEventListener("DOMContentLoaded", () => {
                         positions,
                         baseCurrency: currency,
                         baseRevision: serverRevision,
+                        idempotencyKey: mutationId,
                     }),
                 });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.message || "Failed to save portfolio.");
+                if (!response.ok) {
+                    if (response.status === 409 && data.code === "REVISION_CONFLICT" && data.portfolio) {
+                        conflictPortfolio = data.portfolio;
+                        serverRevision = data.portfolio.revision ?? serverRevision;
+                        pendingMutationId = newClientOperationId();
+                        persistPendingSnapshot();
+                        cacheActivePortfolio("conflict", {
+                            version: data.portfolio.revision ?? null,
+                            serverUpdatedAt: data.portfolio.updatedAt ?? null,
+                        });
+                    }
+                    throw new Error(data.message || "Failed to save portfolio.");
+                }
                 savedRevision = Math.max(savedRevision, targetRevision);
                 serverRevision = data.revision ?? serverRevision;
+                pendingMutationId = null;
                 if (revision <= targetRevision) void dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
                 cacheActivePortfolio(revision > targetRevision ? "pending" : "synced", {
                     version: data.version || data.revision || null,
@@ -884,6 +911,31 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         if (revision > savedRevision || saveFailed) return runSave();
         return true;
+    }
+
+    function newClientOperationId() {
+        const random = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return `op-${random}`;
+    }
+
+    async function resolvePortfolioConflict() {
+        if (!conflictPortfolio) return runSave();
+        const reapplyLocalChanges = window.confirm(
+            "This portfolio changed on another device. Select OK to reapply your local edits to the latest server version, or Cancel to discard local edits and reload the server version."
+        );
+        if (!reapplyLocalChanges) {
+            const remote = conflictPortfolio;
+            conflictPortfolio = null;
+            await dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
+            applyPortfolioData(remote);
+            showToast("Loaded the newer server version.", false, 3000, els.toast);
+            return true;
+        }
+        conflictPortfolio = null;
+        saveFailed = false;
+        pendingMutationId = newClientOperationId();
+        persistPendingSnapshot();
+        return runSave();
     }
 
     async function requestQuotes(symbols, { force = false } = {}) {
@@ -1302,14 +1354,27 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         setMenuError();
         setBusy(els.createPortfolioBtn, true, "Adding…");
+        const createOperation = pendingPortfolioCreate?.name === name
+            ? pendingPortfolioCreate
+            : {
+                name,
+                portfolioId: `portfolio-${newClientOperationId()}`,
+                idempotencyKey: newClientOperationId(),
+            };
+        pendingPortfolioCreate = createOperation;
         try {
             const response = await request("/portfolios", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
+                body: JSON.stringify({
+                    name,
+                    portfolioId: createOperation.portfolioId,
+                    idempotencyKey: createOperation.idempotencyKey,
+                }),
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to create portfolio.");
+            pendingPortfolioCreate = null;
             portfolios.push(data.portfolio);
             els.newPortfolioName.value = "";
             els.picker.open = false;
@@ -1730,7 +1795,9 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     });
     els.refreshRates.addEventListener("click", () => loadRates(true));
-    els.syncRetry.addEventListener("click", () => saveFailed ? runSave() : loadPortfolio(activePortfolioId, { force: true }));
+    els.syncRetry.addEventListener("click", () => conflictPortfolio
+        ? resolvePortfolioConflict()
+        : (saveFailed ? runSave() : loadPortfolio(activePortfolioId, { force: true })));
     els.currency.addEventListener("change", () => {
         const oldRate = rate();
         const entry = num(els.entry.value);
