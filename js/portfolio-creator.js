@@ -80,7 +80,7 @@ window.addEventListener("DOMContentLoaded", () => {
             } finally { location.replace("login.html"); }
         },
     };
-    const QUOTE_TTL = 60000;
+    const QUOTE_TTL = 5 * 60 * 1000;
     const QUOTE_KEY = "dcf_portfolio_quote_cache_v2";
     let portfolios = [];
     let activePortfolioId = null;
