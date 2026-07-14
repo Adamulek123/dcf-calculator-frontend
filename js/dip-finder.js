@@ -59,6 +59,10 @@ window.addEventListener("DOMContentLoaded", () => {
     let dataStore = null;
     let cacheChannel = null;
     let revalidationPromise = null;
+    let watchlistLoadGeneration = 0;
+    let performanceLoadGeneration = 0;
+    let watchlistMutationGeneration = 0;
+    let pendingWatchlistMutations = 0;
     let loadingWatchlists = false;
     let loadingPerformance = false;
 
@@ -439,6 +443,61 @@ window.addEventListener("DOMContentLoaded", () => {
         try { return JSON.stringify(entry.data) === JSON.stringify(data); } catch { return false; }
     };
 
+    const rosterKey = (watchlist) => (watchlist?.tickers || [])
+        .map(normalizeTicker)
+        .sort()
+        .join(",");
+
+    function createWatchlistLoadContext() {
+        return Object.freeze({
+            generation: ++watchlistLoadGeneration,
+            uid: initializedUid,
+            mutationGeneration: watchlistMutationGeneration,
+        });
+    }
+
+    function isCurrentWatchlistLoad(context) {
+        return context.generation === watchlistLoadGeneration
+            && context.uid === initializedUid
+            && context.mutationGeneration === watchlistMutationGeneration
+            && pendingWatchlistMutations === 0;
+    }
+
+    function createPerformanceLoadContext(watchlist) {
+        return Object.freeze({
+            generation: ++performanceLoadGeneration,
+            uid: initializedUid,
+            watchlistId: watchlist?.id || null,
+            rosterKey: rosterKey(watchlist),
+        });
+    }
+
+    function isCurrentPerformanceLoad(context) {
+        const selected = currentWatchlist();
+        return context.generation === performanceLoadGeneration
+            && context.uid === initializedUid
+            && context.watchlistId === (selected?.id || null)
+            && context.rosterKey === rosterKey(selected);
+    }
+
+    function invalidatePerformanceLoad() {
+        performanceLoadGeneration += 1;
+        loadingPerformance = false;
+        setButtonState(els.refresh, "↻ Refresh data", false);
+    }
+
+    function beginWatchlistMutation({ performanceChanged = false } = {}) {
+        watchlistMutationGeneration += 1;
+        watchlistLoadGeneration += 1;
+        pendingWatchlistMutations += 1;
+        loadingWatchlists = false;
+        if (performanceChanged) invalidatePerformanceLoad();
+    }
+
+    function finishWatchlistMutation() {
+        pendingWatchlistMutations = Math.max(0, pendingWatchlistMutations - 1);
+    }
+
     function saveSelectedId() {
         if (selectedId) localStorage.setItem(selectedStorageKey, selectedId);
         else localStorage.removeItem(selectedStorageKey);
@@ -471,8 +530,12 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     async function loadWatchlists(force = false) {
+        if (pendingWatchlistMutations > 0) return;
+        const context = createWatchlistLoadContext();
+        loadingWatchlists = false;
         const cacheKey = dataStore?.keys.watchlists();
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        if (!isCurrentWatchlistLoad(context)) return;
         if (cached) {
             applyWatchlists(cached.data);
             if (cached.isFresh && !force) {
@@ -487,6 +550,7 @@ window.addEventListener("DOMContentLoaded", () => {
         try {
             const response = await request("/watchlists");
             const data = await response.json();
+            if (!isCurrentWatchlistLoad(context)) return;
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             const next = { watchlists: Array.isArray(data.watchlists) ? data.watchlists : [] };
             const version = data.version || data.updatedAt || null;
@@ -500,6 +564,7 @@ window.addEventListener("DOMContentLoaded", () => {
             setServiceStatus("Lists synced", "ready");
             await loadPerformance();
         } catch (error) {
+            if (!isCurrentWatchlistLoad(context)) return;
             if (cached) {
                 setServiceStatus("Saved lists", "partial");
                 await loadPerformance();
@@ -510,23 +575,32 @@ window.addEventListener("DOMContentLoaded", () => {
             showChartState("Watchlists could not load", error.message, "Retry", loadWatchlists);
             showToast(error.message, true, 4000, els.toast);
         } finally {
-            loadingWatchlists = false;
-            renderWatchlistControls();
+            if (isCurrentWatchlistLoad(context)) {
+                loadingWatchlists = false;
+                renderWatchlistControls();
+            }
         }
     }
 
     async function loadPerformance(force = false) {
-        const selected = currentWatchlist();
+        const current = currentWatchlist();
+        const selected = current ? { ...current, tickers: [...current.tickers] } : null;
+        const context = createPerformanceLoadContext(selected);
+        loadingPerformance = false;
+        setButtonState(els.refresh, "↻ Refresh data", false);
         if (!selected?.tickers.length) {
-            performance = new Map();
-            renderPerformance();
+            if (isCurrentPerformanceLoad(context)) {
+                performance = new Map();
+                renderPerformance();
+            }
             return;
         }
 
         const resultKey = createDipPerformanceResultKey(selected);
         const cacheKey = dataStore?.keys.dipPerformance(resultKey);
         let cached = cacheKey ? await dataStore.get(cacheKey) : null;
-        const tickerKey = selected.tickers.map(normalizeTicker).sort().join(",");
+        if (!isCurrentPerformanceLoad(context)) return;
+        const tickerKey = context.rosterKey;
         const cachedTickerKey = cached?.data?.tickers?.map(normalizeTicker).sort().join(",");
         if (cached && cachedTickerKey !== tickerKey) cached = null;
         if (cached) {
@@ -554,7 +628,10 @@ window.addEventListener("DOMContentLoaded", () => {
                 body: JSON.stringify({ tickers: selected.tickers, force })
             }, 60000);
             const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Unable to load market history.");
+            if (!response.ok) {
+                if (!isCurrentPerformanceLoad(context)) return;
+                throw new Error(data.message || "Unable to load market history.");
+            }
             const next = {
                 watchlistId: selected.id,
                 watchlistUpdatedAt: selected.updatedAt || null,
@@ -569,6 +646,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 serverUpdatedAt: data.asOf || null,
                 version,
             });
+            if (!isCurrentPerformanceLoad(context)) return;
             if (!sameCachedPayload(cached, next, version)) {
                 performance = new Map(next.results.map((result) => [result.ticker, result]));
                 renderPerformance();
@@ -577,6 +655,7 @@ window.addEventListener("DOMContentLoaded", () => {
             setServiceStatus(unavailable ? `${unavailable} unavailable` : "Scan current", unavailable ? "partial" : "ready");
             els.live.textContent = `${selected.name} market scan updated.`;
         } catch (error) {
+            if (!isCurrentPerformanceLoad(context)) return;
             if (cached) {
                 setServiceStatus("Saved scan", "partial");
                 showToast("Showing saved scan results while refresh is unavailable.", true, 4000, els.toast);
@@ -586,13 +665,16 @@ window.addEventListener("DOMContentLoaded", () => {
             showChartState("Market scan failed", error.message, "Retry scan", () => loadPerformance(true));
             showToast(error.message, true, 4000, els.toast);
         } finally {
-            loadingPerformance = false;
-            setButtonState(els.refresh, "↻ Refresh data", false);
+            if (isCurrentPerformanceLoad(context)) {
+                loadingPerformance = false;
+                setButtonState(els.refresh, "↻ Refresh data", false);
+            }
         }
     }
 
     async function selectWatchlist(id) {
         if (!watchlists.some((item) => item.id === id) || id === selectedId) return;
+        invalidatePerformanceLoad();
         selectedId = id;
         saveSelectedId();
         performance = new Map();
@@ -625,6 +707,7 @@ window.addEventListener("DOMContentLoaded", () => {
             els.nameInput.focus();
             return;
         }
+        beginWatchlistMutation({ performanceChanged: dialogMode === "create" });
         setButtonState(els.saveDialog, "Saving…", true);
         const previousWatchlists = watchlistSnapshot().watchlists;
         const previousSelectedId = selectedId;
@@ -689,6 +772,7 @@ window.addEventListener("DOMContentLoaded", () => {
             els.nameError.textContent = error.message;
             els.nameError.classList.remove("hidden");
         } finally {
+            finishWatchlistMutation();
             setButtonState(els.saveDialog, dialogMode === "create" ? "Create watchlist" : "Save name", false);
         }
     }
@@ -696,6 +780,7 @@ window.addEventListener("DOMContentLoaded", () => {
     async function deleteSelectedWatchlist() {
         const selected = currentWatchlist();
         if (!selected) return;
+        beginWatchlistMutation({ performanceChanged: true });
         const previousWatchlists = watchlistSnapshot().watchlists;
         const previousSelectedId = selectedId;
         const previousPerformance = performance;
@@ -727,12 +812,15 @@ window.addEventListener("DOMContentLoaded", () => {
             cacheWatchlistCollection();
             renderAll();
             showToast(error.message, true, 4000, els.toast);
+        } finally {
+            finishWatchlistMutation();
         }
     }
 
     async function updateTickers(nextTickers, message) {
         const selected = currentWatchlist();
         if (!selected) return;
+        beginWatchlistMutation({ performanceChanged: true });
         const previousWatchlists = watchlistSnapshot().watchlists;
         const previousPerformance = performance;
         const previousPerformanceResultKey = createDipPerformanceResultKey(selected);
@@ -775,6 +863,8 @@ window.addEventListener("DOMContentLoaded", () => {
             cacheWatchlistCollection();
             renderAll();
             showToast(error.message, true, 4000, els.toast);
+        } finally {
+            finishWatchlistMutation();
         }
     }
 
