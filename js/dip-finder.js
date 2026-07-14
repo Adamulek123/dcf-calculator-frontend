@@ -61,6 +61,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let revalidationPromise = null;
     let loadingWatchlists = false;
     let loadingPerformance = false;
+    const watchlistMutationGenerations = new Map();
 
     const normalizeTicker = (value) => String(value || "").trim().toUpperCase();
     const currentWatchlist = () => watchlists.find((item) => item.id === selectedId) || null;
@@ -439,6 +440,46 @@ window.addEventListener("DOMContentLoaded", () => {
         try { return JSON.stringify(entry.data) === JSON.stringify(data); } catch { return false; }
     };
 
+    function beginWatchlistMutation(watchlistId) {
+        const generation = (watchlistMutationGenerations.get(watchlistId) || 0) + 1;
+        watchlistMutationGenerations.set(watchlistId, generation);
+        return Object.freeze({ watchlistId, generation });
+    }
+
+    function isCurrentWatchlistMutation(context) {
+        return !context
+            || watchlistMutationGenerations.get(context.watchlistId) === context.generation;
+    }
+
+    function applyCanonicalWatchlist(canonical) {
+        if (!canonical?.id) return;
+        watchlists = watchlists.map((item) => item.id === canonical.id ? canonical : item);
+        cacheWatchlistCollection({
+            version: canonical.revision ?? canonical.version ?? null,
+            serverUpdatedAt: canonical.updatedAt || null,
+        });
+        renderAll();
+    }
+
+    function applyTickerIntent(canonicalTickers, added, removed) {
+        const removedSet = new Set(removed);
+        const result = (canonicalTickers || []).filter((symbol) => !removedSet.has(symbol));
+        const existing = new Set(result);
+        added.forEach((symbol) => {
+            if (!existing.has(symbol)) {
+                existing.add(symbol);
+                result.push(symbol);
+            }
+        });
+        return result;
+    }
+
+    function confirmConflictReapply(action) {
+        return window.confirm(
+            `This watchlist changed on another device. Select OK to reapply your ${action} to the latest version, or Cancel to keep the newer server version.`
+        );
+    }
+
     function saveSelectedId() {
         if (selectedId) localStorage.setItem(selectedStorageKey, selectedId);
         else localStorage.removeItem(selectedStorageKey);
@@ -618,6 +659,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     async function saveWatchlist(event) {
         event.preventDefault();
+        const mode = dialogMode;
         const name = els.nameInput.value.trim().replace(/\s+/g, " ");
         if (!name) {
             els.nameError.textContent = "Enter a watchlist name.";
@@ -625,18 +667,24 @@ window.addEventListener("DOMContentLoaded", () => {
             els.nameInput.focus();
             return;
         }
-        setButtonState(els.saveDialog, "Saving…", true);
+
+        const selected = currentWatchlist();
+        if (mode === "rename" && !selected) return;
+        const mutationContext = mode === "rename" ? beginWatchlistMutation(selected.id) : null;
         const previousWatchlists = watchlistSnapshot().watchlists;
         const previousSelectedId = selectedId;
-        const selected = currentWatchlist();
+        let rollbackWatchlist = selected;
         let optimisticId = null;
         const now = new Date().toISOString();
-        if (dialogMode === "create") {
+
+        setButtonState(els.saveDialog, "Saving…", true);
+        if (mode === "create") {
             optimisticId = `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
             watchlists = [{
                 id: optimisticId,
                 name,
                 tickers: [],
+                revision: 0,
                 createdAt: now,
                 updatedAt: now,
                 syncState: "pending",
@@ -651,16 +699,50 @@ window.addEventListener("DOMContentLoaded", () => {
         saveSelectedId();
         cacheWatchlistCollection();
         renderAll();
+
         try {
-            const endpoint = dialogMode === "create" ? "/watchlists" : `/watchlists/${selected.id}`;
-            const response = await request(endpoint, {
-                method: dialogMode === "create" ? "POST" : "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, ...(dialogMode === "create" ? { tickers: [] } : {}) })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Unable to save watchlist.");
-            if (dialogMode === "create") {
+            let data = null;
+            if (mode === "create") {
+                const response = await request("/watchlists", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name, tickers: [] }),
+                });
+                data = await response.json();
+                if (!response.ok) throw new Error(data.message || "Unable to save watchlist.");
+            } else {
+                let baseRevision = Number.isInteger(selected.revision) ? selected.revision : 0;
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    const response = await request(`/watchlists/${selected.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name, baseRevision }),
+                    });
+                    data = await response.json();
+                    if (!isCurrentWatchlistMutation(mutationContext)) return;
+                    if (response.status === 409 && data.code === "REVISION_CONFLICT" && data.watchlist) {
+                        rollbackWatchlist = data.watchlist;
+                        applyCanonicalWatchlist(data.watchlist);
+                        if (attempt === 1 || !confirmConflictReapply("rename")) {
+                            els.dialog.close();
+                            showToast("Loaded the newer watchlist version.", true, 3200, els.toast);
+                            return;
+                        }
+                        baseRevision = data.watchlist.revision;
+                        watchlists = watchlists.map((item) => item.id === selected.id
+                            ? { ...data.watchlist, name, syncState: "pending" }
+                            : item);
+                        cacheWatchlistCollection();
+                        renderAll();
+                        continue;
+                    }
+                    if (!response.ok) throw new Error(data.message || "Unable to save watchlist.");
+                    break;
+                }
+            }
+
+            if (!isCurrentWatchlistMutation(mutationContext)) return;
+            if (mode === "create") {
                 watchlists = watchlists.map((item) => item.id === optimisticId ? data : item);
                 selectedId = data.id;
                 saveSelectedId();
@@ -669,27 +751,32 @@ window.addEventListener("DOMContentLoaded", () => {
                 watchlists = watchlists.map((item) => item.id === data.id ? data : item);
             }
             cacheWatchlistCollection({
-                version: data.version || null,
+                version: data.revision ?? data.version ?? null,
                 serverUpdatedAt: data.updatedAt || null,
             });
             cacheChannel?.publish("watchlist-updated", {
                 entityId: data.id,
-                operation: dialogMode === "create" ? "create" : "rename",
-                version: data.version || null,
+                operation: mode,
+                version: data.revision ?? data.version ?? null,
             });
             els.dialog.close();
             renderAll();
-            showToast(dialogMode === "create" ? "Watchlist created." : "Watchlist renamed.", false, 2500, els.toast);
+            showToast(mode === "create" ? "Watchlist created." : "Watchlist renamed.", false, 2500, els.toast);
         } catch (error) {
-            watchlists = previousWatchlists;
-            selectedId = previousSelectedId;
+            if (!isCurrentWatchlistMutation(mutationContext)) return;
+            if (mode === "create") {
+                watchlists = previousWatchlists;
+                selectedId = previousSelectedId;
+            } else {
+                watchlists = watchlists.map((item) => item.id === selected.id ? rollbackWatchlist : item);
+            }
             saveSelectedId();
             cacheWatchlistCollection();
             renderAll();
             els.nameError.textContent = error.message;
             els.nameError.classList.remove("hidden");
         } finally {
-            setButtonState(els.saveDialog, dialogMode === "create" ? "Create watchlist" : "Save name", false);
+            setButtonState(els.saveDialog, mode === "create" ? "Create watchlist" : "Save name", false);
         }
     }
 
@@ -733,13 +820,23 @@ window.addEventListener("DOMContentLoaded", () => {
     async function updateTickers(nextTickers, message) {
         const selected = currentWatchlist();
         if (!selected) return;
-        const previousWatchlists = watchlistSnapshot().watchlists;
+
+        const originalWatchlist = { ...selected, tickers: [...selected.tickers] };
         const previousPerformance = performance;
         const previousPerformanceResultKey = createDipPerformanceResultKey(selected);
+        const mutationContext = beginWatchlistMutation(selected.id);
+        const originalSet = new Set(selected.tickers);
+        const nextSet = new Set(nextTickers);
+        const added = nextTickers.filter((symbol) => !originalSet.has(symbol));
+        const removed = selected.tickers.filter((symbol) => !nextSet.has(symbol));
+        const additiveOnly = added.length > 0 && removed.length === 0;
+        let desiredTickers = [...nextTickers];
+        let rollbackWatchlist = originalWatchlist;
+
         watchlists = watchlists.map((item) => item.id === selected.id
             ? {
                 ...item,
-                tickers: [...nextTickers],
+                tickers: desiredTickers,
                 updatedAt: new Date().toISOString(),
                 syncState: "pending",
             }
@@ -747,34 +844,96 @@ window.addEventListener("DOMContentLoaded", () => {
         performance = new Map();
         cacheWatchlistCollection();
         renderAll();
+
         try {
-            const response = await request(`/watchlists/${selected.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ tickers: nextTickers })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || "Unable to update watchlist.");
-            watchlists = watchlists.map((item) => item.id === data.id ? data : item);
-            cacheWatchlistCollection({
-                version: data.version || null,
-                serverUpdatedAt: data.updatedAt || null,
-            });
+            let canonical = null;
+            if (additiveOnly) {
+                const response = await request(`/watchlists/${selected.id}/tickers`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ tickers: added }),
+                });
+                const payload = await response.json();
+                if (!isCurrentWatchlistMutation(mutationContext)) {
+                    if (response.ok && payload.watchlist) {
+                        watchlists = watchlists.map((item) => {
+                            if (item.id !== selected.id) return item;
+                            const tickers = applyTickerIntent(
+                                item.tickers,
+                                payload.watchlist.tickers,
+                                []
+                            );
+                            return {
+                                ...item,
+                                tickers,
+                                revision: Math.max(
+                                    Number(item.revision) || 0,
+                                    Number(payload.watchlist.revision) || 0
+                                ),
+                            };
+                        });
+                        cacheWatchlistCollection();
+                        renderAll();
+                    }
+                    return;
+                }
+                if (!response.ok) throw new Error(payload.message || "Unable to update watchlist.");
+                canonical = payload.watchlist;
+            } else {
+                let baseRevision = Number.isInteger(selected.revision) ? selected.revision : 0;
+                for (let attempt = 0; attempt < 2; attempt += 1) {
+                    const response = await request(`/watchlists/${selected.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ tickers: desiredTickers, baseRevision }),
+                    });
+                    const payload = await response.json();
+                    if (!isCurrentWatchlistMutation(mutationContext)) return;
+                    if (response.status === 409 && payload.code === "REVISION_CONFLICT" && payload.watchlist) {
+                        rollbackWatchlist = payload.watchlist;
+                        applyCanonicalWatchlist(payload.watchlist);
+                        if (attempt === 1 || !confirmConflictReapply("ticker change")) {
+                            showToast("Loaded the newer watchlist version.", true, 3200, els.toast);
+                            await loadPerformance();
+                            return;
+                        }
+                        desiredTickers = applyTickerIntent(payload.watchlist.tickers, added, removed);
+                        baseRevision = payload.watchlist.revision;
+                        watchlists = watchlists.map((item) => item.id === selected.id
+                            ? {
+                                ...payload.watchlist,
+                                tickers: desiredTickers,
+                                syncState: "pending",
+                            }
+                            : item);
+                        cacheWatchlistCollection();
+                        renderAll();
+                        continue;
+                    }
+                    if (!response.ok) throw new Error(payload.message || "Unable to update watchlist.");
+                    canonical = payload;
+                    break;
+                }
+            }
+
+            if (!canonical?.id || !isCurrentWatchlistMutation(mutationContext)) return;
+            applyCanonicalWatchlist(canonical);
             void dataStore?.remove(dataStore.keys.dipPerformance(previousPerformanceResultKey));
             cacheChannel?.publish("watchlist-updated", {
-                entityId: data.id,
-                operation: "tickers",
-                version: data.version || null,
+                entityId: canonical.id,
+                operation: additiveOnly ? "ticker-merge" : "tickers",
+                version: canonical.revision ?? canonical.version ?? null,
             });
-            renderAll();
             showToast(message, false, 2400, els.toast);
             await loadPerformance();
         } catch (error) {
-            watchlists = previousWatchlists;
-            performance = previousPerformance;
+            if (!isCurrentWatchlistMutation(mutationContext)) return;
+            watchlists = watchlists.map((item) => item.id === selected.id ? rollbackWatchlist : item);
+            performance = rollbackWatchlist === originalWatchlist ? previousPerformance : new Map();
             cacheWatchlistCollection();
             renderAll();
             showToast(error.message, true, 4000, els.toast);
+            if (rollbackWatchlist !== originalWatchlist) await loadPerformance();
         }
     }
 
