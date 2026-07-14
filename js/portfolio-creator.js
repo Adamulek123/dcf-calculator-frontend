@@ -83,6 +83,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const QUOTE_KEY = "dcf_portfolio_quote_cache_v2";
     let portfolios = [];
     let activePortfolioId = null;
+    let activationRevision = 0;
     let activePortfolioName = "Core portfolio";
     let positions = [];
     let rates = { USD: 1 };
@@ -548,6 +549,7 @@ window.addEventListener("DOMContentLoaded", () => {
             active.positionCount = positions.length;
             active.baseCurrency = currency;
             active.name = activePortfolioName;
+            active.revision = serverRevision ?? active.revision ?? 0;
         }
     }
 
@@ -555,6 +557,7 @@ window.addEventListener("DOMContentLoaded", () => {
         return {
             portfolios: portfolios.map((portfolio) => ({ ...portfolio })),
             activePortfolioId,
+            activationRevision,
         };
     }
 
@@ -573,6 +576,7 @@ window.addEventListener("DOMContentLoaded", () => {
         return {
             portfolioId: activePortfolioId,
             name: activePortfolioName,
+            revision: serverRevision,
             positions: positions.map((position) => ({ ...position })),
             baseCurrency: currency,
             tickerMetadata: Object.fromEntries(
@@ -905,6 +909,8 @@ window.addEventListener("DOMContentLoaded", () => {
                 }
                 savedRevision = Math.max(savedRevision, targetRevision);
                 serverRevision = data.revision ?? serverRevision;
+                const activeSummary = portfolios.find((item) => item.id === activePortfolioId);
+                if (activeSummary) activeSummary.revision = serverRevision ?? activeSummary.revision ?? 0;
                 pendingMutationId = null;
                 if (revision <= targetRevision) void dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
                 cacheActivePortfolio(revision > targetRevision ? "pending" : "synced", {
@@ -1157,6 +1163,7 @@ window.addEventListener("DOMContentLoaded", () => {
             active.name = activePortfolioName;
             active.positionCount = positions.length;
             active.baseCurrency = currency;
+            active.revision = data.revision ?? active.revision ?? 0;
         }
         if (markCanonical) {
             revision = 0;
@@ -1177,6 +1184,30 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         return data;
     }
+    function reconcileCanonicalPortfolio(rawPortfolio) {
+        if (!rawPortfolio?.portfolioId) return;
+        const portfolioId = rawPortfolio.portfolioId;
+        const summary = portfolios.find((item) => item.id === portfolioId);
+        if (summary) {
+            summary.name = rawPortfolio.name || summary.name;
+            summary.positionCount = Array.isArray(rawPortfolio.positions)
+                ? rawPortfolio.positions.length
+                : summary.positionCount;
+            summary.baseCurrency = rawPortfolio.baseCurrency || summary.baseCurrency;
+            summary.revision = rawPortfolio.revision ?? summary.revision ?? 0;
+            summary.updatedAt = rawPortfolio.updatedAt || summary.updatedAt;
+        }
+        if (portfolioId === activePortfolioId) {
+            applyPortfolioData(rawPortfolio);
+        } else {
+            renderPicker();
+        }
+        cachePortfolioIndex({
+            version: rawPortfolio.revision ?? null,
+            serverUpdatedAt: rawPortfolio.updatedAt || null,
+        });
+    }
+
 
     async function loadPortfolio(portfolioId = null, { force = false } = {}) {
         const requestedPortfolioId = portfolioId || activePortfolioId;
@@ -1256,6 +1287,7 @@ window.addEventListener("DOMContentLoaded", () => {
     function applyPortfolioIndex(data) {
         portfolios = Array.isArray(data?.portfolios) ? data.portfolios : [];
         activePortfolioId = data?.activePortfolioId || portfolios[0]?.id || null;
+        activationRevision = Math.max(0, Number(data?.activationRevision) || 0);
         renderPicker();
     }
 
@@ -1277,6 +1309,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const next = {
                 portfolios: Array.isArray(data.portfolios) ? data.portfolios : [],
                 activePortfolioId: data.activePortfolioId || data.portfolios?.[0]?.id || null,
+                activationRevision: Math.max(0, Number(data.activationRevision) || 0),
             };
             const version = response.headers.get("ETag") || data.version || data.updatedAt || null;
             void dataStore?.set(dataStore.keys.portfolioIndex(), {
@@ -1340,11 +1373,30 @@ window.addEventListener("DOMContentLoaded", () => {
 
         void (async () => {
             try {
-                const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}/activate`, { method: "POST" });
+                const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}/activate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ baseActivationRevision: activationRevision }),
+                });
                 const data = await response.json();
+                if (response.status === 409 && data.code === "ACTIVATION_CONFLICT") {
+                    if (activationId !== activationSequence) return;
+                    activationRevision = Math.max(0, Number(data.activationRevision) || 0);
+                    activePortfolioId = data.activePortfolioId || previousPortfolioId;
+                    cachePortfolioIndex();
+                    renderPicker();
+                    await loadPortfolio(activePortfolioId, { force: true });
+                    setMenuError(data.message || "Active portfolio changed elsewhere.");
+                    showToast("Portfolio switch was refreshed from the server.", true, 3500, els.toast);
+                    return;
+                }
                 if (!response.ok) throw new Error(data.message || "Unable to switch portfolios.");
                 if (activationId !== activationSequence) return;
                 activePortfolioId = data.activePortfolioId || portfolioId;
+                activationRevision = Math.max(
+                    activationRevision,
+                    Number(data.activationRevision) || 0,
+                );
                 cachePortfolioIndex({
                     version: data.version || null,
                     serverUpdatedAt: data.updatedAt || null,
@@ -1432,6 +1484,10 @@ window.addEventListener("DOMContentLoaded", () => {
             els.newPortfolioName.value = "";
             els.picker.open = false;
             activePortfolioId = data.activePortfolioId || data.portfolio.id;
+            activationRevision = Math.max(
+                activationRevision,
+                Number(data.activationRevision) || 0,
+            );
             cachePortfolioIndex({
                 version: data.version || null,
                 serverUpdatedAt: data.portfolio.updatedAt || null,
@@ -1458,32 +1514,47 @@ window.addEventListener("DOMContentLoaded", () => {
             els.renameError.classList.remove("hidden");
             return;
         }
+        const portfolioId = managingPortfolioId;
+        const targetPortfolio = portfolios.find((item) => item.id === portfolioId);
+        if (!targetPortfolio) return;
+        const saved = portfolioId === activePortfolioId ? await flushSave() : true;
+        if (!saved) {
+            els.renameError.textContent = "Save the portfolio before renaming it.";
+            els.renameError.classList.remove("hidden");
+            return;
+        }
         setBusy(els.renameSave, true, "Saving…");
         try {
-            const response = await request(`/portfolios/${encodeURIComponent(managingPortfolioId)}`, {
+            const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name }),
+                body: JSON.stringify({ name, baseRevision: targetPortfolio.revision ?? 0 }),
             });
             const data = await response.json();
+            if (response.status === 409 && data.code === "REVISION_CONFLICT") {
+                reconcileCanonicalPortfolio(data.portfolio);
+            }
             if (!response.ok) throw new Error(data.message || "Unable to rename portfolio.");
-            const portfolio = portfolios.find((item) => item.id === managingPortfolioId);
+            const portfolio = portfolios.find((item) => item.id === portfolioId);
             if (portfolio) Object.assign(portfolio, data);
-            if (managingPortfolioId === activePortfolioId) activePortfolioName = data.name;
+            if (portfolioId === activePortfolioId) {
+                activePortfolioName = data.name;
+                serverRevision = data.revision ?? serverRevision;
+            }
             cachePortfolioIndex({
-                version: data.version || null,
+                version: data.revision ?? data.version ?? null,
                 serverUpdatedAt: data.updatedAt || null,
             });
-            if (managingPortfolioId === activePortfolioId) {
+            if (portfolioId === activePortfolioId) {
                 cacheActivePortfolio("synced", {
-                    version: data.version || null,
+                    version: data.revision ?? data.version ?? null,
                     serverUpdatedAt: data.updatedAt || null,
                 });
             }
             cacheChannel?.publish("portfolio-updated", {
-                entityId: managingPortfolioId,
+                entityId: portfolioId,
                 operation: "rename",
-                version: data.version || null,
+                version: data.revision ?? data.version ?? null,
             });
             els.renameDialog.close();
             renderPicker();
@@ -1500,17 +1571,30 @@ window.addEventListener("DOMContentLoaded", () => {
         const portfolioId = managingPortfolioId;
         if (!portfolioId) return;
         const saved = portfolioId === activePortfolioId ? await flushSave() : true;
+        const targetPortfolio = portfolios.find((item) => item.id === portfolioId);
+        if (!targetPortfolio) return;
         if (!saved) {
             showToast("Save the portfolio before deleting it.", true, 3000, els.toast);
             return;
         }
         try {
-            const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}`, { method: "DELETE" });
+            const response = await request(`/portfolios/${encodeURIComponent(portfolioId)}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ baseRevision: targetPortfolio.revision ?? 0 }),
+            });
             const data = await response.json();
+            if (response.status === 409 && data.code === "REVISION_CONFLICT") {
+                reconcileCanonicalPortfolio(data.portfolio);
+            }
             if (!response.ok) throw new Error(data.message || "Unable to delete portfolio.");
             portfolios = portfolios.filter((item) => item.id !== portfolioId);
             void dataStore?.remove(dataStore.keys.portfolio(portfolioId));
             managingPortfolioId = null;
+            activationRevision = Math.max(
+                activationRevision,
+                Number(data.activationRevision) || 0,
+            );
             activePortfolioId = data.activePortfolioId;
             cachePortfolioIndex({ version: data.version || null, serverUpdatedAt: data.updatedAt || null });
             cacheChannel?.publish("portfolio-updated", {
