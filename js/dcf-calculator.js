@@ -71,6 +71,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     let calculationStore = null;
     let savedCalculations = [];
     let syncingCalculationOutbox = false;
+    let metricsLoadGeneration = 0;
 
     const formatNum = (num, prefix = "", suffix = "") => (typeof num === "number" && !Number.isNaN(num) ? `${prefix}${num.toFixed(2)}${suffix}` : "N/A");
     const formatPercent = (num) => (typeof num === "number" && !Number.isNaN(num) ? `${(num * 100).toFixed(2)}%` : "N/A");
@@ -326,9 +327,18 @@ window.addEventListener("DOMContentLoaded", async () => {
         return isValidTicker(ticker);
     }
 
+    function invalidateMetricsLoad() {
+        metricsLoadGeneration += 1;
+        setButtonState(getCurrentDataBtn, "Search", false);
+    }
+
     async function fetchAndPopulateMetrics() {
         const ticker = tickerInput.value.trim().toUpperCase();
+        const loadGeneration = ++metricsLoadGeneration;
+        const isCurrentLoad = () => loadGeneration === metricsLoadGeneration
+            && tickerInput.value.trim().toUpperCase() === ticker;
         if (!ticker) {
+            setButtonState(getCurrentDataBtn, "Search", false);
             showToast("Please enter a ticker symbol.", true, 3000, toastContainer);
             return;
         }
@@ -343,6 +353,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         try {
             const response = await guardedApiCall(`/get_trailing_metrics?ticker=${ticker}`);
+            if (!isCurrentLoad()) return;
             if (!response) {
                 companyInfoDiv.classList.remove("hidden-state");
                 renderCompanyLogo(ticker, ticker);
@@ -355,6 +366,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             }
 
             const data = await response.json();
+            if (!isCurrentLoad()) return;
             if (!response.ok) {
                 throw new Error(data.error || "Failed to fetch data");
             }
@@ -378,9 +390,12 @@ window.addEventListener("DOMContentLoaded", async () => {
             currentTicker = ticker;
             showToast("Current data loaded successfully!", false, 3000, toastContainer);
         } catch (error) {
+            if (!isCurrentLoad()) return;
             showToast(`Data fetch error: ${error.message}`, true, 4000, toastContainer);
         } finally {
-            setButtonState(getCurrentDataBtn, "Search", false);
+            if (isCurrentLoad()) {
+                setButtonState(getCurrentDataBtn, "Search", false);
+            }
         }
     }
 
@@ -569,6 +584,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const debouncedSuggestions = debounce((query) => showTickerSuggestions(query, tickerAutocomplete), 200);
 
     tickerInput.addEventListener("input", (event) => {
+        invalidateMetricsLoad();
         hideTickerSuggestions(tickerAutocomplete);
         debouncedSuggestions(event.target.value.trim());
     });
@@ -616,6 +632,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                     showToast("Saved calculation not found.", true, 2500, toastContainer);
                     return;
                 }
+                invalidateMetricsLoad();
                 populateFormWithCalculationData(selected);
                 showToast("Saved calculation loaded.", false, 2500, toastContainer);
                 return;
@@ -651,7 +668,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     earningsTabBtn.addEventListener("click", () => switchTab("earnings"));
     cashFlowTabBtn.addEventListener("click", () => switchTab("cashFlow"));
     saveCalculationBtn?.addEventListener("click", saveCalculation);
-    clearBtn?.addEventListener("click", clearAllFields);
+    clearBtn?.addEventListener("click", () => {
+        invalidateMetricsLoad();
+        clearAllFields();
+    });
     loadCalculationsBtn?.addEventListener("click", loadSavedCalculations);
     window.addEventListener("online", () => { void syncCalculationOutbox(); });
 

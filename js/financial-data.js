@@ -75,6 +75,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     let storedFullFCFPerShareData = null;
     let storedFullSBCAdjFCFPerShareData = null;
     let currentFCFView = "fcf";
+    let financialLoadGeneration = 0;
+    let financialLoadPending = false;
 
     const apiDeps = {
         auth,
@@ -828,17 +830,37 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    function invalidateFinancialLoad({ showPrompt = false } = {}) {
+        financialLoadGeneration += 1;
+        if (!financialLoadPending) return;
+        financialLoadPending = false;
+        setButtonState(els.searchBtn, "Search", false);
+        if (showPrompt) {
+            setStatus("");
+            els.chartsGrid.innerHTML = "<p class=\"chart-message\">Search to load financial data.</p>";
+            els.chartsGrid.classList.add("visible");
+        }
+    }
+
     async function loadFinancialData() {
         const ticker = els.tickerInput.value.trim().toUpperCase();
+        const loadGeneration = ++financialLoadGeneration;
+        const isCurrentLoad = () => loadGeneration === financialLoadGeneration
+            && els.tickerInput.value.trim().toUpperCase() === ticker;
         if (!ticker) {
+            financialLoadPending = false;
+            setButtonState(els.searchBtn, "Search", false);
             showToast("Please enter a ticker symbol.", true, 3000, els.toastContainer);
             return;
         }
         if (strictTickerValidation && !isValidTicker(ticker)) {
+            financialLoadPending = false;
+            setButtonState(els.searchBtn, "Search", false);
             showToast("Please select a valid ticker from suggestions.", true, 3000, els.toastContainer);
             return;
         }
 
+        financialLoadPending = true;
         setButtonState(els.searchBtn, "Loading...", true);
         setStatus("Fetching financial data...");
         els.chartsGrid.innerHTML = "<p class=\"chart-message\">Loading financial data\u2026</p>";
@@ -857,6 +879,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                 fetchWithCache(ticker, "stock_info_data", `/get_stock_info_data?ticker=${ticker}`),
                 fetchWithCache(ticker, "price_data", `/get_market_price?ticker=${ticker}&include=history`)
             ]);
+            if (!isCurrentLoad()) return;
             const basicData = filings?.sections?.basic?.data;
             const segmentData = filings?.sections?.segment?.data || null;
             const ttmData = filings?.sections?.ttm?.data || null;
@@ -867,6 +890,7 @@ window.addEventListener("DOMContentLoaded", async () => {
                 setCachedFinancialData(ticker, "ttm_data", ttmData),
                 setCachedFinancialData(ticker, "ttm_segment_data", ttmSegmentData),
             ]);
+            if (!isCurrentLoad()) return;
 
             // Cache all data for period toggle re-rendering
             cachedBasicData = basicData;
@@ -892,27 +916,34 @@ window.addEventListener("DOMContentLoaded", async () => {
             els.companyInfo.classList.add("visible");
 
             setTimeout(() => {
+                if (!isCurrentLoad()) return;
                 els.metricsSection.classList.remove("hidden");
                 els.metricsSection.offsetHeight;
                 els.metricsSection.classList.add("visible");
 
                 setTimeout(() => {
+                    if (!isCurrentLoad()) return;
                     if (els.periodToggle) els.periodToggle.classList.add("visible");
 
                     setTimeout(() => {
+                        if (!isCurrentLoad()) return;
                         els.chartsGrid.classList.add("visible");
                     }, 300);
                 }, 400);
             }, 400);
 
         } catch (error) {
+            if (!isCurrentLoad()) return;
             const message = error?.message || "Failed to load financial data.";
             setStatus(message, true);
             els.chartsGrid.innerHTML = "<p class=\"chart-message error\">Unable to load data from backend.</p>";
             showToast(message, true, 4500, els.toastContainer);
             els.chartsGrid.classList.add("visible");
         } finally {
-            setButtonState(els.searchBtn, "Search", false);
+            if (isCurrentLoad()) {
+                financialLoadPending = false;
+                setButtonState(els.searchBtn, "Search", false);
+            }
         }
     }
 
@@ -1004,6 +1035,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Ticker search
     const debouncedSuggestions = debounce((query) => showTickerSuggestions(query, els.autocomplete), 180);
     els.tickerInput.addEventListener("input", (event) => {
+        invalidateFinancialLoad({ showPrompt: true });
         hideTickerSuggestions(els.autocomplete);
         debouncedSuggestions(event.target.value.trim());
     });
