@@ -1182,13 +1182,23 @@ window.addEventListener("DOMContentLoaded", () => {
     async function loadPortfolio(portfolioId = null, { force = false } = {}) {
         const requestedPortfolioId = portfolioId || activePortfolioId;
         if (!requestedPortfolioId || hasUnsavedPortfolioState()) return true;
-        const context = createPortfolioLoadContext(requestedPortfolioId);
+        let context = createPortfolioLoadContext(requestedPortfolioId);
         const cacheKey = dataStore ? dataStore.keys.portfolio(requestedPortfolioId) : null;
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
         if (cached && canApplyPortfolioLoad(context)) {
             applyPortfolioData(cached.data, { markCanonical: cached.data?.syncState === "synced" });
             await restorePendingSnapshot();
             if (cached.isFresh && !force) return true;
+            if (
+                context.generation !== portfolioLoadGeneration
+                || context.uid !== initializedUid
+                || context.portfolioId !== activePortfolioId
+                || hasUnsavedPortfolioState()
+            ) return true;
+            // Applying a canonical cache entry resets the local revision counters.
+            // Rebase the guard so a forced or stale-cache refresh can still reach
+            // the server while retaining the same UID/portfolio protections.
+            context = createPortfolioLoadContext(requestedPortfolioId);
         }
 
         if (!canApplyPortfolioLoad(context)) return true;
