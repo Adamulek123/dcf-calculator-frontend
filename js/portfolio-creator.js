@@ -112,6 +112,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let dataStore = null;
     let cacheChannel = null;
     let revalidationPromise = null;
+    let portfolioLoadGeneration = 0;
     let activationSequence = 0;
     let activationPending = false;
     let availableWatchlists = [];
@@ -796,6 +797,32 @@ window.addEventListener("DOMContentLoaded", () => {
         scheduleSave();
     }
 
+    function hasUnsavedPortfolioState() {
+        return revision > savedRevision
+            || Boolean(savePromise)
+            || saveFailed
+            || Boolean(conflictPortfolio);
+    }
+
+    function createPortfolioLoadContext(portfolioId) {
+        return Object.freeze({
+            generation: ++portfolioLoadGeneration,
+            uid: initializedUid,
+            portfolioId,
+            revision,
+            savedRevision,
+        });
+    }
+
+    function canApplyPortfolioLoad(context) {
+        return context.generation === portfolioLoadGeneration
+            && context.uid === initializedUid
+            && context.portfolioId === activePortfolioId
+            && context.revision === revision
+            && context.savedRevision === savedRevision
+            && !hasUnsavedPortfolioState();
+    }
+
     function pendingSnapshot() {
         return {
             portfolioId: activePortfolioId,
@@ -929,7 +956,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const remote = conflictPortfolio;
             conflictPortfolio = null;
             await dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
-            applyPortfolioData(remote);
+            applyPortfolioData(remote, { markCanonical: true });
             showToast("Loaded the newer server version.", false, 3000, els.toast);
             return true;
         }
@@ -1117,7 +1144,7 @@ window.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    function applyPortfolioData(rawData) {
+    function applyPortfolioData(rawData, { markCanonical = false } = {}) {
         const data = normalizePortfolioData(rawData);
         activePortfolioId = data.portfolioId;
         activePortfolioName = data.name;
@@ -1132,11 +1159,14 @@ window.addEventListener("DOMContentLoaded", () => {
             active.positionCount = positions.length;
             active.baseCurrency = currency;
         }
-        revision = 0;
-        savedRevision = 0;
-        serverRevision = data.revision ?? null;
-        if (outboxRestoredForId !== activePortfolioId) void restorePendingSnapshot();
-        saveFailed = false;
+        if (markCanonical) {
+            revision = 0;
+            savedRevision = 0;
+            serverRevision = data.revision ?? null;
+            saveFailed = false;
+            conflictPortfolio = null;
+            pendingMutationId = null;
+        }
         loadState = "ready";
         autoSave = true;
         updateCurrencyOptions();
@@ -1150,14 +1180,28 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     async function loadPortfolio(portfolioId = null, { force = false } = {}) {
-        const cacheKey = portfolioId && dataStore ? dataStore.keys.portfolio(portfolioId) : null;
+        const requestedPortfolioId = portfolioId || activePortfolioId;
+        if (!requestedPortfolioId || hasUnsavedPortfolioState()) return true;
+        let context = createPortfolioLoadContext(requestedPortfolioId);
+        const cacheKey = dataStore ? dataStore.keys.portfolio(requestedPortfolioId) : null;
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
-        if (cached) {
-            applyPortfolioData(cached.data);
+        if (cached && canApplyPortfolioLoad(context)) {
+            applyPortfolioData(cached.data, { markCanonical: cached.data?.syncState === "synced" });
+            await restorePendingSnapshot();
             if (cached.isFresh && !force) return true;
+            if (
+                context.generation !== portfolioLoadGeneration
+                || context.uid !== initializedUid
+                || context.portfolioId !== activePortfolioId
+                || hasUnsavedPortfolioState()
+            ) return true;
+            // Applying a canonical cache entry resets the local revision counters.
+            // Rebase the guard so a forced or stale-cache refresh can still reach
+            // the server while retaining the same UID/portfolio protections.
+            context = createPortfolioLoadContext(requestedPortfolioId);
         }
 
-        const revalidationRevision = revision;
+        if (!canApplyPortfolioLoad(context)) return true;
         if (!cached) {
             loadState = "loading";
             positions = [];
@@ -1168,7 +1212,7 @@ window.addEventListener("DOMContentLoaded", () => {
             let response;
             let data;
             let lastError;
-            const query = portfolioId ? `?portfolioId=${encodeURIComponent(portfolioId)}` : "";
+            const query = `?portfolioId=${encodeURIComponent(requestedPortfolioId)}`;
             for (let attempt = 0; attempt < 2; attempt += 1) {
                 try {
                     response = await request(`/portfolio/load${query}`, {}, 45000);
@@ -1183,15 +1227,16 @@ window.addEventListener("DOMContentLoaded", () => {
             if (!response?.ok) throw lastError || new Error("Failed to load portfolio.");
             const normalized = normalizePortfolioData(data);
             const version = data.version || data.revision || data.updatedAt || null;
-            if (portfolioId && activePortfolioId !== portfolioId) return true;
-            if (cached && revision !== revalidationRevision) return true;
+            if (!canApplyPortfolioLoad(context)) return true;
             void dataStore?.set(dataStore.keys.portfolio(normalized.portfolioId), normalized, {
                 ttlMs: CACHE_TTL.portfolioDetail,
                 staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
             });
-            if (!sameCachedPayload(cached, normalized, version)) applyPortfolioData(normalized);
+            if (!sameCachedPayload(cached, normalized, version)) {
+                applyPortfolioData(normalized, { markCanonical: true });
+            }
             return true;
         } catch (error) {
             if (cached) {
@@ -1216,9 +1261,10 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     async function loadPortfolioIndex(force = false) {
+        if (hasUnsavedPortfolioState()) return true;
         const cacheKey = dataStore?.keys.portfolioIndex();
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
-        if (cached) {
+        if (cached && !hasUnsavedPortfolioState()) {
             applyPortfolioIndex(cached.data);
             if (cached.isFresh && !force) return loadPortfolio(activePortfolioId);
         }
@@ -1242,6 +1288,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 serverUpdatedAt: data.updatedAt || null,
                 version,
             });
+            if (hasUnsavedPortfolioState()) return true;
             if (!sameCachedPayload(cached, next, version)) applyPortfolioIndex(next);
             const activeDetail = data.activePortfolio;
             if (!activeDetail || activeDetail.portfolioId !== activePortfolioId) {
@@ -1256,7 +1303,9 @@ window.addEventListener("DOMContentLoaded", () => {
                 serverUpdatedAt: activeDetail.updatedAt || null,
                 version: detailVersion,
             });
-            if (!sameCachedPayload(cachedDetail, activeDetail, detailVersion)) applyPortfolioData(activeDetail);
+            if (!sameCachedPayload(cachedDetail, activeDetail, detailVersion)) {
+                applyPortfolioData(activeDetail, { markCanonical: true });
+            }
             return true;
         } catch (error) {
             if (cached) {
@@ -1862,7 +1911,7 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
         if (message.type !== "portfolio-updated") return;
-        if (revision > savedRevision || savePromise) return;
+        if (hasUnsavedPortfolioState()) return;
         if (message.entityId && message.entityId === activePortfolioId) {
             void loadPortfolio(message.entityId, { force: true });
         }
