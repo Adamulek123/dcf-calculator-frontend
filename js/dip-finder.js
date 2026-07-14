@@ -59,6 +59,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let dataStore = null;
     let cacheChannel = null;
     let revalidationPromise = null;
+    let watchlistLoadGeneration = 0;
+    let watchlistMutationEpoch = 0;
     let loadingWatchlists = false;
     let loadingPerformance = false;
     const watchlistMutationGenerations = new Map();
@@ -446,6 +448,9 @@ window.addEventListener("DOMContentLoaded", () => {
         const generation = (watchlistMutationGenerations.get(watchlistId) || 0) + 1;
         watchlistMutationGenerations.set(watchlistId, generation);
         watchlistMutationCounts.set(watchlistId, (watchlistMutationCounts.get(watchlistId) || 0) + 1);
+        watchlistMutationEpoch += 1;
+        watchlistLoadGeneration += 1;
+        loadingWatchlists = false;
         return Object.freeze({ watchlistId, generation });
     }
 
@@ -458,6 +463,25 @@ window.addEventListener("DOMContentLoaded", () => {
         if (context?.watchlistId) watchlistsNeedingReconciliation.add(context.watchlistId);
     }
 
+    function hasPendingWatchlistMutations() {
+        return watchlistMutationCounts.size > 0;
+    }
+
+    function createWatchlistLoadContext() {
+        return Object.freeze({
+            generation: ++watchlistLoadGeneration,
+            uid: initializedUid,
+            mutationEpoch: watchlistMutationEpoch,
+        });
+    }
+
+    function isCurrentWatchlistLoad(context) {
+        return context.generation === watchlistLoadGeneration
+            && context.uid === initializedUid
+            && context.mutationEpoch === watchlistMutationEpoch
+            && !hasPendingWatchlistMutations();
+    }
+
     async function finishWatchlistMutation(context) {
         if (!context) return;
         const remaining = Math.max(0, (watchlistMutationCounts.get(context.watchlistId) || 1) - 1);
@@ -466,8 +490,13 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
         watchlistMutationCounts.delete(context.watchlistId);
-        if (!watchlistsNeedingReconciliation.delete(context.watchlistId)) return;
-        await loadWatchlists(true);
+        if (hasPendingWatchlistMutations() || watchlistsNeedingReconciliation.size === 0) return;
+        const pendingReconciliations = [...watchlistsNeedingReconciliation];
+        if (await loadWatchlists(true)) {
+            pendingReconciliations.forEach((watchlistId) => {
+                watchlistsNeedingReconciliation.delete(watchlistId);
+            });
+        }
     }
 
     function applyCanonicalWatchlist(canonical) {
@@ -531,13 +560,17 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     async function loadWatchlists(force = false) {
+        if (hasPendingWatchlistMutations()) return false;
+        const context = createWatchlistLoadContext();
         const cacheKey = dataStore?.keys.watchlists();
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
+        if (!isCurrentWatchlistLoad(context)) return false;
         if (cached) {
             applyWatchlists(cached.data);
             if (cached.isFresh && !force) {
                 setServiceStatus("Lists ready", "ready");
-                return loadPerformance();
+                await loadPerformance();
+                return true;
             }
         }
 
@@ -547,6 +580,7 @@ window.addEventListener("DOMContentLoaded", () => {
         try {
             const response = await request("/watchlists");
             const data = await response.json();
+            if (!isCurrentWatchlistLoad(context)) return false;
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             const next = { watchlists: Array.isArray(data.watchlists) ? data.watchlists : [] };
             const version = data.version || data.updatedAt || null;
@@ -559,19 +593,24 @@ window.addEventListener("DOMContentLoaded", () => {
             if (!sameCachedPayload(cached, next, version)) applyWatchlists(next);
             setServiceStatus("Lists synced", "ready");
             await loadPerformance();
+            return true;
         } catch (error) {
+            if (!isCurrentWatchlistLoad(context)) return false;
             if (cached) {
                 setServiceStatus("Saved lists", "partial");
                 await loadPerformance();
                 showToast("Showing saved watchlists while the service is unavailable.", true, 4000, els.toast);
-                return;
+                return false;
             }
             setServiceStatus("Service unavailable", "error");
             showChartState("Watchlists could not load", error.message, "Retry", loadWatchlists);
             showToast(error.message, true, 4000, els.toast);
+            return false;
         } finally {
-            loadingWatchlists = false;
-            renderWatchlistControls();
+            if (isCurrentWatchlistLoad(context)) {
+                loadingWatchlists = false;
+                renderWatchlistControls();
+            }
         }
     }
 
