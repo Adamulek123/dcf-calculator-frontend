@@ -8,6 +8,7 @@ import {
     signInWithPopup
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { auth } from "./firebase-init.js";
+import { clearPrivateUserData } from "./data-store.js";
 
 function getUserMessage(error, mode) {
     if (!error || !error.code) {
@@ -61,7 +62,17 @@ async function loginWithGoogle() {
     return result;
 }
 
-function logoutUser() {
+async function logoutUser() {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+        try {
+            await clearPrivateUserData(uid);
+        } catch (error) {
+            // Ending the server-backed session remains mandatory even if browser
+            // storage is unavailable. In-memory entries are cleared first by the store.
+            console.warn("Unable to fully clear private browser data during logout", error);
+        }
+    }
     return signOut(auth);
 }
 

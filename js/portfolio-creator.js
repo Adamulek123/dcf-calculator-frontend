@@ -75,7 +75,6 @@ window.addEventListener("DOMContentLoaded", () => {
         auth,
         handleLogout: async () => {
             try {
-                cacheChannel?.publish("signed-out", { operation: "logout" });
                 await logoutUser();
             } finally { location.replace("login.html"); }
         },
