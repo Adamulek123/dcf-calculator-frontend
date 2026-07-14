@@ -62,6 +62,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let loadingWatchlists = false;
     let loadingPerformance = false;
     const watchlistMutationGenerations = new Map();
+    const watchlistMutationCounts = new Map();
+    const watchlistsNeedingReconciliation = new Set();
 
     const normalizeTicker = (value) => String(value || "").trim().toUpperCase();
     const currentWatchlist = () => watchlists.find((item) => item.id === selectedId) || null;
@@ -443,12 +445,29 @@ window.addEventListener("DOMContentLoaded", () => {
     function beginWatchlistMutation(watchlistId) {
         const generation = (watchlistMutationGenerations.get(watchlistId) || 0) + 1;
         watchlistMutationGenerations.set(watchlistId, generation);
+        watchlistMutationCounts.set(watchlistId, (watchlistMutationCounts.get(watchlistId) || 0) + 1);
         return Object.freeze({ watchlistId, generation });
     }
 
     function isCurrentWatchlistMutation(context) {
         return !context
             || watchlistMutationGenerations.get(context.watchlistId) === context.generation;
+    }
+
+    function markWatchlistForReconciliation(context) {
+        if (context?.watchlistId) watchlistsNeedingReconciliation.add(context.watchlistId);
+    }
+
+    async function finishWatchlistMutation(context) {
+        if (!context) return;
+        const remaining = Math.max(0, (watchlistMutationCounts.get(context.watchlistId) || 1) - 1);
+        if (remaining > 0) {
+            watchlistMutationCounts.set(context.watchlistId, remaining);
+            return;
+        }
+        watchlistMutationCounts.delete(context.watchlistId);
+        if (!watchlistsNeedingReconciliation.delete(context.watchlistId)) return;
+        await loadWatchlists(true);
     }
 
     function applyCanonicalWatchlist(canonical) {
@@ -719,7 +738,10 @@ window.addEventListener("DOMContentLoaded", () => {
                         body: JSON.stringify({ name, baseRevision }),
                     });
                     data = await response.json();
-                    if (!isCurrentWatchlistMutation(mutationContext)) return;
+                    if (!isCurrentWatchlistMutation(mutationContext)) {
+                        if (response.ok) markWatchlistForReconciliation(mutationContext);
+                        return;
+                    }
                     if (response.status === 409 && data.code === "REVISION_CONFLICT" && data.watchlist) {
                         rollbackWatchlist = data.watchlist;
                         applyCanonicalWatchlist(data.watchlist);
@@ -777,6 +799,7 @@ window.addEventListener("DOMContentLoaded", () => {
             els.nameError.classList.remove("hidden");
         } finally {
             setButtonState(els.saveDialog, mode === "create" ? "Create watchlist" : "Save name", false);
+            await finishWatchlistMutation(mutationContext);
         }
     }
 
@@ -855,26 +878,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 });
                 const payload = await response.json();
                 if (!isCurrentWatchlistMutation(mutationContext)) {
-                    if (response.ok && payload.watchlist) {
-                        watchlists = watchlists.map((item) => {
-                            if (item.id !== selected.id) return item;
-                            const tickers = applyTickerIntent(
-                                item.tickers,
-                                payload.watchlist.tickers,
-                                []
-                            );
-                            return {
-                                ...item,
-                                tickers,
-                                revision: Math.max(
-                                    Number(item.revision) || 0,
-                                    Number(payload.watchlist.revision) || 0
-                                ),
-                            };
-                        });
-                        cacheWatchlistCollection();
-                        renderAll();
-                    }
+                    if (response.ok) markWatchlistForReconciliation(mutationContext);
                     return;
                 }
                 if (!response.ok) throw new Error(payload.message || "Unable to update watchlist.");
@@ -888,7 +892,10 @@ window.addEventListener("DOMContentLoaded", () => {
                         body: JSON.stringify({ tickers: desiredTickers, baseRevision }),
                     });
                     const payload = await response.json();
-                    if (!isCurrentWatchlistMutation(mutationContext)) return;
+                    if (!isCurrentWatchlistMutation(mutationContext)) {
+                        if (response.ok) markWatchlistForReconciliation(mutationContext);
+                        return;
+                    }
                     if (response.status === 409 && payload.code === "REVISION_CONFLICT" && payload.watchlist) {
                         rollbackWatchlist = payload.watchlist;
                         applyCanonicalWatchlist(payload.watchlist);
@@ -934,6 +941,8 @@ window.addEventListener("DOMContentLoaded", () => {
             renderAll();
             showToast(error.message, true, 4000, els.toast);
             if (rollbackWatchlist !== originalWatchlist) await loadPerformance();
+        } finally {
+            await finishWatchlistMutation(mutationContext);
         }
     }
 
