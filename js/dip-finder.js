@@ -451,12 +451,13 @@ window.addEventListener("DOMContentLoaded", () => {
         watchlistMutationEpoch += 1;
         watchlistLoadGeneration += 1;
         loadingWatchlists = false;
-        return Object.freeze({ watchlistId, generation });
+        return Object.freeze({ watchlistId, generation, uid: initializedUid });
     }
 
     function isCurrentWatchlistMutation(context) {
         return !context
-            || watchlistMutationGenerations.get(context.watchlistId) === context.generation;
+            || (context.uid === initializedUid
+                && watchlistMutationGenerations.get(context.watchlistId) === context.generation);
     }
 
     function markWatchlistForReconciliation(context) {
@@ -483,20 +484,31 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     async function finishWatchlistMutation(context) {
-        if (!context) return;
+        if (!context || context.uid !== initializedUid) return;
         const remaining = Math.max(0, (watchlistMutationCounts.get(context.watchlistId) || 1) - 1);
         if (remaining > 0) {
             watchlistMutationCounts.set(context.watchlistId, remaining);
             return;
         }
         watchlistMutationCounts.delete(context.watchlistId);
-        if (hasPendingWatchlistMutations() || watchlistsNeedingReconciliation.size === 0) return;
+        if (hasPendingWatchlistMutations()) return;
+        if (watchlistsNeedingReconciliation.size === 0) {
+            cacheWatchlistCollection();
+            return;
+        }
+        await flushWatchlistReconciliation();
+    }
+
+    async function flushWatchlistReconciliation() {
+        if (hasPendingWatchlistMutations() || watchlistsNeedingReconciliation.size === 0) return false;
         const pendingReconciliations = [...watchlistsNeedingReconciliation];
         if (await loadWatchlists(true)) {
             pendingReconciliations.forEach((watchlistId) => {
                 watchlistsNeedingReconciliation.delete(watchlistId);
             });
+            return true;
         }
+        return false;
     }
 
     function applyCanonicalWatchlist(canonical) {
@@ -550,7 +562,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     function cacheWatchlistCollection({ version = null, serverUpdatedAt = null } = {}) {
-        if (!dataStore) return;
+        if (!dataStore || hasPendingWatchlistMutations()) return;
         void dataStore.set(dataStore.keys.watchlists(), watchlistSnapshot(), {
             ttlMs: CACHE_TTL.watchlists,
             staleTtlMs: CACHE_STALE_TTL.watchlists,
@@ -728,16 +740,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
         const selected = currentWatchlist();
         if (mode === "rename" && !selected) return;
-        const mutationContext = mode === "rename" ? beginWatchlistMutation(selected.id) : null;
-        const previousWatchlists = watchlistSnapshot().watchlists;
         const previousSelectedId = selectedId;
         let rollbackWatchlist = selected;
-        let optimisticId = null;
+        const optimisticId = mode === "create"
+            ? `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`
+            : null;
+        const mutationContext = beginWatchlistMutation(selected?.id || optimisticId);
         const now = new Date().toISOString();
 
         setButtonState(els.saveDialog, "Saving…", true);
         if (mode === "create") {
-            optimisticId = `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`;
             watchlists = [{
                 id: optimisticId,
                 name,
@@ -804,7 +816,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
             if (!isCurrentWatchlistMutation(mutationContext)) return;
             if (mode === "create") {
-                watchlists = watchlists.map((item) => item.id === optimisticId ? data : item);
+                const optimisticIndex = watchlists.findIndex((item) => item.id === optimisticId);
+                if (optimisticIndex >= 0) watchlists.splice(optimisticIndex, 1, data);
+                else watchlists = [data, ...watchlists];
                 selectedId = data.id;
                 saveSelectedId();
                 performance = new Map();
@@ -826,8 +840,10 @@ window.addEventListener("DOMContentLoaded", () => {
         } catch (error) {
             if (!isCurrentWatchlistMutation(mutationContext)) return;
             if (mode === "create") {
-                watchlists = previousWatchlists;
-                selectedId = previousSelectedId;
+                watchlists = watchlists.filter((item) => item.id !== optimisticId);
+                selectedId = watchlists.some((item) => item.id === previousSelectedId)
+                    ? previousSelectedId
+                    : watchlists[0]?.id || null;
             } else {
                 watchlists = watchlists.map((item) => item.id === selected.id ? rollbackWatchlist : item);
             }
@@ -845,7 +861,8 @@ window.addEventListener("DOMContentLoaded", () => {
     async function deleteSelectedWatchlist() {
         const selected = currentWatchlist();
         if (!selected) return;
-        const previousWatchlists = watchlistSnapshot().watchlists;
+        const mutationContext = beginWatchlistMutation(selected.id);
+        const previousIndex = watchlists.findIndex((item) => item.id === selected.id);
         const previousSelectedId = selectedId;
         const previousPerformance = performance;
         const performanceResultKey = createDipPerformanceResultKey(selected);
@@ -857,6 +874,10 @@ window.addEventListener("DOMContentLoaded", () => {
         renderAll();
         try {
             const response = await request(`/watchlists/${selected.id}`, { method: "DELETE" });
+            if (!isCurrentWatchlistMutation(mutationContext)) {
+                if (response.ok) markWatchlistForReconciliation(mutationContext);
+                return;
+            }
             if (!response.ok) {
                 const data = await response.json();
                 throw new Error(data.message || "Unable to delete watchlist.");
@@ -869,13 +890,21 @@ window.addEventListener("DOMContentLoaded", () => {
             await loadPerformance();
             showToast(`${selected.name} deleted.`, false, 2500, els.toast);
         } catch (error) {
-            watchlists = previousWatchlists;
-            selectedId = previousSelectedId;
+            if (!isCurrentWatchlistMutation(mutationContext)) return;
+            if (!watchlists.some((item) => item.id === selected.id)) {
+                const insertAt = Math.min(previousIndex, watchlists.length);
+                watchlists.splice(insertAt, 0, selected);
+            }
+            selectedId = watchlists.some((item) => item.id === previousSelectedId)
+                ? previousSelectedId
+                : selected.id;
             performance = previousPerformance;
             saveSelectedId();
             cacheWatchlistCollection();
             renderAll();
             showToast(error.message, true, 4000, els.toast);
+        } finally {
+            await finishWatchlistMutation(mutationContext);
         }
     }
 
@@ -1093,7 +1122,10 @@ window.addEventListener("DOMContentLoaded", () => {
     function revalidateStaleData() {
         if (!dataStore || document.visibilityState === "hidden") return;
         if (revalidationPromise) return revalidationPromise;
-        revalidationPromise = loadWatchlists(false)
+        const revalidation = watchlistsNeedingReconciliation.size > 0
+            ? flushWatchlistReconciliation()
+            : loadWatchlists(false);
+        revalidationPromise = revalidation
             .finally(() => { revalidationPromise = null; });
         return revalidationPromise;
     }
@@ -1103,7 +1135,10 @@ window.addEventListener("DOMContentLoaded", () => {
             location.replace("login.html");
             return;
         }
-        if (message.type === "watchlist-updated") void loadWatchlists(true);
+        if (message.type === "watchlist-updated") {
+            watchlistsNeedingReconciliation.add(message.entityId || "collection");
+            void flushWatchlistReconciliation();
+        }
     }
 
     window.addEventListener("pageshow", () => { void revalidateStaleData(); });
@@ -1116,6 +1151,11 @@ window.addEventListener("DOMContentLoaded", () => {
     observeAuthState((user) => {
         if (!user || initializedUid === user.uid) return;
         initializedUid = user.uid;
+        watchlistMutationGenerations.clear();
+        watchlistMutationCounts.clear();
+        watchlistsNeedingReconciliation.clear();
+        watchlistMutationEpoch += 1;
+        watchlistLoadGeneration += 1;
         dataStore = createUserDataStore(user.uid);
         cacheChannel?.close();
         cacheChannel = createUserCacheChannel(user.uid, handleCrossTabCacheMessage);
