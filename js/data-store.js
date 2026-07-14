@@ -281,6 +281,7 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
             });
         } catch (error) {
             console.warn(`Unable to clear client cache for the active user`, error);
+            throw error;
         }
     }
 
@@ -366,6 +367,31 @@ function createUserCacheChannel(rawUid, onMessage = () => {}, {
     return Object.freeze({ uid, publish, close });
 }
 
+async function clearPrivateUserData(rawUid, {
+    storage = globalThis.localStorage,
+} = {}) {
+    const uid = assertUid(rawUid);
+    const channel = createUserCacheChannel(uid);
+    try {
+        channel.publish("signed-out", { operation: "logout" });
+        const failures = [];
+        try {
+            await createUserDataStore(uid).clearUser();
+        } catch (error) {
+            failures.push(error);
+        }
+        try {
+            storage?.removeItem(`dcf_dip_finder_watchlist_v1:${uid}`);
+        } catch (error) {
+            console.warn("Unable to clear user-scoped browser preferences", error);
+            failures.push(error);
+        }
+        if (failures.length) throw new AggregateError(failures, "Private browser data cleanup failed");
+    } finally {
+        channel.close();
+    }
+}
+
 export {
     CACHE_STALE_TTL,
     CACHE_TTL,
@@ -373,4 +399,5 @@ export {
     createDipPerformanceResultKey,
     createUserCacheChannel,
     createUserDataStore,
+    clearPrivateUserData,
 };
