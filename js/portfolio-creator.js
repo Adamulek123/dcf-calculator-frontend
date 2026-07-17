@@ -34,6 +34,7 @@ window.addEventListener("DOMContentLoaded", () => {
         refreshRates: $("refreshRatesBtn"), refreshPrices: $("refreshPricesBtn"),
         summaryCount: $("summaryPositionCount"), summaryExposure: $("summaryExposure"),
         summaryPnl: $("summaryPnl"), summaryReturn: $("summaryReturn"),
+        quoteWarning: $("portfolioQuoteWarning"),
         ticket: $("positionTicket"), form: $("positionForm"), formEyebrow: $("positionFormEyebrow"),
         formTitle: $("positionFormTitle"), formDescription: $("positionFormDescription"),
         ticker: $("portfolioTickerInput"), autocomplete: $("portfolioTickerAutocomplete"),
@@ -191,7 +192,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 const price = num(item?.price);
                 const at = Date.parse(item?.asOf || "");
                 if (Number.isFinite(price) && Number.isFinite(at) && now - at < QUOTE_TTL) {
-                    quotes.set(ticker(symbol), { price, asOf: item.asOf, status: "ready" });
+                    quotes.set(ticker(symbol), { price, asOf: item.asOf, freshness: "fresh", status: "ready" });
                 }
             });
         } catch (error) {
@@ -312,6 +313,25 @@ window.addEventListener("DOMContentLoaded", () => {
         els.summaryReturn.textContent = data.priced ? pct(data.returnPct) : "—";
         performance(els.summaryPnl, data.priced ? data.pnl : null);
         performance(els.summaryReturn, data.returnPct);
+        const fallbackQuotes = positions
+            .map((position) => quote(position.ticker))
+            .filter((item) => Number.isFinite(item?.price)
+                && ["stale", "last_known"].includes(item?.freshness));
+        if (fallbackQuotes.length) {
+            const oldest = fallbackQuotes.reduce((current, item) => {
+                const currentAt = Date.parse(current?.asOf || "");
+                const itemAt = Date.parse(item?.asOf || "");
+                return !Number.isFinite(currentAt) || itemAt < currentAt ? item : current;
+            }, fallbackQuotes[0]);
+            const lastKnownCount = fallbackQuotes.filter((item) => item.freshness === "last_known").length;
+            els.quoteWarning.textContent = lastKnownCount
+                ? `Portfolio totals include ${fallbackQuotes.length} non-fresh price${fallbackQuotes.length === 1 ? "" : "s"}, including ${lastKnownCount} last-known value${lastKnownCount === 1 ? "" : "s"}. Oldest updated ${relative(oldest.asOf)}.`
+                : `Portfolio totals include ${fallbackQuotes.length} stale price${fallbackQuotes.length === 1 ? "" : "s"}. Oldest updated ${relative(oldest.asOf)}.`;
+            els.quoteWarning.classList.remove("hidden");
+        } else {
+            els.quoteWarning.textContent = "";
+            els.quoteWarning.classList.add("hidden");
+        }
     }
 
     function renderAnalytics() {
@@ -368,13 +388,17 @@ window.addEventListener("DOMContentLoaded", () => {
             return ["Fetching…", "Contacting price service", "loading"];
         }
         if (Number.isFinite(item.quote.price)) {
-            const stale = Date.now() - Date.parse(item.quote.asOf || 0) > QUOTE_TTL;
+            const freshness = item.quote.freshness || "fresh";
+            const sourceLabel = ["hit", "shared"].includes(item.quote.cacheStatus) ? "Cached" : "Updated";
+            const freshnessLabel = freshness === "last_known"
+                ? "Last known"
+                : freshness === "stale" ? "Stale" : sourceLabel;
             return [
                 money(item.quote.price * rate()),
                 item.quote.status === "loading"
                     ? "Refreshing…"
-                    : `${item.quote.cacheStatus === "hit" ? "Cached" : "Updated"} ${relative(item.quote.asOf)}`,
-                stale ? "stale" : "ready",
+                    : `${freshnessLabel} · ${relative(item.quote.asOf)}`,
+                freshness,
             ];
         }
         return ["Unavailable", "Try refreshing", "error"];
@@ -422,8 +446,8 @@ window.addEventListener("DOMContentLoaded", () => {
             const row = document.createElement("tr");
             row.dataset.id = position.id;
             if (editingId === position.id) row.classList.add("is-editing");
-            const statusLabel = quoteState === "ready" ? "Live" : quoteState === "stale" ? "Stale" : quoteState === "loading" ? "Loading" : quoteState === "error" ? "Unavailable" : "Pending";
-            const statusClass = quoteState === "ready" ? "positive" : quoteState === "error" ? "negative" : "amber";
+            const statusLabel = quoteState === "fresh" ? "Live" : quoteState === "stale" ? "Stale" : quoteState === "last_known" ? "Last known" : quoteState === "loading" ? "Loading" : quoteState === "error" ? "Unavailable" : "Pending";
+            const statusClass = quoteState === "fresh" ? "positive" : quoteState === "error" ? "negative" : "amber";
             row.innerHTML = `
                 <td data-label="Instrument"><span class="pt-asset"><span class="pt-row-logo"></span><span><strong>${escapeHtml(position.ticker)}</strong><small>${escapeHtml(meta.name || "Listed instrument")} · ${escapeHtml(meta.exchange || "Exchange")}</small></span></span></td>
                 <td data-label="Side"><span class="pt-side-tag ${position.side === "sell" ? "short" : "long"}">${position.side === "sell" ? "▼ Short" : "▲ Long"}</span></td>
@@ -990,6 +1014,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 quotes.set(symbol, {
                     price: current?.price ?? null,
                     asOf: current?.asOf ?? null,
+                    freshness: current?.freshness ?? null,
                     status: "loading",
                 });
             }
@@ -1019,12 +1044,13 @@ window.addEventListener("DOMContentLoaded", () => {
                         price,
                         asOf: (data.quoteTimestamps || [])[index] || data.requestedAt || new Date().toISOString(),
                         cacheStatus: (data.quoteCacheStatuses || [])[index] || data.cacheStatus || "live",
+                        freshness: (data.quoteFreshness || [])[index] || (Number.isFinite(price) ? "fresh" : "unavailable"),
                         requestedAt: data.requestedAt || null,
                         status: Number.isFinite(price) ? "ready" : "error",
                     });
                 });
                 needed.filter((symbol) => !returned.has(symbol)).forEach((symbol) => {
-                    quotes.set(symbol, { price: null, asOf: null, status: "error" });
+                    quotes.set(symbol, { price: null, asOf: null, freshness: "unavailable", status: "error" });
                 });
                 persistQuoteCache();
                 const draft = ticker(els.ticker.value);
@@ -1036,7 +1062,8 @@ window.addEventListener("DOMContentLoaded", () => {
                 needed.forEach((symbol) => {
                     const old = quote(symbol);
                     quotes.set(symbol, {
-                        price: old?.price ?? null, asOf: old?.asOf ?? null, status: "error",
+                        price: old?.price ?? null, asOf: old?.asOf ?? null,
+                        freshness: old?.freshness ?? null, status: "error",
                     });
                 });
                 throw error;
