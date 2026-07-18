@@ -56,6 +56,12 @@ function isValidTicker(query, tickers = cachedTickers) {
     return tickers.some((t) => t.symbol && t.symbol.toUpperCase() === queryUpper);
 }
 
+function getTickerMetadata(symbol, tickers = cachedTickers) {
+    if (!symbol || !Array.isArray(tickers)) return null;
+    const normalizedSymbol = symbol.trim().toUpperCase();
+    return tickers.find((ticker) => ticker.symbol?.toUpperCase() === normalizedSymbol) || null;
+}
+
 function getLogoUrl(ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is CORS-restricted to the production domain — acceptable risk
     return `https://img.logo.dev/ticker/${ticker}?token=${token}`;
 }
@@ -171,6 +177,7 @@ if (typeof window !== "undefined") {
 export {
     debounce,
     isValidTicker,
+    getTickerMetadata,
     fetchTickers,
     showTickerSuggestions,
     hideTickerSuggestions,

@@ -1,140 +1,185 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
-    <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self';
-                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-                   font-src https://fonts.gstatic.com;
-                   img-src 'self' https://img.logo.dev data:;
-                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com https://img.logo.dev;">
-    <meta name="theme-color" content="#0b101a">
-    <title>DCF Calculator | DCF Calculator</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com https://img.logo.dev;">
+<meta name="theme-color" content="#f1eee5">
+<meta name="description" content="Build a five-year earnings or free-cash-flow valuation model.">
+<title>DCF Calculator | Stock Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 </head>
-<body class="dcf-page">
-    <a class="skip-link" href="#main-content">Skip to content</a>
+<body class="dcf-page dcf-terminal-page">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="app-layout">
+<!-- Shared sidebar is injected by sidebar.js. -->
+<main id="main-content" class="app-main">
+<div id="appContent" class="dcf-terminal-shell">
+<header class="dcf-masthead dcf-reveal">
+<div class="dcf-masthead-copy">
+<p class="dcf-kicker"><span aria-hidden="true"></span> Valuation workspace</p>
+<h1>DCF Calculator</h1>
+</div>
+</header>
 
-    <div class="app-layout">
-        <!-- Sidebar injected by sidebar.js -->
+<section class="dcf-market-panel dcf-panel dcf-reveal" aria-labelledby="marketDataTitle">
+<div class="dcf-market-copy">
+<p class="dcf-overline">Desk 01 / Market data</p>
+<h2 id="marketDataTitle">Choose a company</h2>
+<p>Load current trailing metrics, then adjust the assumptions that drive your valuation.</p>
+</div>
+<div class="dcf-search-command">
+<div class="dcf-search-wrapper search-wrapper">
+<label for="tickerInput">Company or ticker</label>
+<input type="text" id="tickerInput" autocomplete="off" placeholder="AAPL or Apple" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="tickerAutocomplete" aria-describedby="marketDataStatus">
+<div id="tickerAutocomplete" class="ticker-autocomplete hidden" role="listbox" aria-label="Ticker suggestions"></div>
+</div>
+<button id="getCurrentDataBtn" class="dcf-dark-button" type="button">Load market data</button>
+</div>
+<div id="companyInfo" class="dcf-company-band company-info hidden-state">
+<div class="company-logo" id="companyLogo" aria-hidden="true"></div>
+<div class="dcf-company-copy"><span>Selected company</span><p id="companyName" class="company-name"></p></div>
+<div class="dcf-company-exchange"><span>Stock exchange</span><strong id="companyExchange">—</strong></div>
+</div>
+<p id="marketDataStatus" class="dcf-market-status is-idle" role="status">Search a ticker to load current market data.</p>
+</section>
 
-        <main id="main-content" class="app-main">
-            <div id="appContent" class="dcf-container">
-                <!-- Left Panel — Inputs -->
-                <div class="left-panel">
-                    <div class="header-section" style="flex-direction: row;">
-                        <div class="search-wrapper">
-                            <input type="text" id="tickerInput" placeholder="Enter Ticker (e.g., GOOG)">
-                            <div id="tickerAutocomplete" class="ticker-autocomplete hidden"></div>
-                        </div>
-                        <button id="getCurrentDataBtn" class="primary-button">Search</button>
-                    </div>
+<section class="dcf-summary-tape dcf-reveal" aria-label="Current valuation context">
+<article class="dcf-summary-cell"><span>Market price</span><strong id="currentStockPrice">—</strong><small>Latest available quote</small></article>
+<div id="earningsSummary" class="dcf-summary-group">
+<article class="dcf-summary-cell"><span>EPS / TTM</span><strong id="currentEps">$0.00</strong><small>Trailing earnings per share</small></article>
+<article class="dcf-summary-cell"><span>P/E / TTM</span><strong id="currentPe">0.00</strong><small>Current earnings multiple</small></article>
+<article class="dcf-summary-cell"><span>EPS growth</span><strong id="epsGrowth">0.0%</strong><small>Trailing growth signal</small></article>
+</div>
+<div id="cashFlowSummary" class="dcf-summary-group hidden">
+<article class="dcf-summary-cell"><span>FCF / share</span><strong id="currentFcfShare">$0.00</strong><small>Trailing free cash flow</small></article>
+<article class="dcf-summary-cell"><span>FCF yield</span><strong id="fcfYield">0.0%</strong><small>Current cash-flow yield</small></article>
+<article class="dcf-summary-cell"><span>SBC impact</span><strong id="sbcImpact">0.0%</strong><small>Stock compensation drag</small></article>
+</div>
+</section>
 
-                    <div class="tab-buttons">
-                        <button id="earningsTabBtn" class="tab-button active">Earnings</button>
-                        <button id="cashFlowTabBtn" class="tab-button">Cash Flow</button>
-                    </div>
+<section class="dcf-model-ticket dcf-panel dcf-reveal" aria-labelledby="assumptionsTitle">
+<div class="dcf-ticket-head">
+<div><p class="dcf-overline">Desk 02 / Model builder</p><h2 id="assumptionsTitle">Model assumptions</h2><p>Choose a valuation method, set a forward growth case, and define the return you require.</p></div>
+<div class="dcf-method-control" aria-label="Valuation method">
+<button id="earningsTabBtn" class="dcf-method-button active" type="button" aria-pressed="true">Earnings</button>
+<button id="cashFlowTabBtn" class="dcf-method-button" type="button" aria-pressed="false">Free cash flow</button>
+</div>
+</div>
+<div class="dcf-assumption-grid">
+<div id="earningsSection" class="dcf-method-fields">
+<div class="dcf-field">
+<label for="epsTtmInput">EPS / TTM</label>
+<div class="dcf-affix-control dcf-prefix-control"><span>$</span><input type="number" id="epsTtmInput" value="0.00" step="0.01" inputmode="decimal" readonly aria-describedby="epsTtmHelp epsTtmError"></div>
+<small id="epsTtmHelp">Loaded from trailing earnings.</small><span id="epsTtmError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+<div class="dcf-field">
+<label for="growthRateInput">EPS growth rate</label>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="growthRateInput" placeholder="15.0" step="0.1" inputmode="decimal" aria-describedby="growthRateHelp growthRateError"><span>%</span></div>
+<small id="growthRateHelp">Annual growth assumed for five years.</small><span id="growthRateError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+<div class="dcf-field">
+<label for="peMultipleInput">Terminal P/E</label>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="peMultipleInput" placeholder="20.0" step="0.1" inputmode="decimal" aria-describedby="peMultipleHelp peMultipleError"><span>×</span></div>
+<small id="peMultipleHelp">Multiple applied in year five.</small><span id="peMultipleError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+</div>
 
-                    <!-- Earnings Section -->
-                    <div id="earningsSection">
-                        <h2 class="section-title">Assumptions (Earnings)</h2>
-                        <div class="metric-grid">
-                            <div class="metric-item"><p class="metric-label">EPS (TTM)</p><p id="currentEps" class="metric-value">$0.00</p></div>
-                            <div class="metric-item"><p class="metric-label">PE (TTM)</p><p id="currentPe" class="metric-value">0.00</p></div>
-                            <div class="metric-item"><p class="metric-label">EPS Growth</p><p id="epsGrowth" class="metric-value">0.0%</p></div>
-                        </div>
-                        <div class="input-group"><label for="epsTtmInput">EPS (TTM)</label><div class="input-field-wrapper"><span class="currency-symbol">$</span><input type="number" id="epsTtmInput" value="0.00" step="0.01" readonly></div></div>
-                        <div class="input-group"><label for="growthRateInput">EPS Growth Rate</label><div class="input-field-wrapper"><input type="number" id="growthRateInput" placeholder="e.g., 15" step="0.1"><span class="percentage-symbol">%</span></div></div>
-                        <div class="input-group"><label for="peMultipleInput">Appropriate PE Multiple</label><div class="input-field-wrapper"><input type="number" id="peMultipleInput" placeholder="e.g., 20" step="0.1"></div></div>
-                    </div>
+<div id="cashFlowSection" class="dcf-method-fields hidden">
+<div class="dcf-field">
+<label for="fcfShareInput">FCF / share</label>
+<div class="dcf-affix-control dcf-prefix-control"><span>$</span><input type="number" id="fcfShareInput" value="0.00" step="0.01" inputmode="decimal" readonly aria-describedby="fcfShareHelp fcfShareError"></div>
+<small id="fcfShareHelp">Loaded from trailing free cash flow.</small><span id="fcfShareError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+<div class="dcf-field">
+<label for="fcfGrowthRateInput">FCF growth rate</label>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="fcfGrowthRateInput" placeholder="12.0" step="0.1" inputmode="decimal" aria-describedby="fcfGrowthHelp fcfGrowthError"><span>%</span></div>
+<small id="fcfGrowthHelp">Annual growth assumed for five years.</small><span id="fcfGrowthError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+<div class="dcf-field">
+<label for="fcfYieldInput">Terminal FCF yield</label>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="fcfYieldInput" placeholder="5.0" step="0.1" inputmode="decimal" aria-describedby="fcfYieldHelp fcfYieldError"><span>%</span></div>
+<small id="fcfYieldHelp">Cash-flow yield applied in year five.</small><span id="fcfYieldError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+</div>
 
-                    <!-- Cash Flow Section -->
-                    <div id="cashFlowSection" class="hidden">
-                        <h2 class="section-title">Assumptions (Cash Flow)</h2>
-                        <div class="metric-grid">
-                            <div class="metric-item"><p class="metric-label">FCF/Share (TTM)</p><p id="currentFcfShare" class="metric-value">$0.00</p></div>
-                            <div class="metric-item"><p class="metric-label">FCF Yield (TTM)</p><p id="fcfYield" class="metric-value">0.0%</p></div>
-                            <div class="metric-item"><p class="metric-label">SBC Impact</p><p id="sbcImpact" class="metric-value">0.0%</p></div>
-                        </div>
-                        <div class="input-group"><label for="fcfShareInput">FCF/Share (TTM)</label><div class="input-field-wrapper"><span class="currency-symbol">$</span><input type="number" id="fcfShareInput" value="0.00" step="0.01" readonly></div></div>
-                        <div class="input-group"><label for="fcfGrowthRateInput">FCF Growth Rate</label><div class="input-field-wrapper"><input type="number" id="fcfGrowthRateInput" placeholder="e.g., 12" step="0.1"><span class="percentage-symbol">%</span></div></div>
-                        <div class="input-group"><label for="fcfYieldInput">Appropriate FCF Yield</label><div class="input-field-wrapper"><input type="number" id="fcfYieldInput" placeholder="e.g., 5" step="0.1"><span class="percentage-symbol">%</span></div></div>
-                    </div>
+<div class="dcf-field dcf-return-field">
+<label for="desiredReturnInput">Desired annual return</label>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="desiredReturnInput" placeholder="10.0" step="0.1" inputmode="decimal" aria-describedby="desiredReturnHelp desiredReturnError"><span>%</span></div>
+<small id="desiredReturnHelp">Used to calculate a disciplined entry price.</small><span id="desiredReturnError" class="dcf-field-error hidden" role="alert"></span>
+</div>
+<div class="dcf-ticket-actions" role="group" aria-label="Model actions">
+<button id="clearBtn" class="dcf-text-button" type="button">Reset</button>
+<button id="saveCalculationBtn" class="dcf-outline-button" type="button" disabled>Save</button>
+<button id="calculatePriceBtn" class="dcf-dark-button" type="button">Calculate <span aria-hidden="true">→</span></button>
+</div>
+</div>
+</section>
 
-                    <div class="input-group"><label for="desiredReturnInput">Desired Return</label><div class="input-field-wrapper"><input type="number" id="desiredReturnInput" placeholder="e.g., 10" step="0.1"><span class="percentage-symbol">%</span></div></div>
+<div class="dcf-results-workspace dcf-reveal">
+<section class="dcf-panel dcf-projection-panel" aria-labelledby="projectionTitle">
+<div class="dcf-section-head">
+<div><p class="dcf-overline">Desk 03 / Forward view</p><h2 id="projectionTitle">Five-year projection</h2></div>
+<span class="dcf-horizon-label">Today → Year 5</span>
+</div>
+<div id="projectionPlaceholder" class="dcf-empty-state projection-placeholder" role="status">
+<span class="dcf-state-mark" aria-hidden="true">05</span><h3>Build a valuation case</h3>
+<p>Load a company, complete the assumptions, and calculate to reveal the projected path and target entry price.</p>
+</div>
+<div id="projectionOutput" class="hidden">
+<div id="calculationResults" class="dcf-result-tape projection-results" aria-label="Valuation results">
+<article><span>Annualized return</span><strong id="returnFromTodayDisplay">N/A</strong><small>From today’s market price</small></article>
+<article><span>Target entry price</span><strong id="entryPriceDisplay">N/A</strong><small>For the desired return</small></article>
+<article><span>Desired return</span><strong id="desiredReturnDisplay">N/A</strong><small>Annual hurdle rate</small></article>
+<article><span>Year-five price</span><strong id="priceAfter5YearsDisplay">N/A</strong><small>Based on terminal assumptions</small></article>
+</div>
+<div class="dcf-chart-heading">
+<div><strong>Projected price path</strong><small>Interpolated from today’s valuation to the terminal case.</small></div>
+<span><i aria-hidden="true"></i> Model price</span>
+</div>
+<div class="dcf-chart-container"><canvas id="priceChart" role="img" aria-label="Projected stock price from today through year five"></canvas></div>
+<div id="calculationMessage" class="calculation-message dcf-signal" role="status"></div>
+</div>
+</section>
 
-                    <div class="button-group">
-                        <button id="calculatePriceBtn" class="primary-button">Calculate</button>
-                        <button id="saveCalculationBtn" class="primary-button bg-green-600">Save</button>
-                        <button id="clearBtn" class="primary-button bg-gray-600">Clear</button>
-                    </div>
-                </div>
+<aside class="dcf-panel dcf-saved-rail" aria-labelledby="savedCalculationsTitle">
+<div class="dcf-saved-head">
+<div><p class="dcf-overline">Research file</p><h2 id="savedCalculationsTitle">Saved models</h2></div>
+<span id="savedCalculationCount">0 models</span>
+</div>
+<div id="savedCalculationsContainer" class="dcf-saved-list" aria-live="polite"><p class="muted">No saved calculations yet.</p></div>
+<button id="loadCalculationsBtn" class="dcf-outline-button dcf-sync-button" type="button">Sync saved models</button>
+<p class="dcf-saved-note">Models are cached locally and synchronized when the service is available.</p>
+</aside>
+</div>
+<p class="dcf-disclaimer">Market data may be delayed · Valuation outputs are estimates, not investment advice</p>
+</div>
+</main>
+</div>
 
-                <!-- Right Panel — Results -->
-                <div class="right-panel">
-                    <div id="companyInfo" class="company-info hidden-state">
-                        <div class="company-logo" id="companyLogo"></div>
-                        <div><p id="companyName" class="company-name"></p></div>
-                        <p id="currentStockPrice" class="current-price"></p>
-                    </div>
-
-                    <div id="projectionPlaceholder" class="projection-placeholder">
-                        <h3>5-Year Projection</h3>
-                        <p>Enter a stock ticker and your assumptions, then click "Calculate" to see the projected stock price and potential returns.</p>
-                    </div>
-
-                    <div id="projectionOutput" class="hidden">
-                        <h2 class="section-title">5-Year Projection</h2>
-                        <div id="calculationResults" class="projection-results">
-                            <p class="projection-result-row">Return from today: <strong id="returnFromTodayDisplay" class="projection-value">N/A</strong></p>
-                            <p class="projection-result-row">Entry Price for Desired Return: <strong id="entryPriceDisplay" class="projection-value">N/A</strong></p>
-                            <p class="projection-result-row">Desired Return: <strong id="desiredReturnDisplay" class="projection-value">N/A</strong></p>
-                            <p class="projection-result-row">Price After 5 Years: <strong id="priceAfter5YearsDisplay" class="projection-value">N/A</strong></p>
-                        </div>
-                        <div class="dcf-chart-container">
-                            <canvas id="priceChart"></canvas>
-                        </div>
-                        <div id="calculationMessage" class="calculation-message"></div>
-                    </div>
-
-                    <div class="saved-calculations-list saved-section-margin">
-                        <h3>Saved Calculations</h3>
-                        <div id="savedCalculationsContainer"><p class="muted">No saved calculations yet.</p></div>
-                        <button id="loadCalculationsBtn" class="primary-button bg-indigo-600 w-full" style="margin-top: 1rem;">Load</button>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Confirmation Modal -->
-    <div id="confirmationModal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h3 id="modalTitle">Confirm Action</h3>
-            <p id="modalMessage">Are you sure?</p>
-            <div class="modal-buttons">
-                <button id="confirmYesBtn" class="confirm-btn">Yes</button>
-                <button id="confirmNoBtn" class="cancel-btn">No</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="toast-container"></div>
-
-    <script type="module">
-        import { runAuthGuard } from "./js/auth-guard.js";
-        import { renderSidebar } from "./js/sidebar.js";
-        import "./js/dcf-calculator.js";
-        runAuthGuard();
-        renderSidebar();
-    </script>
-    <script src="js/service-worker-register.js" defer></script>
+<dialog id="confirmationModal" class="dcf-dialog" aria-labelledby="modalTitle" aria-describedby="modalMessage">
+<form method="dialog">
+<p class="dcf-overline">Confirm removal</p><h2 id="modalTitle">Delete saved model?</h2>
+<p id="modalMessage">This removes the saved valuation from this account.</p>
+<div class="dcf-dialog-actions">
+<button id="confirmNoBtn" class="dcf-outline-button" type="button">Keep model</button>
+<button id="confirmYesBtn" class="dcf-danger-button" type="button">Delete model</button>
+</div>
+</form>
+</dialog>
+<div id="toast-container"></div>
+<div id="dcfLiveStatus" class="sr-only" aria-live="polite"></div>
+<script type="module">
+import { runAuthGuard } from "./js/auth-guard.js";
+import { renderSidebar } from "./js/sidebar.js";
+import "./js/dcf-calculator.js";
+runAuthGuard();
+renderSidebar();
+</script>
+<script src="js/service-worker-register.js" defer></script>
 </body>
 </html>
