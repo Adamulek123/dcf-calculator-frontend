@@ -35,6 +35,14 @@ const SIDEBAR_NAV_ITEMS = [
         shortcut: "04",
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 5v14h18M5.5 8.5l4 4 3-3 5 5M17.5 10.5v4h-4"/></svg>',
     },
+    {
+        id: "earnings-calendar",
+        label: "Earnings Calendar",
+        description: "Expected report dates",
+        href: "earnings-calendar.html",
+        shortcut: "05",
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h3M8 17h6"/></svg>',
+    },
 ];
 
 const LOGOUT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>';

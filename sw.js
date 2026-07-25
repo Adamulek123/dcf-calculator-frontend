@@ -1,4 +1,4 @@
-const SHELL_CACHE = "dcf-shell-v1";
+const SHELL_CACHE = "dcf-shell-v13";
 const SHELL_ASSETS = [
     "./",
     "./index.html",
@@ -8,6 +8,7 @@ const SHELL_ASSETS = [
     "./portfolio-creator.html",
     "./dip-finder.html",
     "./financial-data.html",
+    "./earnings-calendar.html",
     "./css/style.css",
     "./js/service-worker-register.js",
     "./js/script.js",
@@ -19,6 +20,18 @@ const SHELL_ASSETS = [
     "./js/portfolio-creator.js",
     "./js/dip-finder.js",
     "./js/financial-data.js",
+    "./js/earnings-calendar.js",
+    "./js/cache-metrics.js",
+    "./js/cache-policy.js",
+    "./js/cache-registry.js",
+    "./js/data-store.js",
+    "./js/public-data-store.js",
+    "./js/sidebar.js",
+    "./js/firebase-init.js",
+    "./js/toast.js",
+    "./js/ticker.js",
+    "./js/charts.js",
+    "./js/cache.js",
 ];
 
 self.addEventListener("install", (event) => {
@@ -45,10 +58,9 @@ self.addEventListener("fetch", (event) => {
 
     event.respondWith((async () => {
         const cached = await caches.match(request);
-        if (cached && !isShellNavigation) return cached;
         try {
             const network = await fetch(request);
-            if (isShellNavigation && network.ok) {
+            if (network.ok) {
                 const cache = await caches.open(SHELL_CACHE);
                 cache.put(request, network.clone());
             }

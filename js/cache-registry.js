@@ -48,6 +48,9 @@ function createCacheRegistry({ uid = null } = {}) {
                 staleTtlMs: policy.staleTtlMs,
                 version: version ?? policy.version,
                 serverUpdatedAt,
+                policyName: name,
+                maxEntries: policy.maxEntries,
+                maxBytes: policy.maxBytes,
             });
             return entry ? { ...entry, policy, isFresh: true } : null;
         }
