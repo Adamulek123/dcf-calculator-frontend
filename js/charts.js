@@ -94,6 +94,10 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
 
     const yAxisStepSize = calculateStepSize(maxValue, yAxisMin);
     const growthElements = options.growthElements;
+    const chartTheme = options.theme || {};
+    const interactive = Boolean(isFullscreen || options.interactive);
+    const textColor = chartTheme.textColor || "#3c4145";
+    const gridColor = chartTheme.gridColor || "#e9ecef";
 
     return new ChartCtor(ctx, {
         type: chartData.type,
@@ -120,7 +124,7 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
                 legend: {
                     display: isFullscreen,
                     labels: {
-                        color: "#212529",
+                        color: chartTheme.legendText || "#212529",
                         font: { size: isFullscreen ? 18 : 14, weight: "600" },
                         padding: isFullscreen ? 20 : 15,
                         boxWidth: isFullscreen ? 50 : 40,
@@ -136,8 +140,11 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
                     } : undefined
                 },
                 tooltip: {
-                    enabled: isFullscreen,
-                    animation: isFullscreen ? { duration: 100 } : false,
+                    enabled: interactive,
+                    animation: interactive ? { duration: 100 } : false,
+                    backgroundColor: chartTheme.tooltipBackground,
+                    titleColor: chartTheme.tooltipText,
+                    bodyColor: chartTheme.tooltipText,
                     callbacks: {
                         label(context) {
                             let label = context.dataset.label || "";
@@ -173,17 +180,17 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
                     }
                 }
             },
-            interaction: { mode: isFullscreen ? "nearest" : null, intersect: true, axis: "x" },
-            hover: { mode: isFullscreen ? "nearest" : null, animationDuration: 0 },
+            interaction: { mode: interactive ? "nearest" : null, intersect: true, axis: "x" },
+            hover: { mode: interactive ? "nearest" : null, animationDuration: 0 },
             scales: {
                 y: {
                     display: true,
                     beginAtZero: false,
                     min: yAxisMin,
                     stacked: chartData.stacked || false,
-                    grid: { color: "#e9ecef" },
+                    grid: { color: gridColor },
                     ticks: {
-                        color: "#3c4145",
+                        color: textColor,
                         font: { size: isFullscreen ? 14 : 11, weight: "500" },
                         stepSize: yAxisStepSize,
                         callback(value) {
@@ -215,7 +222,7 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
                     stacked: chartData.stacked || false,
                     grid: { display: false },
                     ticks: {
-                        color: "#3c4145",
+                        color: textColor,
                         display: true,
                         font: { size: isFullscreen ? 14 : 11 },
                         maxRotation: 45,

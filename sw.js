@@ -1,4 +1,4 @@
-const SHELL_CACHE = "dcf-shell-v1";
+const SHELL_CACHE = "dcf-shell-v8";
 const SHELL_ASSETS = [
     "./",
     "./index.html",
