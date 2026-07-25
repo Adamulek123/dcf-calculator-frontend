@@ -4722,6 +4722,13 @@ select.pt-square-control:hover {
 .portfolio-terminal-page .amber { color: #9b6811 !important; }
 .pt-panel { border: 1px solid var(--pt-line-strong); background: var(--pt-panel); box-shadow: var(--pt-shadow); }
 .pt-ticket { position: relative; z-index: 20; margin-bottom: 1rem; overflow: visible; }
+.pt-quote-warning {
+    margin: -.35rem 0 1rem; padding: .65rem .8rem; border: 1px solid rgba(155,104,17,.42);
+    border-left: 3px solid var(--pt-amber); background: rgba(210,154,56,.1); color: #75500e;
+    font-size: .51rem; font-weight: 600; letter-spacing: .025em; line-height: 1.5; text-transform: uppercase;
+}
+.pt-quote-warning::before { margin-right: .45rem; content: "Price notice"; color: var(--pt-ink); }
+
 .pt-ticket-head {
     min-height: 88px; display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem;
     padding: 1rem 1.15rem; border-bottom: 1px solid var(--pt-line-strong);
