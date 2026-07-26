@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com;
+                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src 'self' https://img.logo.dev data:;
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
+    <meta name="theme-color" content="#f1eee5">
+    <meta name="description" content="Review expected S&amp;P 500 earnings reports across the market week.">
+    <title>Earnings Calendar | DCF Calculator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="earnings-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="app-layout">
+        <main id="main-content" class="app-main">
+            <section class="earnings-shell" aria-labelledby="earningsTitle">
+                <header class="earnings-header earnings-reveal">
+                    <div class="earnings-heading-copy">
+                        <p class="earnings-kicker"><span aria-hidden="true"></span> S&amp;P 500 / US market session</p>
+                        <h1 id="earningsTitle">Earnings Calendar</h1>
+                    </div>
+                    <div class="earnings-header-status">
+                        <div id="earningsMeta" class="earnings-meta" aria-live="polite">Loading calendar status…</div>
+                        <button id="earningsRefreshBtn" class="earnings-button earnings-button-primary" type="button">
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+                            <span id="earningsRefreshLabel">Refresh data</span>
+                        </button>
+                    </div>
+                </header>
+
+                <div class="earnings-command-bar earnings-reveal" aria-label="Calendar controls">
+                    <div class="earnings-week-controls">
+                        <button id="earningsPreviousBtn" class="earnings-button earnings-icon-button" type="button" aria-label="Previous week">
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+                            <span>Previous</span>
+                        </button>
+                        <button id="earningsCurrentBtn" class="earnings-button" type="button">Current week</button>
+                        <button id="earningsNextBtn" class="earnings-button earnings-icon-button" type="button" aria-label="Next week">
+                            <span>Next</span>
+                            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
+                    <div class="earnings-week-heading">
+                        <span class="earnings-label">Selected week</span>
+                        <h2 id="earningsWeekTitle">—</h2>
+                        <span id="earningsWeekCount" class="earnings-count">—</span>
+                    </div>
+                </div>
+
+                <div id="earningsDayTabs" class="earnings-day-tabs" role="tablist" aria-label="Weekdays"></div>
+                <div id="earningsDays" class="earnings-days earnings-reveal" role="tabpanel" aria-busy="true"></div>
+            </section>
+        </main>
+    </div>
+
+    <dialog id="earningsDrawer" class="earnings-drawer" aria-labelledby="earningsDrawerTitle">
+        <div class="earnings-drawer-frame">
+            <header class="earnings-drawer-header">
+                <p class="earnings-label">Earnings brief</p>
+                <button id="earningsDrawerClose" class="earnings-drawer-close" type="button" aria-label="Close company details">
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+            </header>
+            <div class="earnings-drawer-company">
+                <div id="earningsDrawerLogo" class="earnings-drawer-logo" aria-hidden="true"></div>
+                <div>
+                    <h2 id="earningsDrawerTitle">—</h2>
+                    <p id="earningsDrawerName">—</p>
+                </div>
+            </div>
+            <dl class="earnings-drawer-meta">
+                <div><dt>Expected date</dt><dd id="earningsDrawerDate">—</dd></div>
+                <div><dt>Market session</dt><dd id="earningsDrawerSession">—</dd></div>
+            </dl>
+            <section class="earnings-drawer-section" aria-labelledby="earningsPredictionsTitle">
+                <span class="earnings-drawer-index">01</span>
+                <div>
+                    <h3 id="earningsPredictionsTitle">Predictions</h3>
+                    <p id="earningsEstimateState" class="earnings-estimate-state">Loading consensus estimates…</p>
+                    <dl id="earningsEstimateGrid" class="earnings-estimate-grid hidden">
+                        <div><dt>Fiscal period</dt><dd id="earningsDrawerFiscal">—</dd></div>
+                        <div><dt>EPS estimate</dt><dd id="earningsDrawerEps">—</dd></div>
+                        <div><dt>Revenue estimate</dt><dd id="earningsDrawerRevenue">—</dd></div>
+                    </dl>
+                    <button id="earningsEstimateRetry" class="earnings-button earnings-estimate-retry hidden" type="button">Retry estimates</button>
+                </div>
+            </section>
+        </div>
+    </dialog>
+
+    <div id="toast-container"></div>
+    <div id="earningsLiveStatus" class="sr-only" aria-live="polite"></div>
+    <script type="module" src="js/earnings-calendar.js"></script>
+    <script src="js/service-worker-register.js" defer></script>
+</body>
+</html>

@@ -49,27 +49,11 @@ function isTransientNetworkError(error) {
     return error?.name === "TypeError";
 }
 
-async function apiCall(endpoint, options = {}, dependencies = {}) {
-    const { auth = window.auth, handleLogout = () => {}, backendBaseUrl = getBackendBaseUrl() } = dependencies;
-    const user = auth?.currentUser;
-    let idToken = null;
-
-    if (user) {
-        try {
-            idToken = await user.getIdToken();
-        } catch (error) {
-            console.error("Error getting Firebase ID token:", error);
-            handleLogout();
-            throw new Error("Authentication token expired or invalid. Please log in again.");
-        }
-    }
-
-    if (idToken) {
-        options.headers = { ...options.headers, Authorization: `Bearer ${idToken}` };
-    } else {
-        throw new Error("No authentication token available. Please log in.");
-    }
-
+async function executeApiCall(endpoint, options = {}, {
+    backendBaseUrl = getBackendBaseUrl(),
+    requestIdentity = "public",
+    onUnauthorized = null,
+} = {}) {
     const method = String(options.method || "GET").toUpperCase();
     const coalesce = method === "GET" || options.coalesce === true;
     const retryable = method === "GET" || options.retry === true;
@@ -78,7 +62,7 @@ async function apiCall(endpoint, options = {}, dependencies = {}) {
     delete requestOptions.coalesce;
     delete requestOptions.retry;
     delete requestOptions.retryAttempts;
-    const key = `${user.uid}:${method}:${endpoint}:${canonicalBody(requestOptions.body)}`;
+    const key = `${requestIdentity}:${method}:${endpoint}:${canonicalBody(requestOptions.body)}`;
     const execute = async () => {
         for (let attempt = 0; ; attempt += 1) {
             try {
@@ -91,8 +75,8 @@ async function apiCall(endpoint, options = {}, dependencies = {}) {
                     durationMs: performance.now() - startedAt,
                     bytes: Number(response.headers.get("Content-Length")) || null,
                 });
-                if (response.status === 401) {
-                    handleLogout();
+                if (response.status === 401 && typeof onUnauthorized === "function") {
+                    onUnauthorized();
                     throw new Error("Session expired. Please log in again.");
                 }
                 if (!retryable || !isTransientResponse(response) || attempt >= maxAttempts) return response;
@@ -117,4 +101,33 @@ async function apiCall(endpoint, options = {}, dependencies = {}) {
     }
 }
 
-export { getBackendBaseUrl, setButtonState, apiCall, isTransientResponse };
+async function apiCall(endpoint, options = {}, dependencies = {}) {
+    const { auth = window.auth, handleLogout = () => {}, backendBaseUrl = getBackendBaseUrl() } = dependencies;
+    const user = auth?.currentUser;
+    if (!user) throw new Error("No authentication token available. Please log in.");
+    let idToken;
+    try {
+        idToken = await user.getIdToken();
+    } catch (error) {
+        console.error("Error getting Firebase ID token:", error);
+        handleLogout();
+        throw new Error("Authentication token expired or invalid. Please log in again.");
+    }
+    return executeApiCall(endpoint, {
+        ...options,
+        headers: { ...options.headers, Authorization: `Bearer ${idToken}` },
+    }, {
+        backendBaseUrl,
+        requestIdentity: user.uid,
+        onUnauthorized: handleLogout,
+    });
+}
+
+async function publicApiCall(endpoint, options = {}, dependencies = {}) {
+    return executeApiCall(endpoint, options, {
+        backendBaseUrl: dependencies.backendBaseUrl || getBackendBaseUrl(),
+        requestIdentity: "public",
+    });
+}
+
+export { getBackendBaseUrl, setButtonState, apiCall, publicApiCall, isTransientResponse };

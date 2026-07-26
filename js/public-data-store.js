@@ -58,6 +58,9 @@ async function setPublicRecord(key, data, ttlMs, {
     staleTtlMs = 0,
     version = null,
     serverUpdatedAt = null,
+    policyName = null,
+    maxEntries = null,
+    maxBytes = null,
 } = {}) {
     const database = await openDatabase();
     if (!database) return null;
@@ -72,6 +75,7 @@ async function setPublicRecord(key, data, ttlMs, {
         bytes: sizeOf(data),
         version,
         serverUpdatedAt,
+        policyName,
     };
     const tx = database.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
@@ -79,11 +83,31 @@ async function setPublicRecord(key, data, ttlMs, {
     const request = store.getAll();
     request.onsuccess = () => {
         const records = request.result.sort((a, b) => a.lastAccessed - b.lastAccessed);
-        let total = records.reduce((sum, item) => sum + (item.bytes || 0), 0);
+        const removed = new Set();
+        const policyRecords = policyName ? records.filter((item) => item.policyName === policyName) : [];
+        const entryLimit = Number.isFinite(maxEntries) ? Math.max(1, Math.floor(maxEntries)) : null;
+        while (entryLimit !== null && policyRecords.length > entryLimit) {
+            const removableIndex = policyRecords.findIndex((item) => item.key !== key);
+            if (removableIndex < 0) break;
+            const [item] = policyRecords.splice(removableIndex, 1);
+            store.delete(item.key);
+            removed.add(item.key);
+        }
+        let policyBytes = policyRecords.reduce((sum, item) => sum + (item.bytes || 0), 0);
+        const byteLimit = Number.isFinite(maxBytes) ? Math.max(0, maxBytes) : null;
+        for (const item of policyRecords) {
+            if (byteLimit === null || policyBytes <= byteLimit) break;
+            if (item.key === key || removed.has(item.key)) continue;
+            store.delete(item.key);
+            removed.add(item.key);
+            policyBytes -= item.bytes || 0;
+        }
+        let total = records.reduce((sum, item) => removed.has(item.key) ? sum : sum + (item.bytes || 0), 0);
         for (const item of records) {
             if (total <= MAX_BYTES) break;
-            if (item.key === key) continue;
+            if (item.key === key || removed.has(item.key)) continue;
             store.delete(item.key);
+            removed.add(item.key);
             total -= item.bytes || 0;
         }
     };
