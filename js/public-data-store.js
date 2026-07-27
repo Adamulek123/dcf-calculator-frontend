@@ -3,7 +3,9 @@ import { recordCacheEvent } from "./cache-metrics.js";
 const DATABASE_NAME = "dcf-public-data";
 const STORE_NAME = "records";
 const MAX_BYTES = 12 * 1024 * 1024;
+const PRUNE_INTERVAL_MS = 60 * 1000;
 let databasePromise;
+let lastPruneAt = 0;
 
 function openDatabase() {
     if (databasePromise) return databasePromise;
@@ -28,7 +30,7 @@ async function getPublicEntry(key, { allowExpired = false } = {}) {
     const database = await openDatabase();
     if (!database) return null;
     return new Promise((resolve) => {
-        const tx = database.transaction(STORE_NAME, "readwrite");
+        const tx = database.transaction(STORE_NAME, "readonly");
         const store = tx.objectStore(STORE_NAME);
         const request = store.get(key);
         request.onsuccess = () => {
@@ -37,12 +39,10 @@ async function getPublicEntry(key, { allowExpired = false } = {}) {
             const isFresh = record?.expiresAt > now;
             const staleExpiresAt = record?.staleExpiresAt || record?.expiresAt || 0;
             if (!record || (!isFresh && (!allowExpired || staleExpiresAt <= now))) {
-                if (record) store.delete(key);
+                if (record) void deletePublicRecord(key);
                 recordCacheEvent("public", record ? "expired" : "miss");
                 return resolve(null);
             }
-            record.lastAccessed = now;
-            store.put(record);
             recordCacheEvent("public", isFresh ? "hit" : "stale");
             resolve({ ...record, isFresh });
         };
@@ -80,6 +80,15 @@ async function setPublicRecord(key, data, ttlMs, {
     const tx = database.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
     store.put(record);
+    const shouldPrune = now - lastPruneAt >= PRUNE_INTERVAL_MS;
+    if (!shouldPrune) {
+        return new Promise((resolve) => {
+            tx.oncomplete = () => resolve(record);
+            tx.onerror = () => resolve(null);
+            tx.onabort = () => resolve(null);
+        });
+    }
+    lastPruneAt = now;
     const request = store.getAll();
     request.onsuccess = () => {
         const records = request.result.sort((a, b) => a.lastAccessed - b.lastAccessed);
@@ -111,7 +120,11 @@ async function setPublicRecord(key, data, ttlMs, {
             total -= item.bytes || 0;
         }
     };
-    return record;
+    return new Promise((resolve) => {
+        tx.oncomplete = () => resolve(record);
+        tx.onerror = () => resolve(null);
+        tx.onabort = () => resolve(null);
+    });
 }
 
 async function deletePublicRecord(key) {
