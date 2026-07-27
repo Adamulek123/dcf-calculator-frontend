@@ -53,6 +53,20 @@ function getCurrentPage() {
     return window.location.pathname.split("/").pop() || "index.html";
 }
 
+function populateSidebarNav(nav) {
+    nav.replaceChildren();
+    for (const item of SIDEBAR_NAV_ITEMS) {
+        const link = document.createElement("a");
+        link.className = "sidebar-nav-item";
+        link.href = item.href;
+        link.setAttribute("aria-label", item.label);
+        link.innerHTML = '<span class="sidebar-nav-icon" aria-hidden="true">' + item.icon + '</span>'
+            + '<span class="sidebar-nav-copy"><strong>' + item.label + '</strong><small>' + item.description + '</small></span>'
+            + '<span class="sidebar-shortcut">' + item.shortcut + '</span>';
+        nav.appendChild(link);
+    }
+}
+
 function createSidebar() {
     const aside = document.createElement("aside");
     aside.id = "appSidebar";
@@ -68,17 +82,7 @@ function createSidebar() {
 
     const nav = document.createElement("nav");
     nav.className = "sidebar-nav";
-
-    for (const item of SIDEBAR_NAV_ITEMS) {
-        const link = document.createElement("a");
-        link.className = "sidebar-nav-item";
-        link.href = item.href;
-        link.setAttribute("aria-label", item.label);
-        link.innerHTML = '<span class="sidebar-nav-icon" aria-hidden="true">' + item.icon + '</span>'
-            + '<span class="sidebar-nav-copy"><strong>' + item.label + '</strong><small>' + item.description + '</small></span>'
-            + '<span class="sidebar-shortcut">' + item.shortcut + '</span>';
-        nav.appendChild(link);
-    }
+    populateSidebarNav(nav);
 
     const bottom = document.createElement("div");
     bottom.className = "sidebar-bottom";
@@ -109,6 +113,9 @@ function renderSidebar() {
     if (aside.dataset.sidebarInitialized === "true") return;
     aside.dataset.sidebarInitialized = "true";
     aside.id ||= "appSidebar";
+
+    const nav = aside.querySelector(".sidebar-nav");
+    if (nav) populateSidebarNav(nav);
 
     const currentPage = getCurrentPage();
     aside.querySelectorAll(".sidebar-nav-item[href]").forEach((link) => {

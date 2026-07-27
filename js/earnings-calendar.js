@@ -190,20 +190,25 @@ function setStatus(message, { error = false, loading = false } = {}) {
     if (error && message) showToast(message, true, 4500, elements.toast);
 }
 
+function isProviderSnapshotStale(value = manifest) {
+    const refreshAfter = Date.parse(value?.refreshAfter || "");
+    return Number.isFinite(refreshAfter) && Date.now() > refreshAfter + (4 * 60 * 60 * 1000);
+}
+
 function renderMetadata() {
     if (!manifest) {
         elements.meta.textContent = "Calendar status is unavailable.";
         return;
     }
+    const isProviderStale = isProviderSnapshotStale();
     const parts = [`Last checked ${formatDateTime(manifest.checkedAt)}`];
     if (manifest.changedAt && manifest.changedAt !== manifest.checkedAt) {
         parts.push(`calendar changed ${formatDateTime(manifest.changedAt)}`);
     }
     if (manifest.constituentVersion) parts.push(`constituents ${manifest.constituentVersion}`);
+    if (isProviderStale) parts.push("provider refresh overdue");
     elements.meta.textContent = parts.join(" · ");
 
-    const refreshAfter = Date.parse(manifest.refreshAfter || "");
-    const isProviderStale = Number.isFinite(refreshAfter) && Date.now() > refreshAfter + (4 * 60 * 60 * 1000);
     if (isProviderStale && !staleWarningShown) {
         staleWarningShown = true;
         showToast(
@@ -820,6 +825,14 @@ async function ensureInitialWindow({ force = false } = {}) {
         return !entry?.isFresh || !week || week.weekRevision !== weekRevision(start);
     });
     if (!needsRequest) return;
+    const canRevalidateIndividually = !force && starts.every((start) => (
+        loadedEntries.get(start)?.version
+        && loadedWeeks.get(start)?.weekRevision === weekRevision(start)
+    ));
+    if (canRevalidateIndividually) {
+        await Promise.all(starts.map((start) => ensureWeek(start)));
+        return;
+    }
     await fetchWeekRange(first, 3, null, { cacheMode: force ? "reload" : "default" });
 }
 
@@ -861,6 +874,7 @@ async function selectWeek(start) {
 }
 
 async function refreshVisibleData() {
+    const previousCheckedAt = manifest?.checkedAt || null;
     elements.refresh.disabled = true;
     elements.refreshLabel.textContent = "Refreshing…";
     try {
@@ -869,12 +883,23 @@ async function refreshVisibleData() {
         await hydrateInitialCache();
         await ensureWeek(selectedWeekStart, { force: true });
         renderWeek();
-        showToast("Calendar data refreshed.", false, 2500, elements.toast);
+        if (isProviderSnapshotStale()) {
+            showToast(
+                "Snapshot reloaded, but the scheduled provider refresh is still overdue.",
+                true,
+                5500,
+                elements.toast,
+            );
+        } else if (manifest?.checkedAt && manifest.checkedAt !== previousCheckedAt) {
+            showToast("A newer calendar snapshot was loaded.", false, 2500, elements.toast);
+        } else {
+            showToast("The calendar snapshot is already current.", false, 2500, elements.toast);
+        }
     } catch (error) {
         setStatus(loadedWeeks.has(selectedWeekStart) ? `Showing cached data. ${error.message}` : error.message, { error: true });
     } finally {
         elements.refresh.disabled = false;
-        elements.refreshLabel.textContent = "Refresh data";
+        elements.refreshLabel.textContent = "Reload snapshot";
     }
 }
 
