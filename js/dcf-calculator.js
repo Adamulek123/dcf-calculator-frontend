@@ -4,6 +4,20 @@ import { debounce, fetchTickers, getTickerMetadata, isValidTicker, showTickerSug
 import { createChart } from "./charts.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 import { CACHE_STALE_TTL, CACHE_TTL, createUserDataStore } from "./data-store.js";
+import {
+    CALCULATION_LIMITS,
+    calculateProjection,
+    classifyMetric,
+    discardOutboxOperation,
+    mergeRemoteCalculations,
+    normalizeOutboxOperations,
+    optionalNumber,
+    outboxSummary,
+    parseApiError,
+    queueOutboxOperation,
+    retryOutboxOperation,
+    synchronizeOutboxOperations,
+} from "./dcf-core.js";
 
 window.addEventListener("DOMContentLoaded", async () => {
     const tickerInput = document.getElementById("tickerInput");
@@ -22,12 +36,14 @@ window.addEventListener("DOMContentLoaded", async () => {
     const currentPe = document.getElementById("currentPe");
     const epsGrowth = document.getElementById("epsGrowth");
     const epsTtmInput = document.getElementById("epsTtmInput");
+    const epsTtmHelp = document.getElementById("epsTtmHelp");
     const growthRateInput = document.getElementById("growthRateInput");
     const peMultipleInput = document.getElementById("peMultipleInput");
     const currentFcfShare = document.getElementById("currentFcfShare");
     const fcfYield = document.getElementById("fcfYield");
     const sbcImpact = document.getElementById("sbcImpact");
     const fcfShareInput = document.getElementById("fcfShareInput");
+    const fcfShareHelp = document.getElementById("fcfShareHelp");
     const fcfGrowthRateInput = document.getElementById("fcfGrowthRateInput");
     const fcfYieldInput = document.getElementById("fcfYieldInput");
     const desiredReturnInput = document.getElementById("desiredReturnInput");
@@ -43,6 +59,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     const clearBtn = document.getElementById("clearBtn");
     const loadCalculationsBtn = document.getElementById("loadCalculationsBtn");
     const savedCalculationsContainer = document.getElementById("savedCalculationsContainer");
+    const syncIssuesPanel = document.getElementById("syncIssuesPanel");
+    const syncIssuesContainer = document.getElementById("syncIssuesContainer");
+    const syncIssueCount = document.getElementById("syncIssueCount");
     const toastContainer = document.getElementById("toast-container");
     const confirmationModal = document.getElementById("confirmationModal");
     const modalMessage = document.getElementById("modalMessage");
@@ -87,7 +106,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     };
 
     const SAFE_TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
-
     let currentStockPrice = 0;
     let currentTicker = "";
     let activeTab = "earnings";
@@ -96,13 +114,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     let modalCallback = null;
     let calculationStore = null;
     let savedCalculations = [];
+    let calculationOutbox = [];
     let syncingCalculationOutbox = false;
     let metricsLoadGeneration = 0;
     let hasValidCalculation = false;
     let modalReturnFocus = null;
+    let editingCalculationId = null;
 
-    const formatNum = (num, prefix = "", suffix = "") => (typeof num === "number" && !Number.isNaN(num) ? `${prefix}${num.toFixed(2)}${suffix}` : "N/A");
-    const formatPercent = (num) => (typeof num === "number" && !Number.isNaN(num) ? `${(num * 100).toFixed(2)}%` : "N/A");
+    const formatNum = (num, prefix = "", suffix = "") => (Number.isFinite(num) ? `${prefix}${num.toFixed(2)}${suffix}` : "N/A");
+    const formatPercent = (num) => (Number.isFinite(num) ? `${(num * 100).toFixed(2)}%` : "N/A");
 
     function announce(message) {
         if (!dcfLiveStatus) return;
@@ -162,30 +182,85 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (announceChange) announce(message);
     }
 
-    function setManualMetricEntry(enabled) {
-        epsTtmInput.readOnly = !enabled;
-        fcfShareInput.readOnly = !enabled;
+    function setManualMetricEntry({ earnings = false, cashFlow = false } = {}) {
+        epsTtmInput.readOnly = !earnings;
+        fcfShareInput.readOnly = !cashFlow;
+        epsTtmInput.dataset.metricState = earnings ? "missing" : "usable";
+        fcfShareInput.dataset.metricState = cashFlow ? "missing" : "usable";
+        if (epsTtmHelp) {
+            epsTtmHelp.textContent = earnings
+                ? "Trailing EPS is unavailable. Enter a positive value manually."
+                : "Loaded from trailing earnings.";
+        }
+        if (fcfShareHelp) {
+            fcfShareHelp.textContent = cashFlow
+                ? "FCF per share is unavailable. Enter a positive value manually."
+                : "Loaded from trailing free cash flow.";
+        }
+    }
+
+    function resetMetricSummary() {
+        currentEps.textContent = "N/A";
+        currentPe.textContent = "N/A";
+        epsGrowth.textContent = "N/A";
+        currentFcfShare.textContent = "N/A";
+        fcfYield.textContent = "N/A";
+        sbcImpact.textContent = "N/A";
+    }
+
+    function configureMetricInput(input, help, metric, label) {
+        input.dataset.metricState = metric.state;
+        if (metric.state === "usable") {
+            input.value = metric.value.toFixed(2);
+            input.readOnly = true;
+            help.textContent = `Loaded from trailing ${label}.`;
+            return;
+        }
+        input.readOnly = false;
+        if (metric.state === "missing") {
+            input.value = "";
+            help.textContent = `Trailing ${label} is unavailable. Enter a positive value manually.`;
+            return;
+        }
+        input.value = metric.value.toFixed(2);
+        help.textContent = `Reported ${label} is ${metric.value.toFixed(2)} and is not suitable for this model. Enter a positive manual override.`;
+    }
+
+    function refreshManualMetricHelp(input, help, label) {
+        if (input.readOnly) return;
+        const current = classifyMetric(input.value);
+        if (current.state === "usable") {
+            help.textContent = `Using a positive manual ${label} override.`;
+        } else if (input.dataset.metricState === "nonpositive") {
+            help.textContent = `The reported ${label} is non-positive. Enter a positive manual override.`;
+        } else {
+            help.textContent = `Trailing ${label} is unavailable. Enter a positive value manually.`;
+        }
     }
 
     function validateCalculationInputs() {
         clearValidation();
         const fields = activeTab === "earnings"
             ? [
-                [epsTtmInput, "Enter current EPS."],
-                [growthRateInput, "Enter an EPS growth rate."],
-                [peMultipleInput, "Enter a terminal P/E greater than zero.", true],
+                [epsTtmInput, "Enter a positive current EPS.", CALCULATION_LIMITS.metric],
+                [growthRateInput, "Enter EPS growth between -100% and 1,000,000%.", CALCULATION_LIMITS.growthRate],
+                [peMultipleInput, "Enter a terminal P/E greater than zero.", CALCULATION_LIMITS.terminalValue],
             ]
             : [
-                [fcfShareInput, "Enter current free cash flow per share."],
-                [fcfGrowthRateInput, "Enter an FCF growth rate."],
-                [fcfYieldInput, "Enter a terminal FCF yield greater than zero.", true],
+                [fcfShareInput, "Enter positive free cash flow per share.", CALCULATION_LIMITS.metric],
+                [fcfGrowthRateInput, "Enter FCF growth between -100% and 1,000,000%.", CALCULATION_LIMITS.growthRate],
+                [fcfYieldInput, "Enter a terminal FCF yield greater than zero.", CALCULATION_LIMITS.terminalValue],
             ];
-        fields.push([desiredReturnInput, "Enter the annual return you require."]);
+        fields.push([
+            desiredReturnInput,
+            "Enter a desired return between -99.99% and 1,000,000%.",
+            CALCULATION_LIMITS.desiredReturn,
+        ]);
 
         let firstInvalid = null;
-        fields.forEach(([input, message, mustBePositive = false]) => {
+        fields.forEach(([input, message, limits]) => {
             const value = Number.parseFloat(input.value);
-            if (!Number.isFinite(value) || (mustBePositive && value <= 0)) {
+            if (!Number.isFinite(value) || value < limits.min || value > limits.max) {
                 input.setAttribute("aria-invalid", "true");
                 const errorElement = validationErrors.get(input);
                 if (errorElement) {
@@ -244,17 +319,17 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (companyExchange) companyExchange.textContent = "—";
         if (currentStockPriceDisplay) currentStockPriceDisplay.textContent = "—";
 
-        if (currentEps) currentEps.textContent = "$0.00";
-        if (currentPe) currentPe.textContent = "0.00";
-        if (epsGrowth) epsGrowth.textContent = "0.0%";
-        if (epsTtmInput) epsTtmInput.value = "0.00";
+        if (currentEps) currentEps.textContent = "N/A";
+        if (currentPe) currentPe.textContent = "N/A";
+        if (epsGrowth) epsGrowth.textContent = "N/A";
+        if (epsTtmInput) epsTtmInput.value = "";
         if (growthRateInput) growthRateInput.value = "";
         if (peMultipleInput) peMultipleInput.value = "";
 
-        if (currentFcfShare) currentFcfShare.textContent = "$0.00";
-        if (fcfYield) fcfYield.textContent = "0.0%";
-        if (sbcImpact) sbcImpact.textContent = "0.0%";
-        if (fcfShareInput) fcfShareInput.value = "0.00";
+        if (currentFcfShare) currentFcfShare.textContent = "N/A";
+        if (fcfYield) fcfYield.textContent = "N/A";
+        if (sbcImpact) sbcImpact.textContent = "N/A";
+        if (fcfShareInput) fcfShareInput.value = "";
         if (fcfGrowthRateInput) fcfGrowthRateInput.value = "";
         if (fcfYieldInput) fcfYieldInput.value = "";
 
@@ -274,7 +349,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         currentTicker = "";
         currentStockPrice = 0;
         hasValidCalculation = false;
-        setManualMetricEntry(false);
+        setManualMetricEntry();
         if (saveCalculationBtn) saveCalculationBtn.disabled = true;
         setModelState("Waiting for ticker", "idle");
         setMarketState("Search a ticker to load current market data.", "idle");
@@ -317,13 +392,20 @@ window.addEventListener("DOMContentLoaded", async () => {
     async function readCalculationOutbox(store = calculationStore) {
         if (!store) return [];
         const entry = await store.get(store.keys.calculationOutbox());
-        return Array.isArray(entry?.data?.operations) ? entry.data.operations : [];
+        const operations = normalizeOutboxOperations(entry?.data?.operations);
+        if (JSON.stringify(entry?.data?.operations || []) !== JSON.stringify(operations)) {
+            await writeCalculationOutbox(operations, store);
+        }
+        if (store === calculationStore) calculationOutbox = operations;
+        return operations;
     }
 
     async function writeCalculationOutbox(operations, store = calculationStore) {
         if (!store) return;
+        const normalized = normalizeOutboxOperations(operations);
+        if (store === calculationStore) calculationOutbox = normalized;
         await store.set(store.keys.calculationOutbox(), {
-            operations: Array.isArray(operations) ? operations : [],
+            operations: normalized,
         }, {
             ttlMs: CACHE_TTL.calculationOutbox,
             staleTtlMs: CACHE_STALE_TTL.calculationOutbox,
@@ -332,19 +414,25 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     async function queueCalculationOperation(operation) {
         const operations = await readCalculationOutbox();
-        const withoutSameCalculation = operations.filter((item) => item.calculationId !== operation.calculationId);
-        withoutSameCalculation.push({ ...operation, queuedAt: new Date().toISOString() });
-        await writeCalculationOutbox(withoutSameCalculation);
+        await writeCalculationOutbox(queueOutboxOperation(operations, operation));
+        await renderSyncIssues();
     }
 
-    async function syncCalculationOutbox() {
-        if (!calculationStore || syncingCalculationOutbox) return false;
+    async function syncCalculationOutbox({ notifyRejected = false } = {}) {
+        if (!calculationStore) return { pendingCount: 0, rejected: [], newlyRejected: [], processed: [] };
+        if (syncingCalculationOutbox) {
+            const summary = outboxSummary(await readCalculationOutbox());
+            return { ...summary, newlyRejected: [], processed: [] };
+        }
         const store = calculationStore;
         syncingCalculationOutbox = true;
         try {
-            let operations = await readCalculationOutbox(store);
-            while (operations.length) {
-                const operation = operations[0];
+            const result = await synchronizeOutboxOperations(
+                await readCalculationOutbox(store),
+                {
+                    shouldContinue: () => calculationStore === store,
+                    persist: (operations) => writeCalculationOutbox(operations, store),
+                    send: async (operation) => {
                 const response = operation.type === "save"
                     ? await guardedApiCall("/save_calculation", {
                         method: "POST",
@@ -358,37 +446,55 @@ window.addEventListener("DOMContentLoaded", async () => {
                     : await guardedApiCall(`/delete_calculation/${encodeURIComponent(operation.calculationId)}`, {
                         method: "DELETE",
                     });
-                if (!response || !response.ok) break;
-                if (calculationStore !== store) return false;
-                operations = operations.slice(1);
-                await writeCalculationOutbox(operations, store);
+                        if (!response) return null;
+                        let body = {};
+                        try {
+                            body = await response.clone().json();
+                        } catch {
+                            // Status still determines whether the operation is retryable.
+                        }
+                        return { ok: response.ok, status: response.status, body };
+                    },
+                },
+            );
+            if (notifyRejected && result.newlyRejected.length) {
+                const count = result.newlyRejected.length;
+                showToast(
+                    `${count} saved-model operation${count === 1 ? " needs" : "s need"} attention. Review Sync issues.`,
+                    true,
+                    5000,
+                    toastContainer,
+                );
+                announce("Some saved-model changes need correction before they can be synchronized.");
             }
-            return operations.length === 0;
+            await renderSyncIssues(result.operations);
+            return result;
         } catch (error) {
             console.warn("Calculation sync is unavailable; preserving the outbox.", error);
-            return false;
+            const summary = outboxSummary(await readCalculationOutbox(store));
+            return { ...summary, newlyRejected: [], processed: [] };
         } finally {
             syncingCalculationOutbox = false;
         }
     }
 
-    function captureCalculationData() {
+    function captureCalculationData(calculationId = null) {
         return {
-            id: `${currentTicker || "UNSET"}-${Date.now()}`,
+            id: calculationId || `${currentTicker || "UNSET"}-${Date.now()}`,
             ticker: tickerInput.value.trim().toUpperCase(),
             currentStockPrice,
             activeTab,
             earnings: {
-                epsTtm: parseFloat(epsTtmInput.value),
-                growthRate: parseFloat(growthRateInput.value),
-                peMultiple: parseFloat(peMultipleInput.value)
+                epsTtm: optionalNumber(epsTtmInput.value),
+                growthRate: optionalNumber(growthRateInput.value),
+                peMultiple: optionalNumber(peMultipleInput.value)
             },
             cashFlow: {
-                fcfShare: parseFloat(fcfShareInput.value),
-                fcfGrowthRate: parseFloat(fcfGrowthRateInput.value),
-                fcfYield: parseFloat(fcfYieldInput.value)
+                fcfShare: optionalNumber(fcfShareInput.value),
+                fcfGrowthRate: optionalNumber(fcfGrowthRateInput.value),
+                fcfYield: optionalNumber(fcfYieldInput.value)
             },
-            desiredReturn: parseFloat(desiredReturnInput.value),
+            desiredReturn: optionalNumber(desiredReturnInput.value),
             results: {
                 returnFromToday: returnFromTodayDisplay.textContent,
                 entryPrice: entryPriceDisplay.textContent,
@@ -411,6 +517,9 @@ window.addEventListener("DOMContentLoaded", async () => {
             return;
         }
         const fragment = document.createDocumentFragment();
+        const rejectedSaveIds = new Set(calculationOutbox
+            .filter((operation) => operation.type === "save" && operation.status === "rejected")
+            .map((operation) => operation.calculationId));
         calculations
             .slice()
             .reverse()
@@ -434,6 +543,12 @@ window.addEventListener("DOMContentLoaded", async () => {
                 div.appendChild(strong);
                 div.appendChild(p);
                 div.appendChild(method);
+                if (rejectedSaveIds.has(calc.id)) {
+                    const badge = document.createElement("span");
+                    badge.className = "dcf-sync-issue-badge";
+                    badge.textContent = "Sync issue";
+                    div.appendChild(badge);
+                }
 
                 const btnGroup = document.createElement("div");
                 btnGroup.className = "dcf-saved-item-actions";
@@ -458,6 +573,67 @@ window.addEventListener("DOMContentLoaded", async () => {
             });
         savedCalculationsContainer.textContent = "";
         savedCalculationsContainer.appendChild(fragment);
+    }
+
+    async function renderSyncIssues(operations = null) {
+        if (!syncIssuesPanel || !syncIssuesContainer) return;
+        const source = operations || await readCalculationOutbox();
+        const rejected = normalizeOutboxOperations(source)
+            .filter((operation) => operation.status === "rejected");
+        syncIssuesPanel.hidden = rejected.length === 0;
+        if (syncIssueCount) {
+            syncIssueCount.textContent = String(rejected.length);
+        }
+        syncIssuesContainer.textContent = "";
+        rejected.forEach((operation) => {
+            const article = document.createElement("article");
+            article.className = "dcf-sync-issue";
+
+            const heading = document.createElement("div");
+            const label = document.createElement("strong");
+            label.textContent = `${operation.type === "save" ? "Save" : "Delete"} · ${operation.snapshot?.ticker || operation.calculationId}`;
+            const id = document.createElement("small");
+            id.textContent = operation.calculationId;
+            heading.append(label, id);
+
+            const reason = document.createElement("p");
+            reason.textContent = operation.error?.detail || "The server rejected this operation.";
+
+            const actions = document.createElement("div");
+            actions.className = "dcf-sync-issue-actions";
+            const retry = document.createElement("button");
+            retry.type = "button";
+            retry.className = "retry-sync-issue";
+            retry.dataset.id = operation.calculationId;
+            retry.textContent = "Retry";
+            actions.appendChild(retry);
+
+            if (operation.type === "save") {
+                const edit = document.createElement("button");
+                edit.type = "button";
+                edit.className = "edit-sync-issue";
+                edit.dataset.id = operation.calculationId;
+                edit.textContent = "Edit";
+                const discard = document.createElement("button");
+                discard.type = "button";
+                discard.className = "discard-sync-issue";
+                discard.dataset.id = operation.calculationId;
+                discard.textContent = "Delete local";
+                actions.prepend(edit);
+                actions.appendChild(discard);
+            } else {
+                const restore = document.createElement("button");
+                restore.type = "button";
+                restore.className = "restore-sync-issue";
+                restore.dataset.id = operation.calculationId;
+                restore.textContent = "Restore";
+                actions.appendChild(restore);
+            }
+
+            article.append(heading, reason, actions);
+            syncIssuesContainer.appendChild(article);
+        });
+        renderSavedCalculations();
     }
 
     async function guardedApiCall(endpoint, options = {}) {
@@ -488,6 +664,23 @@ window.addEventListener("DOMContentLoaded", async () => {
         setButtonState(getCurrentDataBtn, "Load market data", false);
     }
 
+    function enterManualMetricsMode(ticker, message) {
+        resetMetricSummary();
+        companyInfoDiv.classList.remove("hidden-state");
+        renderCompanyLogo(ticker, ticker);
+        companyName.textContent = ticker;
+        renderCompanyExchange(ticker);
+        currentStockPrice = 0;
+        currentStockPriceDisplay.textContent = "Unavailable";
+        currentTicker = ticker;
+        epsTtmInput.value = "";
+        fcfShareInput.value = "";
+        setManualMetricEntry({ earnings: true, cashFlow: true });
+        setModelState("Manual assumptions", "manual");
+        setMarketState(message, "manual");
+        announce(message);
+    }
+
     async function fetchAndPopulateMetrics() {
         const ticker = tickerInput.value.trim().toUpperCase();
         const loadGeneration = ++metricsLoadGeneration;
@@ -509,6 +702,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         announce(`Loading current market data for ${ticker}.`);
         projectionPlaceholder.classList.remove("hidden");
         projectionOutput.classList.add("hidden");
+        resetMetricSummary();
+        currentStockPriceDisplay.textContent = "—";
         if (dcfProjectionChart) {
             dcfProjectionChart.destroy();
             dcfProjectionChart = null;
@@ -518,17 +713,10 @@ window.addEventListener("DOMContentLoaded", async () => {
             const response = await guardedApiCall(`/get_trailing_metrics?ticker=${ticker}`);
             if (!isCurrentLoad()) return;
             if (!response) {
-                companyInfoDiv.classList.remove("hidden-state");
-                renderCompanyLogo(ticker, ticker);
-                companyName.textContent = ticker;
-                renderCompanyExchange(ticker);
-                currentStockPrice = 0;
-                currentStockPriceDisplay.textContent = "Unavailable";
-                currentTicker = ticker;
-                setManualMetricEntry(true);
-                setModelState("Manual assumptions", "manual");
-                setMarketState("Market data is unavailable. Enter EPS or FCF per share manually to continue.", "manual");
-                announce("Market data is unavailable. Manual assumption entry is enabled.");
+                enterManualMetricsMode(
+                    ticker,
+                    "Market data is unavailable. Enter EPS or FCF per share manually to continue.",
+                );
                 showToast("Backend unavailable. Enter assumptions manually.", true, 3500, toastContainer);
                 return;
             }
@@ -536,34 +724,70 @@ window.addEventListener("DOMContentLoaded", async () => {
             const data = await response.json();
             if (!isCurrentLoad()) return;
             if (!response.ok) {
-                throw new Error(data.error || "Failed to fetch data");
+                const responseError = new Error(data.error || "Failed to fetch data");
+                responseError.status = response.status;
+                responseError.code = data.code || null;
+                throw responseError;
             }
 
             companyInfoDiv.classList.remove("hidden-state");
-            setManualMetricEntry(false);
             renderCompanyLogo(ticker, data.longName || ticker);
             companyName.textContent = data.longName || ticker;
             renderCompanyExchange(ticker);
-            currentStockPrice = data.regularMarketPrice || 0;
-            currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+            currentStockPrice = Number.isFinite(data.regularMarketPrice) && data.regularMarketPrice > 0
+                ? data.regularMarketPrice
+                : 0;
+            currentStockPriceDisplay.textContent = currentStockPrice > 0
+                ? `$${currentStockPrice.toFixed(2)}`
+                : "Unavailable";
 
             currentEps.textContent = formatNum(data.trailing_eps, "$");
             currentPe.textContent = formatNum(data.trailing_pe);
             epsGrowth.textContent = formatPercent(data.trailing_eps_growth);
-            epsTtmInput.value = (data.trailing_eps || 0).toFixed(2);
+            const epsMetric = classifyMetric(data.trailing_eps);
+            configureMetricInput(epsTtmInput, epsTtmHelp, epsMetric, "EPS");
 
             currentFcfShare.textContent = formatNum(data.fcfShare, "$");
             fcfYield.textContent = formatPercent(data.fcfYield);
             sbcImpact.textContent = formatPercent(data.sbcImpact);
-            fcfShareInput.value = (data.fcfShare || 0).toFixed(2);
+            const fcfMetric = classifyMetric(data.fcfShare);
+            configureMetricInput(fcfShareInput, fcfShareHelp, fcfMetric, "FCF per share");
 
             currentTicker = ticker;
-            setModelState("Ready to calculate", "ready");
-            setMarketState(`Current market data loaded for ${data.longName || ticker}.`, "ready");
-            announce(`Current market data loaded for ${data.longName || ticker}.`);
-            showToast("Current data loaded successfully!", false, 3000, toastContainer);
+            const metricIssues = [
+                epsMetric.state !== "usable"
+                    ? `EPS is ${epsMetric.state === "missing" ? "unavailable" : "non-positive"}`
+                    : null,
+                fcfMetric.state !== "usable"
+                    ? `FCF per share is ${fcfMetric.state === "missing" ? "unavailable" : "non-positive"}`
+                    : null,
+            ].filter(Boolean);
+            if (metricIssues.length) {
+                const partialMessage = `Market data loaded for ${data.longName || ticker}, but ${metricIssues.join(" and ")}. Enter a positive manual override for the affected method.`;
+                setModelState("Manual input required", "manual");
+                setMarketState(partialMessage, "manual");
+                announce(partialMessage);
+                showToast("Some trailing metrics are unavailable. Complete them manually.", true, 4000, toastContainer);
+            } else {
+                setModelState("Ready to calculate", "ready");
+                setMarketState(`Current market data loaded for ${data.longName || ticker}.`, "ready");
+                announce(`Current market data loaded for ${data.longName || ticker}.`);
+                showToast("Current data loaded successfully!", false, 3000, toastContainer);
+            }
         } catch (error) {
             if (!isCurrentLoad()) return;
+            const canUseManualMode = error.code === "market_data_unavailable"
+                || error.code === "market_data_rate_limited"
+                || error.status === 429
+                || error.status >= 500;
+            if (canUseManualMode) {
+                enterManualMetricsMode(
+                    ticker,
+                    "The market-data provider is unavailable. Enter EPS or FCF per share manually, or retry later.",
+                );
+                showToast(`Market data unavailable: ${error.message}`, true, 4500, toastContainer);
+                return;
+            }
             setModelState("Data load failed", "error");
             setMarketState(`Market data could not be loaded: ${error.message}`, "error");
             announce("Market data could not be loaded. Check the ticker and try again.");
@@ -586,53 +810,57 @@ window.addEventListener("DOMContentLoaded", async () => {
         let growthRate;
         let targetMultiple;
         let calculationType;
-        let impliedCurrentMultiple;
 
         if (activeTab === "earnings") {
             currentMetric = parseFloat(epsTtmInput.value);
-            growthRate = parseFloat(growthRateInput.value) / 100;
+            growthRate = parseFloat(growthRateInput.value);
             targetMultiple = parseFloat(peMultipleInput.value);
             calculationType = "EPS";
-            impliedCurrentMultiple = currentMetric > 0 ? currentStockPrice / currentMetric : targetMultiple;
         } else {
             currentMetric = parseFloat(fcfShareInput.value);
-            growthRate = parseFloat(fcfGrowthRateInput.value) / 100;
-            targetMultiple = parseFloat(fcfYieldInput.value) / 100;
+            growthRate = parseFloat(fcfGrowthRateInput.value);
+            targetMultiple = parseFloat(fcfYieldInput.value);
             calculationType = "FCF";
-            impliedCurrentMultiple = currentStockPrice > 0 ? currentMetric / currentStockPrice : targetMultiple;
         }
-        const desiredReturn = parseFloat(desiredReturnInput.value) / 100;
-
-        projectionPlaceholder.classList.add("hidden");
-        projectionOutput.classList.remove("hidden");
-
-        const estimatedMetric5Yr = currentMetric * Math.pow(1 + growthRate, 5);
-        const estimatedPrice5Yr = calculationType === "EPS" ? estimatedMetric5Yr * targetMultiple : estimatedMetric5Yr / targetMultiple;
-        const returnFromToday = currentStockPrice > 0 ? (Math.pow(estimatedPrice5Yr / currentStockPrice, 1 / 5) - 1) * 100 : 0;
-        const entryPriceForDesiredReturn = estimatedPrice5Yr / Math.pow(1 + desiredReturn, 5);
-
-        returnFromTodayDisplay.textContent = `${returnFromToday.toFixed(2)}%`;
-        entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
-        desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`;
-        priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
-
-        const projectedPrices = [];
-        for (let i = 1; i <= 5; i += 1) {
-            const futureMetric = currentMetric * Math.pow(1 + growthRate, i);
-            const interpolatedMultiple = impliedCurrentMultiple + (targetMultiple - impliedCurrentMultiple) * (i / 5);
-            const futurePrice = calculationType === "EPS"
-                ? futureMetric * interpolatedMultiple
-                : (interpolatedMultiple > 0 ? futureMetric / interpolatedMultiple : 0);
-            projectedPrices.push(futurePrice);
+        const desiredReturnPercent = parseFloat(desiredReturnInput.value);
+        const projection = calculateProjection({
+            currentMetric,
+            growthRatePercent: growthRate,
+            terminalValue: targetMultiple,
+            desiredReturnPercent,
+            currentStockPrice,
+            method: activeTab,
+        });
+        if (!projection.valid) {
+            invalidateCalculation();
+            setModelState("Invalid calculation", "error");
+            announce("The assumptions produced a result that cannot be displayed. Review the values and try again.");
+            showToast("These assumptions produce an invalid or unbounded result.", true, 4000, toastContainer);
+            return;
         }
+        const {
+            estimatedPrice5Yr,
+            returnFromToday,
+            entryPriceForDesiredReturn,
+            projectedPrices,
+        } = projection;
+        const desiredReturn = desiredReturnPercent / 100;
+
+        const hasMarketPrice = currentStockPrice > 0;
+        const chartLabels = hasMarketPrice
+            ? ["Today", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"]
+            : ["Year 1", "Year 2", "Year 3", "Year 4", "Year 5"];
+        const chartPrices = hasMarketPrice
+            ? [currentStockPrice, ...projectedPrices]
+            : projectedPrices;
 
         try {
             if (dcfProjectionChart) {
                 dcfProjectionChart.destroy();
             }
             dcfProjectionChart = createChart(priceChartCanvas, "Projected Price Growth", {
-                labels: ["Today", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"],
-                data: [currentStockPrice, ...projectedPrices],
+                labels: chartLabels,
+                data: chartPrices,
                 type: "line",
                 backgroundColor: "rgba(22, 139, 120, .10)",
                 borderColor: "#168b78"
@@ -646,8 +874,19 @@ window.addEventListener("DOMContentLoaded", async () => {
                 },
             });
         } catch (error) {
+            invalidateCalculation();
+            setModelState("Chart unavailable", "error");
+            announce("The valuation chart could not be created. The result was not saved.");
             showToast(`Chart error: ${error.message}`, true, 3000, toastContainer);
+            return;
         }
+
+        projectionPlaceholder.classList.add("hidden");
+        projectionOutput.classList.remove("hidden");
+        returnFromTodayDisplay.textContent = returnFromToday === null ? "N/A" : `${returnFromToday.toFixed(2)}%`;
+        entryPriceDisplay.textContent = `$${entryPriceForDesiredReturn.toFixed(2)}`;
+        desiredReturnDisplay.textContent = `${(desiredReturn * 100).toFixed(2)}%`;
+        priceAfter5YearsDisplay.textContent = `$${estimatedPrice5Yr.toFixed(2)}`;
 
         hasValidCalculation = true;
         if (saveCalculationBtn) saveCalculationBtn.disabled = false;
@@ -676,27 +915,50 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
         setModelState("Saving model", "loading");
         saveCalculationBtn.disabled = true;
-        const snapshot = captureCalculationData();
-        const existing = [...savedCalculations];
-        existing.push(snapshot);
-        await writeSavedCalculations(existing);
-        renderSavedCalculations(existing);
-        await queueCalculationOperation({
-            type: "save",
-            calculationId: snapshot.id,
-            snapshot,
-        });
-        const synced = await syncCalculationOutbox();
-        saveCalculationBtn.disabled = false;
-        setModelState("Valuation calculated", "calculated");
-        const saveMessage = synced ? "Model saved and synchronized." : "Model saved locally and waiting to synchronize.";
-        announce(saveMessage);
-        showToast(synced ? "Saved successfully." : "Saved locally; waiting to sync.", false, 3000, toastContainer);
+        try {
+            const snapshot = captureCalculationData(editingCalculationId);
+            const existing = savedCalculations.filter((item) => item.id !== snapshot.id);
+            existing.push(snapshot);
+            await writeSavedCalculations(existing);
+            renderSavedCalculations(existing);
+            await queueCalculationOperation({
+                type: "save",
+                calculationId: snapshot.id,
+                snapshot,
+            });
+            const syncResult = await syncCalculationOutbox();
+            const rejectedSave = syncResult.rejected.find((item) => item.calculationId === snapshot.id);
+            if (rejectedSave) {
+                setModelState("Saved locally — correction required", "error");
+                announce("The model was saved locally, but the server rejected it. Review the Sync issues panel to correct it.");
+                showToast(`Saved locally, but synchronization was rejected: ${rejectedSave.error?.detail}`, true, 5000, toastContainer);
+                return;
+            }
+            editingCalculationId = null;
+            setModelState("Valuation calculated", "calculated");
+            const saveProcessed = syncResult.processed.some((item) => item.calculationId === snapshot.id);
+            const saveMessage = saveProcessed
+                ? "Model saved and synchronized."
+                : "Model saved locally and waiting to synchronize.";
+            announce(saveMessage);
+            showToast(
+                saveProcessed ? "Saved successfully." : "Saved locally; waiting to sync.",
+                false,
+                3000,
+                toastContainer,
+            );
+        } catch (error) {
+            setModelState("Save failed", "error");
+            announce("The model could not be saved locally.");
+            showToast(`Save failed: ${error.message}`, true, 4000, toastContainer);
+        } finally {
+            saveCalculationBtn.disabled = !hasValidCalculation;
+        }
     }
 
     async function loadSavedCalculations() {
         if (!calculationStore) return;
-        await syncCalculationOutbox();
+        await syncCalculationOutbox({ notifyRejected: true });
         renderSavedCalculations(savedCalculations);
 
         const response = await guardedApiCall("/load_calculations");
@@ -718,18 +980,12 @@ window.addEventListener("DOMContentLoaded", async () => {
             return;
         }
 
-        const local = [...savedCalculations];
-        const localIds = new Set(local.map((c) => c.id));
-        const pendingDeletes = new Set((await readCalculationOutbox())
-            .filter((operation) => operation.type === "delete")
-            .map((operation) => operation.calculationId));
-        let added = 0;
-        backendItems.forEach((item) => {
-            if (item.data && !pendingDeletes.has(item.data.id) && !localIds.has(item.data.id)) {
-                local.push(item.data);
-                added++;
-            }
-        });
+        const local = mergeRemoteCalculations(
+            savedCalculations,
+            backendItems.map((item) => item.data || item),
+            await readCalculationOutbox(),
+        );
+        const added = Math.max(0, local.length - savedCalculations.length);
         if (added > 0) {
             await writeSavedCalculations(local);
             renderSavedCalculations(local);
@@ -760,25 +1016,50 @@ window.addEventListener("DOMContentLoaded", async () => {
     async function deleteCalculation(calcId) {
         if (!calculationStore) return;
         const existing = [...savedCalculations];
+        const removedSnapshot = existing.find((calculation) => calculation.id === calcId) || null;
         const updated = existing.filter((c) => c.id !== calcId);
         await writeSavedCalculations(updated);
         renderSavedCalculations(updated);
-        await queueCalculationOperation({ type: "delete", calculationId: calcId });
-        const synced = await syncCalculationOutbox();
-        showToast(synced ? "Deleted successfully." : "Deleted locally; waiting to sync.", false, 3000, toastContainer);
-        announce(synced ? "Saved model deleted and synchronized." : "Saved model deleted locally and waiting to synchronize.");
+        await queueCalculationOperation({
+            type: "delete",
+            calculationId: calcId,
+            snapshot: removedSnapshot,
+        });
+        const syncResult = await syncCalculationOutbox();
+        const rejectedDelete = syncResult.rejected.find((item) => item.calculationId === calcId);
+        if (rejectedDelete) {
+            showToast(`Removed locally; server cleanup was rejected: ${rejectedDelete.error?.detail}`, true, 5000, toastContainer);
+            announce("The model was removed locally, but server cleanup was rejected.");
+            return;
+        }
+        const deleteProcessed = syncResult.processed.some((item) => item.calculationId === calcId);
+        showToast(deleteProcessed ? "Deleted successfully." : "Deleted locally; waiting to sync.", false, 3000, toastContainer);
+        announce(deleteProcessed ? "Saved model deleted and synchronized." : "Saved model deleted locally and waiting to synchronize.");
     }
 
-    function populateFormWithCalculationData(data) {
+    function setEditingCalculation(calculationId = null) {
+        editingCalculationId = calculationId;
+        if (saveCalculationBtn) {
+            saveCalculationBtn.textContent = calculationId ? "Save correction" : "Save";
+        }
+    }
+
+    function populateFormWithCalculationData(data, { editRejected = false } = {}) {
+        setEditingCalculation(editRejected ? data.id : null);
         tickerInput.value = data.ticker || "";
         currentTicker = data.ticker || "";
-        currentStockPrice = Number(data.currentStockPrice || 0);
-        currentStockPriceDisplay.textContent = `$${currentStockPrice.toFixed(2)}`;
+        const savedMarketPrice = Number(data.currentStockPrice);
+        currentStockPrice = Number.isFinite(savedMarketPrice) && savedMarketPrice > 0
+            ? savedMarketPrice
+            : 0;
+        currentStockPriceDisplay.textContent = currentStockPrice > 0
+            ? `$${currentStockPrice.toFixed(2)}`
+            : "Unavailable";
         companyInfoDiv.classList.remove("hidden-state");
         renderCompanyLogo(currentTicker, currentTicker || "Saved calculation");
         companyName.textContent = currentTicker || "Saved calculation";
         renderCompanyExchange(currentTicker);
-        setManualMetricEntry(false);
+        resetMetricSummary();
         setMarketState("Saved model loaded from your research file.", "ready");
 
         if (data.activeTab === "cashFlow") {
@@ -787,10 +1068,14 @@ window.addEventListener("DOMContentLoaded", async () => {
             switchTab("earnings");
         }
 
-        epsTtmInput.value = Number(data.earnings?.epsTtm || 0).toFixed(2);
+        const savedEps = classifyMetric(data.earnings?.epsTtm);
+        const savedFcf = classifyMetric(data.cashFlow?.fcfShare);
+        currentEps.textContent = formatNum(savedEps.value, "$");
+        currentFcfShare.textContent = formatNum(savedFcf.value, "$");
+        configureMetricInput(epsTtmInput, epsTtmHelp, savedEps, "EPS");
         growthRateInput.value = data.earnings?.growthRate ?? "";
         peMultipleInput.value = data.earnings?.peMultiple ?? "";
-        fcfShareInput.value = Number(data.cashFlow?.fcfShare || 0).toFixed(2);
+        configureMetricInput(fcfShareInput, fcfShareHelp, savedFcf, "FCF per share");
         fcfGrowthRateInput.value = data.cashFlow?.fcfGrowthRate ?? "";
         fcfYieldInput.value = data.cashFlow?.fcfYield ?? "";
         desiredReturnInput.value = data.desiredReturn ?? "";
@@ -843,7 +1128,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         companyInfoDiv.classList.add("hidden-state");
         if (companyExchange) companyExchange.textContent = "—";
         currentStockPriceDisplay.textContent = "—";
-        setManualMetricEntry(false);
+        setManualMetricEntry();
         setMarketState("Ticker changed. Load market data for the new company.", "idle");
         invalidateCalculation("Ticker changed. Load market data and recalculate.", false);
         hideTickerSuggestions(tickerAutocomplete);
@@ -933,6 +1218,67 @@ window.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    syncIssuesContainer?.addEventListener("click", async (event) => {
+        const button = event.target.closest("button[data-id]");
+        if (!button || !calculationStore) return;
+        const calculationId = button.dataset.id;
+        const operations = await readCalculationOutbox();
+        const operation = operations.find((item) => item.calculationId === calculationId);
+        if (!operation) {
+            await renderSyncIssues(operations);
+            return;
+        }
+
+        if (button.classList.contains("edit-sync-issue") && operation.snapshot) {
+            invalidateMetricsLoad();
+            populateFormWithCalculationData(operation.snapshot, { editRejected: true });
+            document.getElementById("assumptionsTitle")?.scrollIntoView({ behavior: "smooth", block: "start" });
+            showToast("Rejected model loaded. Correct it and save the correction.", false, 3500, toastContainer);
+            return;
+        }
+
+        if (button.classList.contains("retry-sync-issue")) {
+            await writeCalculationOutbox(retryOutboxOperation(operations, calculationId));
+            await renderSyncIssues();
+            const result = await syncCalculationOutbox({ notifyRejected: true });
+            const succeeded = result.processed.some((item) => item.calculationId === calculationId);
+            const rejectedAgain = result.rejected.some((item) => item.calculationId === calculationId);
+            showToast(
+                succeeded
+                    ? "Operation synchronized."
+                    : rejectedAgain
+                        ? "The server rejected this operation again. Edit it or review the error."
+                        : "Retry is still waiting for the service.",
+                !succeeded,
+                3500,
+                toastContainer,
+            );
+            return;
+        }
+
+        if (button.classList.contains("restore-sync-issue") && operation.snapshot) {
+            const restored = savedCalculations.filter((item) => item.id !== calculationId);
+            restored.push(operation.snapshot);
+            await writeSavedCalculations(restored);
+            await writeCalculationOutbox(discardOutboxOperation(operations, calculationId));
+            await renderSyncIssues();
+            showToast("The locally deleted model was restored.", false, 3000, toastContainer);
+            return;
+        }
+
+        if (button.classList.contains("discard-sync-issue")) {
+            showConfirmationModal(
+                "This removes the rejected local model and its synchronization issue. This cannot be undone.",
+                async () => {
+                    await writeSavedCalculations(savedCalculations.filter((item) => item.id !== calculationId));
+                    await writeCalculationOutbox(discardOutboxOperation(await readCalculationOutbox(), calculationId));
+                    await renderSyncIssues();
+                    showToast("Rejected local model removed.", false, 3000, toastContainer);
+                },
+            );
+        }
+    });
+
     if (confirmYesBtn) {
         confirmYesBtn.addEventListener("click", () => {
             if (modalCallback) modalCallback();
@@ -962,6 +1308,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     assumptionInputs.forEach((input) => {
         input?.addEventListener("input", () => {
             clearValidation();
+            if (input === epsTtmInput) refreshManualMetricHelp(epsTtmInput, epsTtmHelp, "EPS");
+            if (input === fcfShareInput) refreshManualMetricHelp(fcfShareInput, fcfShareHelp, "FCF per share");
             invalidateCalculation("Assumptions changed. Recalculate to update the model.", false);
         });
     });
@@ -970,10 +1318,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     saveCalculationBtn?.addEventListener("click", saveCalculation);
     clearBtn?.addEventListener("click", () => {
         invalidateMetricsLoad();
+        setEditingCalculation();
         clearAllFields();
     });
     loadCalculationsBtn?.addEventListener("click", loadSavedCalculations);
-    window.addEventListener("online", () => { void syncCalculationOutbox(); });
+    window.addEventListener("online", () => {
+        void syncCalculationOutbox({ notifyRejected: true });
+    });
 
     renderSavedCalculations();
 
@@ -981,15 +1332,19 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (!user) {
             calculationStore = null;
             savedCalculations = [];
+            calculationOutbox = [];
             renderSavedCalculations([]);
+            await renderSyncIssues([]);
             return;
         }
         const storeForUser = createUserDataStore(user.uid);
         calculationStore = storeForUser;
         savedCalculations = await readSavedCalculations(storeForUser);
+        calculationOutbox = await readCalculationOutbox(storeForUser);
         if (calculationStore !== storeForUser) return;
         renderSavedCalculations(savedCalculations);
-        await syncCalculationOutbox();
+        await renderSyncIssues(calculationOutbox);
+        await syncCalculationOutbox({ notifyRejected: true });
         if (calculationStore !== storeForUser) return;
         await loadSavedCalculations();
         if (calculationStore !== storeForUser) return;

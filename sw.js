@@ -1,4 +1,4 @@
-const SHELL_CACHE = "dcf-shell-v8";
+const SHELL_CACHE = "dcf-shell-v11";
 const SHELL_ASSETS = [
     "./",
     "./index.html",
@@ -15,6 +15,19 @@ const SHELL_ASSETS = [
     "./js/api.js",
     "./js/auth.js",
     "./js/auth-guard.js",
+    "./js/firebase-init.js",
+    "./js/sidebar.js",
+    "./js/toast.js",
+    "./js/ticker.js",
+    "./js/charts.js",
+    "./js/data-store.js",
+    "./js/cache-policy.js",
+    "./js/cache-metrics.js",
+    "./js/cache-registry.js",
+    "./js/public-data-store.js",
+    "./js/dcf-core.js",
+    "./js/vendor/firebase-client.js",
+    "./js/vendor/chart.umd.min.js",
     "./js/dcf-calculator.js",
     "./js/portfolio-creator.js",
     "./js/dip-finder.js",
@@ -44,7 +57,7 @@ self.addEventListener("fetch", (event) => {
     if (!isShellNavigation && !isPrecachedAsset) return;
 
     event.respondWith((async () => {
-        const cached = await caches.match(request);
+        const cached = await caches.match(request, { ignoreSearch: true });
         if (cached && !isShellNavigation) return cached;
         try {
             const network = await fetch(request);

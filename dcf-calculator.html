@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com https://img.logo.dev;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://img.logo.dev;">
 <meta name="theme-color" content="#f1eee5">
 <meta name="description" content="Build a five-year earnings or free-cash-flow valuation model.">
 <title>DCF Calculator | Stock Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+<link rel="stylesheet" href="css/style.css?v=11">
+<script src="js/vendor/chart.umd.min.js" defer></script>
 </head>
 <body class="dcf-page dcf-terminal-page">
 <a class="skip-link" href="#main-content">Skip to content</a>
@@ -24,6 +24,11 @@
 <p class="dcf-kicker"><span aria-hidden="true"></span> Valuation workspace</p>
 <h1>DCF Calculator</h1>
 </div>
+<aside class="dcf-model-state" aria-label="Valuation model status">
+<span>Model status</span>
+<strong id="modelStatus" class="is-idle" role="status">Waiting for ticker</strong>
+<small>Results must be recalculated after any assumption changes.</small>
+</aside>
 </header>
 
 <section class="dcf-market-panel dcf-panel dcf-reveal" aria-labelledby="marketDataTitle">
@@ -49,16 +54,16 @@
 </section>
 
 <section class="dcf-summary-tape dcf-reveal" aria-label="Current valuation context">
-<article class="dcf-summary-cell"><span>Market price</span><strong id="currentStockPrice">—</strong><small>Latest available quote</small></article>
+<article class="dcf-summary-cell dcf-summary-market"><span>Market price</span><strong id="currentStockPrice">—</strong><small>Latest available quote</small></article>
 <div id="earningsSummary" class="dcf-summary-group">
-<article class="dcf-summary-cell"><span>EPS / TTM</span><strong id="currentEps">$0.00</strong><small>Trailing earnings per share</small></article>
-<article class="dcf-summary-cell"><span>P/E / TTM</span><strong id="currentPe">0.00</strong><small>Current earnings multiple</small></article>
-<article class="dcf-summary-cell"><span>EPS growth</span><strong id="epsGrowth">0.0%</strong><small>Trailing growth signal</small></article>
+<article class="dcf-summary-cell dcf-summary-first"><span>EPS / TTM</span><strong id="currentEps">N/A</strong><small>Trailing earnings per share</small></article>
+<article class="dcf-summary-cell dcf-summary-second"><span>P/E / TTM</span><strong id="currentPe">N/A</strong><small>Current earnings multiple</small></article>
+<article class="dcf-summary-cell dcf-summary-third"><span>EPS growth</span><strong id="epsGrowth">N/A</strong><small>Trailing growth signal</small></article>
 </div>
 <div id="cashFlowSummary" class="dcf-summary-group hidden">
-<article class="dcf-summary-cell"><span>FCF / share</span><strong id="currentFcfShare">$0.00</strong><small>Trailing free cash flow</small></article>
-<article class="dcf-summary-cell"><span>FCF yield</span><strong id="fcfYield">0.0%</strong><small>Current cash-flow yield</small></article>
-<article class="dcf-summary-cell"><span>SBC impact</span><strong id="sbcImpact">0.0%</strong><small>Stock compensation drag</small></article>
+<article class="dcf-summary-cell dcf-summary-first"><span>FCF / share</span><strong id="currentFcfShare">N/A</strong><small>Trailing free cash flow</small></article>
+<article class="dcf-summary-cell dcf-summary-second"><span>FCF yield</span><strong id="fcfYield">N/A</strong><small>Current cash-flow yield</small></article>
+<article class="dcf-summary-cell dcf-summary-third"><span>SBC impact</span><strong id="sbcImpact">N/A</strong><small>Stock compensation drag</small></article>
 </div>
 </section>
 
@@ -74,17 +79,17 @@
 <div id="earningsSection" class="dcf-method-fields">
 <div class="dcf-field">
 <label for="epsTtmInput">EPS / TTM</label>
-<div class="dcf-affix-control dcf-prefix-control"><span>$</span><input type="number" id="epsTtmInput" value="0.00" step="0.01" inputmode="decimal" readonly aria-describedby="epsTtmHelp epsTtmError"></div>
+<div class="dcf-affix-control dcf-prefix-control"><span>$</span><input type="number" id="epsTtmInput" step="0.01" min="0.000001" inputmode="decimal" readonly aria-describedby="epsTtmHelp epsTtmError"></div>
 <small id="epsTtmHelp">Loaded from trailing earnings.</small><span id="epsTtmError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 <div class="dcf-field">
 <label for="growthRateInput">EPS growth rate</label>
-<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="growthRateInput" placeholder="15.0" step="0.1" inputmode="decimal" aria-describedby="growthRateHelp growthRateError"><span>%</span></div>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="growthRateInput" placeholder="15.0" step="0.1" min="-100" max="1000000" inputmode="decimal" aria-describedby="growthRateHelp growthRateError"><span>%</span></div>
 <small id="growthRateHelp">Annual growth assumed for five years.</small><span id="growthRateError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 <div class="dcf-field">
 <label for="peMultipleInput">Terminal P/E</label>
-<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="peMultipleInput" placeholder="20.0" step="0.1" inputmode="decimal" aria-describedby="peMultipleHelp peMultipleError"><span>×</span></div>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="peMultipleInput" placeholder="20.0" step="0.1" min="0.000001" max="1000000" inputmode="decimal" aria-describedby="peMultipleHelp peMultipleError"><span>×</span></div>
 <small id="peMultipleHelp">Multiple applied in year five.</small><span id="peMultipleError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 </div>
@@ -92,24 +97,24 @@
 <div id="cashFlowSection" class="dcf-method-fields hidden">
 <div class="dcf-field">
 <label for="fcfShareInput">FCF / share</label>
-<div class="dcf-affix-control dcf-prefix-control"><span>$</span><input type="number" id="fcfShareInput" value="0.00" step="0.01" inputmode="decimal" readonly aria-describedby="fcfShareHelp fcfShareError"></div>
+<div class="dcf-affix-control dcf-prefix-control"><span>$</span><input type="number" id="fcfShareInput" step="0.01" min="0.000001" inputmode="decimal" readonly aria-describedby="fcfShareHelp fcfShareError"></div>
 <small id="fcfShareHelp">Loaded from trailing free cash flow.</small><span id="fcfShareError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 <div class="dcf-field">
 <label for="fcfGrowthRateInput">FCF growth rate</label>
-<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="fcfGrowthRateInput" placeholder="12.0" step="0.1" inputmode="decimal" aria-describedby="fcfGrowthHelp fcfGrowthError"><span>%</span></div>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="fcfGrowthRateInput" placeholder="12.0" step="0.1" min="-100" max="1000000" inputmode="decimal" aria-describedby="fcfGrowthHelp fcfGrowthError"><span>%</span></div>
 <small id="fcfGrowthHelp">Annual growth assumed for five years.</small><span id="fcfGrowthError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 <div class="dcf-field">
 <label for="fcfYieldInput">Terminal FCF yield</label>
-<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="fcfYieldInput" placeholder="5.0" step="0.1" inputmode="decimal" aria-describedby="fcfYieldHelp fcfYieldError"><span>%</span></div>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="fcfYieldInput" placeholder="5.0" step="0.1" min="0.000001" max="1000000" inputmode="decimal" aria-describedby="fcfYieldHelp fcfYieldError"><span>%</span></div>
 <small id="fcfYieldHelp">Cash-flow yield applied in year five.</small><span id="fcfYieldError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 </div>
 
 <div class="dcf-field dcf-return-field">
 <label for="desiredReturnInput">Desired annual return</label>
-<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="desiredReturnInput" placeholder="10.0" step="0.1" inputmode="decimal" aria-describedby="desiredReturnHelp desiredReturnError"><span>%</span></div>
+<div class="dcf-affix-control dcf-suffix-control"><input type="number" id="desiredReturnInput" placeholder="10.0" step="0.1" min="-99.99" max="1000000" inputmode="decimal" aria-describedby="desiredReturnHelp desiredReturnError"><span>%</span></div>
 <small id="desiredReturnHelp">Used to calculate a disciplined entry price.</small><span id="desiredReturnError" class="dcf-field-error hidden" role="alert"></span>
 </div>
 <div class="dcf-ticket-actions" role="group" aria-label="Model actions">
@@ -152,6 +157,13 @@
 <span id="savedCalculationCount">0 models</span>
 </div>
 <div id="savedCalculationsContainer" class="dcf-saved-list" aria-live="polite"><p class="muted">No saved calculations yet.</p></div>
+<section id="syncIssuesPanel" class="dcf-sync-issues" aria-labelledby="syncIssuesTitle" hidden>
+<div class="dcf-sync-issues-head">
+<div><span>Reconciliation desk</span><strong id="syncIssuesTitle">Sync issues</strong></div>
+<b id="syncIssueCount" aria-label="Rejected operation count">0</b>
+</div>
+<div id="syncIssuesContainer" aria-live="polite"></div>
+</section>
 <button id="loadCalculationsBtn" class="dcf-outline-button dcf-sync-button" type="button">Sync saved models</button>
 <p class="dcf-saved-note">Models are cached locally and synchronized when the service is available.</p>
 </aside>

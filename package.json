@@ -1,0 +1,14 @@
+{
+  "name": "dcf-calculator-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:vendor": "node scripts/build-vendor.mjs",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "chart.js": "4.4.7",
+    "esbuild": "0.25.0",
+    "firebase": "11.6.1"
+  }
+}

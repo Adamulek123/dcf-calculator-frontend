@@ -6,7 +6,7 @@ import {
     onAuthStateChanged,
     GoogleAuthProvider,
     signInWithPopup
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+} from "./vendor/firebase-client.js";
 import { auth } from "./firebase-init.js";
 import { clearPrivateUserData } from "./data-store.js";
 

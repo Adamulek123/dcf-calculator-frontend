@@ -1,5 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, connectAuthEmulator } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { initializeApp, getAuth, connectAuthEmulator } from "./vendor/firebase-client.js";
 
 // Firebase client config is intentionally public — it is NOT a secret.
 // Per Firebase documentation, these values identify the app to Firebase services
