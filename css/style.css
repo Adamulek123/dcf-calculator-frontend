@@ -5153,6 +5153,13 @@ select.pt-square-control:hover {
     align-content: start;
     gap: .55rem;
 }
+@media (min-width: 901px) {
+    .earnings-board { grid-template-rows: auto repeat(3, auto); }
+    .earnings-day-column {
+        grid-row: 1 / -1;
+        grid-template-rows: subgrid;
+    }
+}
 .earnings-day-heading {
     position: relative;
     display: grid;

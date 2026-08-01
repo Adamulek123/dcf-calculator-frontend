@@ -660,12 +660,7 @@ function renderWeek() {
             column.appendChild(dayHeading(date));
             const dateEvents = eventsByDate.get(date);
             SESSION_LANES.forEach((lane) => {
-                const hasLaneEvents = dateEvents.some((event) => lane.sessions.includes(
-                    SESSION_LABELS[event.session] ? event.session : "unknown",
-                ));
-                if (lane.id !== "middle" || hasLaneEvents) {
-                    column.appendChild(laneCell(date, lane, dateEvents));
-                }
+                column.appendChild(laneCell(date, lane, dateEvents));
             });
             board.appendChild(column);
         });
