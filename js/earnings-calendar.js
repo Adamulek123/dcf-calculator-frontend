@@ -4,6 +4,7 @@ import { createCacheRegistry } from "./cache-registry.js";
 import { renderSidebar } from "./sidebar.js";
 import { getLogoUrl, onLogoError } from "./ticker.js";
 import { showToast } from "./toast.js";
+import { isAdvertisedWeek, visibleWeekdayDates } from "./earnings-calendar-coverage.mjs";
 
 runAuthGuard();
 renderSidebar();
@@ -134,8 +135,8 @@ function formatDateTime(value) {
     }).format(date);
 }
 
-function formatWeek(start) {
-    const end = isoDate(addDays(start, WEEKDAY_COUNT - 1));
+function formatWeek(start, weekEnd = addDays(start, WEEKDAY_COUNT - 1)) {
+    const end = isoDate(weekEnd);
     const startDate = isoDate(start);
     const sameMonth = startDate.getUTCMonth() === end.getUTCMonth();
     const startLabel = new Intl.DateTimeFormat(undefined, {
@@ -180,8 +181,7 @@ function weekCacheKey(start, revision = weekRevision(start)) {
 }
 
 function isWithinCoverage(start) {
-    if (!manifest?.coverageStart || !manifest?.coverageEnd) return false;
-    return start >= manifest.coverageStart && addDays(start, 6) <= manifest.coverageEnd;
+    return isAdvertisedWeek(manifest, start);
 }
 
 function setStatus(message, { error = false, loading = false } = {}) {
@@ -221,7 +221,8 @@ function renderMetadata() {
 }
 
 function renderControls() {
-    elements.weekTitle.textContent = formatWeek(selectedWeekStart);
+    const weekEnd = loadedWeeks.get(selectedWeekStart)?.weekEnd;
+    elements.weekTitle.textContent = formatWeek(selectedWeekStart, weekEnd);
     elements.previous.disabled = !manifest || !isWithinCoverage(addWeeks(selectedWeekStart, -1));
     elements.next.disabled = !manifest || !isWithinCoverage(addWeeks(selectedWeekStart, 1));
     elements.current.disabled = selectedWeekStart === currentWeekStart;
@@ -642,7 +643,7 @@ function renderWeek() {
     const reportLabel = events.length === 1 ? "report" : "reports";
     elements.weekCount.textContent = `${events.length} ${reportLabel}`;
 
-    const weekdayDates = Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(selectedWeekStart, index));
+    const weekdayDates = visibleWeekdayDates(selectedWeekStart, week.weekEnd, WEEKDAY_COUNT);
     renderMobileDayTabs(weekdayDates, events);
     const eventsByDate = new Map(weekdayDates.map((date) => [date, []]));
     events.forEach((event) => {
@@ -652,7 +653,7 @@ function renderWeek() {
     if (events.length) {
         const board = document.createElement("div");
         board.className = "earnings-board";
-        board.setAttribute("aria-label", `Earnings calendar for ${formatWeek(selectedWeekStart)}`);
+        board.setAttribute("aria-label", `Earnings calendar for ${formatWeek(selectedWeekStart, week.weekEnd)}`);
         weekdayDates.forEach((date) => {
             const column = document.createElement("article");
             column.className = "earnings-day-column earnings-calendar-cell";
