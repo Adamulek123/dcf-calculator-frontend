@@ -1,0 +1,159 @@
+/* Phone layout corrections for Dip Finder and Portfolio Creator. */
+
+@media (max-width: 760px) {
+    .dip-page .app-layout {
+        display: block;
+    }
+
+    .dip-page .app-main,
+    .portfolio-terminal-page .app-main {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .dip-page .sidebar {
+        width: 100%;
+    }
+
+    .dip-shell {
+        width: auto;
+        max-width: 100%;
+        margin-inline: 0;
+        padding: .75rem;
+    }
+
+    .dip-header {
+        min-height: 0;
+        gap: .9rem;
+        padding-block: .2rem 1rem;
+        flex-direction: column;
+    }
+
+    .dip-header h1 {
+        font-size: clamp(2.45rem, 12vw, 3rem);
+        line-height: .86;
+    }
+
+    .dip-header > div:first-child {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .dip-header-status {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .dip-header-status .dip-button {
+        width: 100%;
+    }
+
+    .dip-header > div:first-child > p:last-child {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        white-space: normal;
+        font-size: .58rem;
+        line-height: 1.55;
+    }
+
+    .dip-table-wrap {
+        max-width: 100%;
+        overscroll-behavior-inline: contain;
+    }
+}
+
+@media (max-width: 460px) {
+    .dip-header-status .dip-button {
+        width: 100%;
+    }
+
+    .dip-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dip-summary-grid article {
+        min-height: 88px;
+        padding: .75rem;
+        border-right: 1px solid var(--dip-line);
+        border-bottom: 1px solid var(--dip-line);
+    }
+
+    .dip-summary-grid article:nth-child(2n) {
+        border-right: 0;
+    }
+
+    .dip-summary-grid article:nth-last-child(-n + 2) {
+        border-bottom: 0;
+    }
+
+    .dip-summary-grid strong {
+        font-size: 1.7rem;
+    }
+
+    .dip-roster-head h3 {
+        font-size: 1.8rem;
+    }
+}
+
+.portfolio-terminal-page .app-main {
+    width: 100%;
+    margin-left: 0;
+}
+
+@media (max-width: 650px) {
+    .portfolio-terminal-page .app-layout {
+        display: block;
+    }
+
+    .portfolio-terminal-shell {
+        width: 100%;
+        padding: .7rem;
+    }
+
+    .pt-masthead {
+        min-height: 0;
+        gap: .9rem;
+        padding: .45rem 0 .9rem;
+    }
+
+    .portfolio-terminal-page h1 {
+        font-size: clamp(2.35rem, 11vw, 2.85rem);
+    }
+
+    .pt-ticket-head,
+    .pt-ledger-head {
+        min-height: 0;
+        gap: .75rem;
+        padding: .85rem;
+    }
+}
+
+@media (max-width: 390px) {
+    .pt-account-tape {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pt-tape-cell {
+        min-height: 88px;
+        padding: .75rem;
+    }
+
+    .pt-tape-cell:nth-child(odd) {
+        border-right: 1px solid var(--pt-line);
+    }
+
+    .pt-tape-cell:nth-child(even) {
+        border-right: 0;
+    }
+
+    .pt-tape-cell:nth-child(-n + 2) {
+        border-bottom: 1px solid var(--pt-line);
+    }
+
+    .pt-tape-cell:nth-last-child(-n + 2) {
+        border-bottom: 0;
+    }
+}
