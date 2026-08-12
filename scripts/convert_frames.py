@@ -13,7 +13,9 @@ Usage:
 
 import argparse
 import os
+import shutil
 import sys
+import tempfile
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -28,6 +30,63 @@ RESOLUTIONS = {
 DEFAULT_SRC = "G:/Mój dysk/pics_upscale/upscaled123"
 DEFAULT_DST = str(Path(__file__).parent.parent / "assets" / "frames")
 DEFAULT_QUALITY = 80
+FRAME_COUNT = 192
+
+
+def discover_frames(src_dir):
+    candidates = sorted(
+        (path for path in src_dir.iterdir() if path.is_file() and path.suffix.lower() in {".tif", ".tiff"}),
+        key=lambda path: path.name.lower(),
+    )
+    by_number = {}
+    problems = []
+    for path in candidates:
+        if not path.stem.isdigit():
+            problems.append(f"unexpected non-numeric frame name: {path.name}")
+            continue
+        number = int(path.stem)
+        if not 1 <= number <= FRAME_COUNT:
+            problems.append(f"frame number outside 1-{FRAME_COUNT}: {path.name}")
+            continue
+        if number in by_number:
+            problems.append(
+                f"duplicate frame {number}: {by_number[number].name} and {path.name}"
+            )
+            continue
+        by_number[number] = path
+
+    missing = sorted(set(range(1, FRAME_COUNT + 1)) - set(by_number))
+    if missing:
+        preview = ", ".join(str(number) for number in missing[:12])
+        suffix = "…" if len(missing) > 12 else ""
+        problems.append(f"missing frame numbers: {preview}{suffix}")
+    if problems:
+        raise ValueError("; ".join(problems))
+    return [by_number[number] for number in range(1, FRAME_COUNT + 1)]
+
+
+def validate_outputs(directory):
+    expected = {f"frame-{number:03d}.webp" for number in range(1, FRAME_COUNT + 1)}
+    actual = {path.name for path in directory.glob("*.webp")}
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        raise RuntimeError(
+            f"invalid output set in {directory}: missing={missing[:5]}, unexpected={unexpected[:5]}"
+        )
+
+
+def publish_frames(staging_root, destination_root):
+    destination_root.mkdir(parents=True, exist_ok=True)
+    for tier in RESOLUTIONS:
+        source = staging_root / tier
+        target = destination_root / tier
+        target.mkdir(parents=True, exist_ok=True)
+        for stale in target.glob("*.webp"):
+            stale.unlink()
+        for generated in source.glob("*.webp"):
+            os.replace(generated, target / generated.name)
+    os.replace(staging_root / "poster.webp", destination_root / "poster.webp")
 
 
 def convert_frame(args):
@@ -63,20 +122,34 @@ def main():
     parser.add_argument("--workers", type=int, default=os.cpu_count(), help="Parallel workers")
     args = parser.parse_args()
 
+    if not 0 <= args.quality <= 100:
+        parser.error("--quality must be between 0 and 100")
+    if args.workers is None or args.workers < 1:
+        parser.error("--workers must be at least 1")
+
     src_dir = Path(args.src)
-    dst_1x = Path(args.dst) / "1x"
-    dst_2x = Path(args.dst) / "2x"
-
-    dst_1x.mkdir(parents=True, exist_ok=True)
-    dst_2x.mkdir(parents=True, exist_ok=True)
-
-    tiffs = sorted(src_dir.glob("*.tiff"))
-    if not tiffs:
-        print(f"ERROR: No .tiff files found in {src_dir}", file=sys.stderr)
+    if not src_dir.is_dir():
+        print(f"ERROR: Source directory does not exist: {src_dir}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        tiffs = discover_frames(src_dir)
+    except ValueError as exc:
+        print(f"ERROR: Expected exactly {FRAME_COUNT} uniquely numbered TIFF frames: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Found {len(tiffs)} TIFF frames in {src_dir}")
-    print(f"Output: {args.dst}  |  Quality: {args.quality}  |  Workers: {args.workers}")
+    destination_root = Path(args.dst).resolve()
+    destination_root.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = Path(tempfile.mkdtemp(
+        prefix=f".{destination_root.name}-staging-",
+        dir=destination_root.parent,
+    ))
+    dst_1x = staging_root / "1x"
+    dst_2x = staging_root / "2x"
+    dst_1x.mkdir()
+    dst_2x.mkdir()
+
+    print(f"Validated {len(tiffs)} TIFF frames in {src_dir}")
+    print(f"Output: {destination_root}  |  Quality: {args.quality}  |  Workers: {args.workers}")
     print(f"  1x -> {RESOLUTIONS['1x'][0]}x{RESOLUTIONS['1x'][1]}")
     print(f"  2x -> {RESOLUTIONS['2x'][0]}x{RESOLUTIONS['2x'][1]}")
     print()
@@ -86,54 +159,57 @@ def main():
     errors = []
     t0 = time.time()
 
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(convert_frame, task): task for task in tasks}
-        for future in as_completed(futures):
-            frame_num, err = future.result()
-            if err:
-                errors.append(err)
-            else:
-                done += 1
-                elapsed = time.time() - t0
-                rate = done / elapsed
-                eta = (len(tiffs) - done) / rate if rate > 0 else 0
-                print(
-                    f"\r  {done}/{len(tiffs)} frames  "
-                    f"[{elapsed:.0f}s elapsed, ~{eta:.0f}s remaining]",
-                    end="",
-                    flush=True,
-                )
+    try:
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            futures = {pool.submit(convert_frame, task): task for task in tasks}
+            for future in as_completed(futures):
+                frame_num, err = future.result()
+                if err:
+                    errors.append(err)
+                else:
+                    done += 1
+                    elapsed = time.time() - t0
+                    rate = done / elapsed
+                    eta = (len(tiffs) - done) / rate if rate > 0 else 0
+                    print(
+                        f"\r  {done}/{len(tiffs)} frames  "
+                        f"[{elapsed:.0f}s elapsed, ~{eta:.0f}s remaining]",
+                        end="",
+                        flush=True,
+                    )
 
-    print()
+        print()
+        if errors:
+            print(f"\n{len(errors)} ERROR(S):")
+            for error in errors:
+                print(f"  {error}")
+            sys.exit(1)
 
-    # Generate poster from the last frame (frame 192 = fully open laptop)
-    last_tiff = sorted(tiffs)[-1]
-    poster_path = Path(args.dst) / "poster.webp"
-    print(f"\nGenerating poster from {last_tiff.name} -> {poster_path}")
-    with Image.open(last_tiff) as img:
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        resized = img.resize(RESOLUTIONS["2x"], Image.LANCZOS)
-        resized.save(str(poster_path), "WEBP", quality=args.quality, method=6)
+        # Frame 192 is the fully open laptop; numeric validation makes this deterministic.
+        last_tiff = tiffs[-1]
+        poster_path = staging_root / "poster.webp"
+        print(f"\nGenerating poster from {last_tiff.name} -> {poster_path}")
+        with Image.open(last_tiff) as img:
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            resized = img.resize(RESOLUTIONS["2x"], Image.LANCZOS)
+            resized.save(str(poster_path), "WEBP", quality=args.quality, method=6)
 
-    # Report totals
-    size_1x = sum(f.stat().st_size for f in dst_1x.glob("*.webp"))
-    size_2x = sum(f.stat().st_size for f in dst_2x.glob("*.webp"))
-    count_1x = len(list(dst_1x.glob("*.webp")))
-    count_2x = len(list(dst_2x.glob("*.webp")))
+        validate_outputs(dst_1x)
+        validate_outputs(dst_2x)
+        size_1x = sum(path.stat().st_size for path in dst_1x.glob("*.webp"))
+        size_2x = sum(path.stat().st_size for path in dst_2x.glob("*.webp"))
+        poster_size = poster_path.stat().st_size
+        publish_frames(staging_root, destination_root)
 
-    print()
-    print("=" * 50)
-    print(f"Done in {time.time() - t0:.1f}s")
-    print(f"  1x: {count_1x} files  {size_1x / 1e6:.1f} MB  (avg {size_1x / max(count_1x,1) / 1e3:.0f} KB/frame)")
-    print(f"  2x: {count_2x} files  {size_2x / 1e6:.1f} MB  (avg {size_2x / max(count_2x,1) / 1e3:.0f} KB/frame)")
-    print(f"  poster: {poster_path.stat().st_size / 1e3:.0f} KB")
-
-    if errors:
-        print(f"\n{len(errors)} ERROR(S):")
-        for e in errors:
-            print(f"  {e}")
-        sys.exit(1)
+        print()
+        print("=" * 50)
+        print(f"Done in {time.time() - t0:.1f}s")
+        print(f"  1x: {FRAME_COUNT} files  {size_1x / 1e6:.1f} MB  (avg {size_1x / FRAME_COUNT / 1e3:.0f} KB/frame)")
+        print(f"  2x: {FRAME_COUNT} files  {size_2x / 1e6:.1f} MB  (avg {size_2x / FRAME_COUNT / 1e3:.0f} KB/frame)")
+        print(f"  poster: {poster_size / 1e3:.0f} KB")
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
 
 if __name__ == "__main__":

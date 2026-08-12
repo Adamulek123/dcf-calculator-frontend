@@ -6,6 +6,17 @@ const autocompleteRequestIds = new WeakMap();
 
 const publicCache = createCacheRegistry();
 
+const TICKER_SYNTAX = /^[A-Z0-9][A-Z0-9.-]{0,14}$/;
+
+function isTickerSyntaxValid(query) {
+    return TICKER_SYNTAX.test(String(query || "").trim().toUpperCase());
+}
+
+function buildTickerQueryUrl(path, ticker, params = {}) {
+    const query = new URLSearchParams({ ticker: String(ticker || ""), ...params });
+    return `${path}?${query.toString()}`;
+}
+
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -49,7 +60,7 @@ async function fetchTickers(fetchApi = apiCall) {
 }
 
 function isValidTicker(query, tickers = cachedTickers) {
-    if (!query || !tickers || tickers.length === 0) {
+    if (!isTickerSyntaxValid(query) || !tickers || tickers.length === 0) {
         return false;
     }
     const queryUpper = query.toUpperCase().trim();
@@ -57,13 +68,13 @@ function isValidTicker(query, tickers = cachedTickers) {
 }
 
 function getLogoUrl(ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is CORS-restricted to the production domain — acceptable risk
-    return `https://img.logo.dev/ticker/${ticker}?token=${token}`;
+    return `https://img.logo.dev/ticker/${encodeURIComponent(String(ticker || ""))}?token=${encodeURIComponent(token)}`;
 }
 
 async function onLogoLoad() { return null; }
 
 function onLogoError(img, ticker, token = "pk_RQ-JlIhmQEOm6yeZvHsSKA") { // Token is CORS-restricted to the production domain — acceptable risk
-    const fallbackUrl = `https://img.logo.dev/${ticker.toLowerCase()}.com?token=${token}`;
+    const fallbackUrl = `https://img.logo.dev/${encodeURIComponent(String(ticker || "").toLowerCase())}.com?token=${encodeURIComponent(token)}`;
     img.src = fallbackUrl;
     img.onerror = null;
 }
@@ -72,6 +83,9 @@ function hideTickerSuggestions(tickerAutocomplete = document.getElementById("tic
     if (!tickerAutocomplete) return;
     autocompleteRequestIds.set(tickerAutocomplete, (autocompleteRequestIds.get(tickerAutocomplete) || 0) + 1);
     tickerAutocomplete.classList.add("hidden");
+    const input = tickerAutocomplete.parentElement?.querySelector(`input[aria-controls="${tickerAutocomplete.id}"]`);
+    input?.setAttribute("aria-expanded", "false");
+    input?.removeAttribute("aria-activedescendant");
 }
 
 async function showTickerSuggestions(
@@ -85,6 +99,9 @@ async function showTickerSuggestions(
     const requestId = (autocompleteRequestIds.get(tickerAutocomplete) || 0) + 1;
     autocompleteRequestIds.set(tickerAutocomplete, requestId);
     tickerAutocomplete.classList.add("hidden");
+    tickerAutocomplete.setAttribute("role", "listbox");
+    const input = tickerAutocomplete.parentElement?.querySelector(`input[aria-controls="${tickerAutocomplete.id}"]`);
+    input?.setAttribute("aria-expanded", "false");
     tickerAutocomplete.classList.toggle(
         "ticker-autocomplete-terminal",
         options.variant === "terminal"
@@ -111,6 +128,10 @@ async function showTickerSuggestions(
         const row = document.createElement("div");
         row.className = "ticker-suggestion";
         row.dataset.symbol = item.symbol;
+        row.id = `${tickerAutocomplete.id}-option-${suggestions.indexOf(item)}`;
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", "false");
+        row.tabIndex = -1;
 
         const img = document.createElement("img");
         img.className = "ticker-suggestion-logo";
@@ -161,6 +182,7 @@ async function showTickerSuggestions(
     if (autocompleteRequestIds.get(tickerAutocomplete) !== requestId) return;
     tickerAutocomplete.replaceChildren(fragment);
     tickerAutocomplete.classList.remove("hidden");
+    input?.setAttribute("aria-expanded", "true");
 }
 
 if (typeof window !== "undefined") {
@@ -171,6 +193,8 @@ if (typeof window !== "undefined") {
 export {
     debounce,
     isValidTicker,
+    isTickerSyntaxValid,
+    buildTickerQueryUrl,
     fetchTickers,
     showTickerSuggestions,
     hideTickerSuggestions,

@@ -1,4 +1,6 @@
 (() => {
+    document.documentElement.classList.add("js");
+
     const topbar = document.getElementById("topbar");
     const revealTargets = Array.from(document.querySelectorAll(".reveal"));
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -9,11 +11,11 @@
         }
 
         const y = window.scrollY || 0;
-        const shouldHide = y > 8;
+        const hasScrolled = y > 8;
+        const shouldHide = hasScrolled && !topbar.matches(":focus-within");
 
         topbar.classList.toggle("is-hidden", shouldHide);
-        topbar.style.boxShadow = shouldHide ? "0 10px 24px rgba(15, 23, 42, 0.08)" : "none";
-
+        topbar.classList.toggle("is-scrolled", hasScrolled);
     }
 
     function revealAllImmediately() {
@@ -45,6 +47,19 @@
 
     setTopbarVisibility();
     setupRevealObserver();
+
+    if (topbar) {
+        topbar.addEventListener("focusin", () => {
+            topbar.classList.remove("is-hidden");
+        });
+        topbar.addEventListener("focusout", () => {
+            if (window.requestAnimationFrame) {
+                window.requestAnimationFrame(setTopbarVisibility);
+                return;
+            }
+            setTopbarVisibility();
+        });
+    }
 
     window.addEventListener("scroll", () => {
         if (window.requestAnimationFrame) {

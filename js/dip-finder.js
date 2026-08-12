@@ -49,8 +49,14 @@ window.addEventListener("DOMContentLoaded", () => {
     let selectedId = null;
     let performance = new Map();
     let chart = null;
-    let metric = "returnPct";
-    let period = "1M";
+    const urlState = new URLSearchParams(globalThis.location?.search || "");
+    const urlWatchlistId = urlState.get("watchlist");
+    const urlMetric = ["returnPct", "drawdownPct"].includes(urlState.get("metric"))
+        ? urlState.get("metric")
+        : null;
+    const urlPeriod = PERIODS.includes(urlState.get("period")) ? urlState.get("period") : null;
+    let metric = urlMetric || "returnPct";
+    let period = urlPeriod || "1M";
     let dialogMode = "create";
     let tickerReady = false;
     let metadata = new Map();
@@ -63,6 +69,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let watchlistMutationEpoch = 0;
     let loadingWatchlists = false;
     let loadingPerformance = false;
+    let pendingWatchlistCreate = null;
+    let activeTickerSuggestion = -1;
     const watchlistMutationGenerations = new Map();
     const watchlistMutationCounts = new Map();
     const watchlistMutationQueues = new Map();
@@ -70,6 +78,10 @@ window.addEventListener("DOMContentLoaded", () => {
     const watchlistsNeedingReconciliation = new Set();
 
     const normalizeTicker = (value) => String(value || "").trim().toUpperCase();
+    const newClientOperationId = () => {
+        const random = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return `op-${random}`;
+    };
     const currentWatchlist = () => watchlists.find((item) => item.id === selectedId) || null;
     const formatPct = (value) => Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
     const formatPrice = (value) => Number.isFinite(value)
@@ -82,6 +94,18 @@ window.addEventListener("DOMContentLoaded", () => {
             ? value
             : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
     };
+
+    function syncUrlState() {
+        if (!globalThis.history?.replaceState || !globalThis.location?.href) return;
+        const url = new URL(globalThis.location.href);
+        if (selectedId) url.searchParams.set("watchlist", selectedId);
+        else url.searchParams.delete("watchlist");
+        if (period === "1M") url.searchParams.delete("period");
+        else url.searchParams.set("period", period);
+        if (metric === "returnPct") url.searchParams.delete("metric");
+        else url.searchParams.set("metric", metric);
+        globalThis.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
 
     async function request(endpoint, options = {}, timeout = 45000) {
         const controller = new AbortController();
@@ -326,6 +350,7 @@ window.addEventListener("DOMContentLoaded", () => {
             }
         };
 
+        const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
         chart = new globalThis.Chart(els.chart, {
             type: "bar",
             data: {
@@ -343,7 +368,7 @@ window.addEventListener("DOMContentLoaded", () => {
             },
             options: {
                 maintainAspectRatio: false,
-                animation: { duration: 420, easing: "easeOutQuart" },
+                animation: { duration: reducedMotion ? 0 : 420, easing: "easeOutQuart" },
                 events: [],
                 interaction: { mode: null },
                 layout: { padding: { left: 6, right: 8 } },
@@ -445,6 +470,22 @@ window.addEventListener("DOMContentLoaded", () => {
         if (entry.version !== null && version !== null) return entry.version === version;
         try { return JSON.stringify(entry.data) === JSON.stringify(data); } catch { return false; }
     };
+
+    function persistCacheEntry(key, data, options = {}, label = "watchlist cache") {
+        if (!dataStore || !key) return Promise.resolve(null);
+        return Promise.resolve()
+            .then(() => dataStore.set(key, data, options))
+            .then((result) => {
+                if (result?.persisted === false) {
+                    console.warn(`${label} is memory-only; it will not survive a reload.`, result.persistenceError);
+                }
+                return result;
+            })
+            .catch((error) => {
+                console.warn(`Unable to persist ${label}`, error);
+                return null;
+            });
+    }
 
     function beginWatchlistMutation(watchlistId) {
         const generation = (watchlistMutationGenerations.get(watchlistId) || 0) + 1;
@@ -618,6 +659,7 @@ window.addEventListener("DOMContentLoaded", () => {
     function saveSelectedId() {
         if (selectedId) localStorage.setItem(selectedStorageKey, selectedId);
         else localStorage.removeItem(selectedStorageKey);
+        syncUrlState();
     }
 
     function applyWatchlists(data) {
@@ -625,6 +667,7 @@ window.addEventListener("DOMContentLoaded", () => {
         syncCanonicalWatchlists(watchlists);
         if (!watchlists.some((item) => item.id === selectedId)) selectedId = watchlists[0]?.id || null;
         saveSelectedId();
+        syncUrlState();
         renderAll();
     }
 
@@ -639,12 +682,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
     function cacheWatchlistCollection({ version = null, serverUpdatedAt = null } = {}) {
         if (!dataStore || hasPendingWatchlistMutations()) return;
-        void dataStore.set(dataStore.keys.watchlists(), watchlistSnapshot(), {
+        void persistCacheEntry(dataStore.keys.watchlists(), watchlistSnapshot(), {
             ttlMs: CACHE_TTL.watchlists,
             staleTtlMs: CACHE_STALE_TTL.watchlists,
             version,
             serverUpdatedAt,
-        });
+        }, "watchlist cache");
     }
 
     async function loadWatchlists(force = false) {
@@ -666,18 +709,18 @@ window.addEventListener("DOMContentLoaded", () => {
         setServiceStatus(cached ? "Refreshing lists" : "Loading lists", "loading");
         renderWatchlistControls();
         try {
-            const response = await request("/watchlists");
+            const response = await request("/watchlists", { coalesce: force ? false : true });
             const data = await response.json();
             if (!isCurrentWatchlistLoad(context)) return false;
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             const next = { watchlists: Array.isArray(data.watchlists) ? data.watchlists : [] };
             const version = data.version || data.updatedAt || null;
-            void dataStore?.set(dataStore.keys.watchlists(), next, {
+            void persistCacheEntry(dataStore?.keys.watchlists(), next, {
                 ttlMs: CACHE_TTL.watchlists,
                 staleTtlMs: CACHE_STALE_TTL.watchlists,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
-            });
+            }, "watchlist cache");
             if (!sameCachedPayload(cached, next, version)) applyWatchlists(next);
             setServiceStatus("Lists synced", "ready");
             await loadPerformance();
@@ -742,7 +785,7 @@ window.addEventListener("DOMContentLoaded", () => {
         try {
             const response = await request("/watchlists/performance", {
                 method: "POST",
-                coalesce: true,
+                coalesce: force ? false : true,
                 retry: true,
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ tickers: selected.tickers, force })
@@ -760,12 +803,12 @@ window.addEventListener("DOMContentLoaded", () => {
                 asOf: data.asOf || null,
             };
             const version = data.version || data.asOf || null;
-            void dataStore?.set(dataStore.keys.dipPerformance(resultKey), next, {
+            void persistCacheEntry(dataStore?.keys.dipPerformance(resultKey), next, {
                 ttlMs: CACHE_TTL.dipPerformance,
                 staleTtlMs: CACHE_STALE_TTL.dipPerformance,
                 serverUpdatedAt: data.asOf || null,
                 version,
-            });
+            }, "Dip Finder results");
             if (!isCurrentPerformanceLoad(context)) return;
             if (!sameCachedPayload(cached, next, version)) {
                 performance = new Map(next.results.map((result) => [result.ticker, result]));
@@ -797,6 +840,7 @@ window.addEventListener("DOMContentLoaded", () => {
         invalidatePerformanceLoad();
         selectedId = id;
         saveSelectedId();
+        syncUrlState();
         performance = new Map();
         renderAll();
         await loadPerformance();
@@ -818,6 +862,38 @@ window.addEventListener("DOMContentLoaded", () => {
         els.nameInput.select();
     }
 
+    async function reconcileWatchlistCreate(createOperation, optimisticId) {
+        if (!createOperation?.idempotencyKey) return false;
+        try {
+            const response = await request("/watchlists", { coalesce: false });
+            const data = await response.json();
+            if (!response.ok) return false;
+            const candidate = (data.watchlists || []).find((item) => (
+                item.idempotencyKey === createOperation.idempotencyKey
+                || item.createOperationId === createOperation.idempotencyKey
+                || item.name === createOperation.name
+            ));
+            if (!candidate) return false;
+            pendingWatchlistCreate = null;
+            rememberCanonicalWatchlist(candidate);
+            const optimisticIndex = watchlists.findIndex((item) => item.id === optimisticId);
+            if (optimisticIndex >= 0) watchlists.splice(optimisticIndex, 1, candidate);
+            else watchlists = [candidate, ...watchlists];
+            if (selectedId === optimisticId) selectedId = candidate.id;
+            saveSelectedId();
+            cacheWatchlistCollection({
+                version: candidate.revision ?? null,
+                serverUpdatedAt: candidate.updatedAt || null,
+            });
+            els.dialog.close();
+            renderAll();
+            showToast("Watchlist creation was confirmed after the connection recovered.", false, 3500, els.toast);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     async function saveWatchlist(event) {
         event.preventDefault();
         const mode = dialogMode;
@@ -833,6 +909,12 @@ window.addEventListener("DOMContentLoaded", () => {
         if (mode === "rename" && !selected) return;
         const previousSelectedId = selectedId;
         let rollbackWatchlist = selected;
+        const createOperation = mode === "create"
+            ? (pendingWatchlistCreate?.name === name
+                ? pendingWatchlistCreate
+                : { name, idempotencyKey: newClientOperationId() })
+            : null;
+        if (createOperation) pendingWatchlistCreate = createOperation;
         const optimisticId = mode === "create"
             ? `pending-${globalThis.crypto?.randomUUID?.() || Date.now()}`
             : null;
@@ -870,7 +952,11 @@ window.addEventListener("DOMContentLoaded", () => {
                 const response = await request("/watchlists", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, tickers: [] }),
+                    body: JSON.stringify({
+                        name,
+                        tickers: [],
+                        idempotencyKey: createOperation.idempotencyKey,
+                    }),
                 });
                 data = await response.json();
                 if (!response.ok) throw new Error(data.message || "Unable to save watchlist.");
@@ -916,6 +1002,7 @@ window.addEventListener("DOMContentLoaded", () => {
             });
             if (!isCurrentWatchlistMutation(mutationContext)) return;
             if (mode === "create") {
+                pendingWatchlistCreate = null;
                 const optimisticIndex = watchlists.findIndex((item) => item.id === optimisticId);
                 if (optimisticIndex >= 0) watchlists.splice(optimisticIndex, 1, data);
                 else watchlists = [data, ...watchlists];
@@ -937,7 +1024,14 @@ window.addEventListener("DOMContentLoaded", () => {
                 showToast(error.message, true, 4000, els.toast);
                 return;
             }
+            const likelyResponseLoss = !/already exists|required|invalid|maximum|ticker/i.test(
+                String(error?.message || "").toLowerCase(),
+            );
+            if (mode === "create" && likelyResponseLoss
+                && await reconcileWatchlistCreate(createOperation, optimisticId)) return;
             if (mode === "create") {
+                // Keep the operation key after an ambiguous response so a retry
+                // replays the committed create instead of creating a duplicate.
                 forgetCanonicalWatchlist(optimisticId, mutationContext);
                 watchlists = watchlists.filter((item) => item.id !== optimisticId);
                 if (selectedId === optimisticId) {
@@ -1189,13 +1283,31 @@ window.addEventListener("DOMContentLoaded", () => {
         els.tickerInput.value = "";
         hideTickerSuggestions(els.autocomplete);
         els.tickerInput.setAttribute("aria-expanded", "false");
+        activeTickerSuggestion = -1;
         await updateTickers([...selected.tickers, symbol], `${symbol} added.`);
     }
 
     const suggestTickers = debounce(async (query) => {
         await showTickerSuggestions(query, els.autocomplete);
+        activeTickerSuggestion = -1;
+        els.tickerInput.removeAttribute("aria-activedescendant");
+        [...els.autocomplete.querySelectorAll(".ticker-suggestion")]
+            .forEach((item) => item.setAttribute("aria-selected", "false"));
         els.tickerInput.setAttribute("aria-expanded", String(!els.autocomplete.classList.contains("hidden")));
     }, 180);
+
+    function setActiveTickerSuggestion(index) {
+        const items = [...els.autocomplete.querySelectorAll(".ticker-suggestion")];
+        if (!items.length) return;
+        activeTickerSuggestion = (index + items.length) % items.length;
+        items.forEach((item, itemIndex) => {
+            const active = itemIndex === activeTickerSuggestion;
+            item.classList.toggle("is-active", active);
+            item.setAttribute("aria-selected", String(active));
+        });
+        els.tickerInput.setAttribute("aria-activedescendant", items[activeTickerSuggestion].id);
+        items[activeTickerSuggestion].scrollIntoView({ block: "nearest" });
+    }
 
     els.list.addEventListener("click", (event) => selectWatchlist(event.target.closest("[data-id]")?.dataset.id));
     els.select.addEventListener("change", () => selectWatchlist(els.select.value));
@@ -1226,15 +1338,31 @@ window.addEventListener("DOMContentLoaded", () => {
                 item.classList.toggle("is-active", active);
                 item.setAttribute("aria-pressed", String(active));
             });
+            syncUrlState();
             renderPerformance();
         });
     });
     document.querySelectorAll("[data-period]").forEach((button) => {
         button.addEventListener("click", () => {
             period = button.dataset.period;
-            document.querySelectorAll("[data-period]").forEach((item) => item.classList.toggle("is-active", item === button));
+            document.querySelectorAll("[data-period]").forEach((item) => {
+                const active = item === button;
+                item.classList.toggle("is-active", active);
+                item.setAttribute("aria-pressed", String(active));
+            });
+            syncUrlState();
             renderPerformance();
         });
+    });
+    document.querySelectorAll("[data-metric]").forEach((button) => {
+        const active = button.dataset.metric === metric;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll("[data-period]").forEach((button) => {
+        const active = button.dataset.period === period;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", String(active));
     });
 
     els.refresh.addEventListener("click", () => {
@@ -1245,11 +1373,30 @@ window.addEventListener("DOMContentLoaded", () => {
         addTicker(els.tickerInput.value);
     });
     els.tickerInput.addEventListener("input", () => {
+        activeTickerSuggestion = -1;
+        els.tickerInput.removeAttribute("aria-activedescendant");
         const query = els.tickerInput.value.trim();
         if (query.length >= 2) suggestTickers(query);
         else {
             hideTickerSuggestions(els.autocomplete);
             els.tickerInput.setAttribute("aria-expanded", "false");
+        }
+    });
+    els.tickerInput.addEventListener("keydown", (event) => {
+        const items = [...els.autocomplete.querySelectorAll(".ticker-suggestion")];
+        const open = !els.autocomplete.classList.contains("hidden") && items.length > 0;
+        if (event.key === "ArrowDown" && open) {
+            event.preventDefault();
+            setActiveTickerSuggestion(activeTickerSuggestion + 1);
+        } else if (event.key === "ArrowUp" && open) {
+            event.preventDefault();
+            setActiveTickerSuggestion(activeTickerSuggestion - 1);
+        } else if (event.key === "Escape") {
+            hideTickerSuggestions(els.autocomplete);
+            activeTickerSuggestion = -1;
+        } else if (event.key === "Enter" && open && activeTickerSuggestion >= 0) {
+            event.preventDefault();
+            addTicker(items[activeTickerSuggestion].dataset.symbol);
         }
     });
     els.autocomplete.addEventListener("click", (event) => {
@@ -1322,7 +1469,7 @@ window.addEventListener("DOMContentLoaded", () => {
         cacheChannel?.close();
         cacheChannel = createUserCacheChannel(user.uid, handleCrossTabCacheMessage);
         selectedStorageKey = `${STORAGE_KEY}:${user.uid}`;
-        selectedId = localStorage.getItem(selectedStorageKey);
+        selectedId = urlWatchlistId || localStorage.getItem(selectedStorageKey);
         fetchTickers((endpoint) => request(endpoint))
             .then((items) => {
                 tickerReady = Array.isArray(items) && items.length > 0;

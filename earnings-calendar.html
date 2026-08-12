@@ -5,11 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
-                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com;
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   script-src 'self' https://www.gstatic.com https://apis.google.com;
+                   style-src 'self' https://fonts.googleapis.com;
+                   style-src-elem 'self' https://fonts.googleapis.com;
+                   style-src-attr 'unsafe-inline';
                    font-src https://fonts.gstatic.com;
                    img-src 'self' https://img.logo.dev data:;
-                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;
+                   object-src 'none';
+                   base-uri 'self';
+                   form-action 'self';">
     <meta name="theme-color" content="#f1eee5">
     <meta name="description" content="Review expected S&amp;P 500 earnings reports across the market week.">
     <title>Earnings Calendar | DCF Calculator</title>

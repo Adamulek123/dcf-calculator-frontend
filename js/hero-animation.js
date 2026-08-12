@@ -114,13 +114,21 @@
             canvas.style.height = cssH + 'px';
             canvas.width  = Math.round(cssW * dpr);
             canvas.height = Math.round(cssH * dpr);
-            ctx.scale(dpr, dpr);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
         sizeCanvas();
 
-        // Frame image pool
+        // Keep only a moving window of decoded frames. Browser HTTP caching makes
+        // backwards scrolling cheap without retaining hundreds of large bitmaps.
         const frames = new Array(FRAME_COUNT).fill(null);
-        let currentFrame = 0;
+        const loadingFrames = new Set();
+        const queuedFrames = new Set();
+        const loadQueue = [];
+        const LOAD_CONCURRENCY = 4;
+        const LOAD_AHEAD = isMobile ? 5 : 8;
+        const LOAD_BEHIND = isMobile ? 2 : 4;
+        const MAX_RESIDENT_FRAMES = isMobile ? 14 : 24;
+        let loadingStarted = false;
         let rafPending = false;
 
         function frameName(i) {
@@ -152,31 +160,63 @@
             return null;
         }
 
-        // Preload all (or every Nth) frames with a concurrency cap
-        function preloadFrames() {
-            const indices = [];
-            for (let i = 0; i < FRAME_COUNT; i += frameStep) indices.push(i);
-            // Always include first and last
-            if (!indices.includes(FRAME_COUNT - 1)) indices.push(FRAME_COUNT - 1);
+        function pruneFrames(center) {
+            const resident = frames
+                .map((img, index) => img ? index : -1)
+                .filter((index) => index >= 0);
+            if (resident.length <= MAX_RESIDENT_FRAMES) return;
+            resident
+                .filter((index) => index !== center)
+                .sort((a, b) => Math.abs(b - center) - Math.abs(a - center))
+                .slice(0, resident.length - MAX_RESIDENT_FRAMES)
+                .forEach((index) => { frames[index] = null; });
+        }
 
-            let nextToLoad = 0;
-            const CONCURRENCY = 6;
-
-            function loadNext() {
-                if (nextToLoad >= indices.length) return;
-                const idx = indices[nextToLoad++];
+        function pumpFrameQueue() {
+            while (loadingFrames.size < LOAD_CONCURRENCY && loadQueue.length) {
+                const idx = loadQueue.shift();
+                queuedFrames.delete(idx);
+                if (frames[idx] || loadingFrames.has(idx)) continue;
+                loadingFrames.add(idx);
                 const img = new Image();
                 img.onload = () => {
+                    loadingFrames.delete(idx);
                     frames[idx] = img;
-                    // Draw first frame immediately so canvas is not blank
-                    if (idx === 0) drawFrame(img);
-                    loadNext();
+                    const target = lastFrameIndex >= 0 ? lastFrameIndex : idx;
+                    const nearest = nearestLoaded(target);
+                    if (nearest) {
+                        drawFrame(nearest);
+                        if (posterEl) posterEl.style.display = 'none';
+                    }
+                    pruneFrames(lastFrameIndex >= 0 ? lastFrameIndex : idx);
+                    pumpFrameQueue();
                 };
-                img.onerror = () => loadNext();
+                img.onerror = () => {
+                    loadingFrames.delete(idx);
+                    pumpFrameQueue();
+                };
                 img.src = frameName(idx);
             }
+        }
 
-            for (let i = 0; i < CONCURRENCY; i++) loadNext();
+        function queueFrame(index) {
+            const normalized = index === FRAME_COUNT - 1
+                ? index
+                : clamp(Math.round(index / frameStep) * frameStep, 0, FRAME_COUNT - 1);
+            if (frames[normalized] || loadingFrames.has(normalized) || queuedFrames.has(normalized)) return;
+            queuedFrames.add(normalized);
+            loadQueue.push(normalized);
+        }
+
+        function loadFrameWindow(center) {
+            if (!loadingStarted) return;
+            loadQueue.length = 0;
+            queuedFrames.clear();
+            queueFrame(center);
+            for (let offset = 1; offset <= LOAD_AHEAD; offset++) queueFrame(center + offset * frameStep);
+            for (let offset = 1; offset <= LOAD_BEHIND; offset++) queueFrame(center - offset * frameStep);
+            if (center >= FRAME_COUNT - 1 - LOAD_AHEAD * frameStep) queueFrame(FRAME_COUNT - 1);
+            pumpFrameQueue();
         }
 
         // ------- Scroll handler -------
@@ -208,6 +248,7 @@
 
             if (clamped !== lastFrameIndex) {
                 lastFrameIndex = clamped;
+                loadFrameWindow(clamped);
                 const img = nearestLoaded(clamped);
                 if (img) drawFrame(img);
             }
@@ -255,20 +296,16 @@
                 } else {
                     gradOpacity = (progress - GRAD_FADE_START) / (GRAD_FADE_END - GRAD_FADE_START);
                 }
-                sticky.style.setProperty('--grad-opacity', gradOpacity);
-                // Apply via inline ::after pseudo – use a wrapper div instead
-                if (sticky._gradEl) sticky._gradEl.style.opacity = gradOpacity;
+                // The static geometry/background live in the stylesheet. A direct
+                // opacity property is CSP-safe and keeps the scroll interpolation
+                // smooth without parsing a CSS declaration string.
+                if (sticky._gradEl) sticky._gradEl.style.opacity = String(gradOpacity);
             }
         }
 
         // Create a real div for the gradient (pseudo-element opacity not scriptable)
         const gradDiv = document.createElement('div');
-        gradDiv.style.cssText = [
-            'position:absolute', 'inset:0 0 0 0', 'bottom:0', 'left:0', 'right:0',
-            'height:28vh', 'top:auto',
-            'background:linear-gradient(to bottom, transparent, #ffffff)',
-            'pointer-events:none', 'opacity:0', 'z-index:3',
-        ].join(';');
+        gradDiv.className = 'hero-scroll__gradient';
         sticky.appendChild(gradDiv);
         sticky._gradEl = gradDiv;
 
@@ -284,8 +321,24 @@
             drawFrame(nearestLoaded(lastFrameIndex >= 0 ? lastFrameIndex : 0));
         }, { passive: true });
 
-        // Kick off
-        preloadFrames();
+        // Defer frame requests until the hero is close to the viewport. Only a
+        // small window around the current scroll position is requested.
+        if (posterEl) posterEl.style.display = 'block';
+        const startLoading = () => {
+            if (loadingStarted) return;
+            loadingStarted = true;
+            loadFrameWindow(lastFrameIndex >= 0 ? lastFrameIndex : 0);
+        };
+        if ("IntersectionObserver" in window) {
+            const observer = new IntersectionObserver((entries) => {
+                if (!entries.some((entry) => entry.isIntersecting)) return;
+                observer.disconnect();
+                startLoading();
+            }, { rootMargin: "200px 0px" });
+            observer.observe(section);
+        } else {
+            startLoading();
+        }
         // Initial paint (progress = 0)
         requestAnimationFrame(onScrollTick);
     }

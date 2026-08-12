@@ -18,6 +18,7 @@ const CACHE_TTL = Object.freeze({
     fxRates: CACHE_POLICIES.fxRates.ttlMs,
     savedCalculations: CACHE_POLICIES.savedCalculations.ttlMs,
     calculationOutbox: CACHE_POLICIES.calculationOutbox.ttlMs,
+    calculationDeadLetters: CACHE_POLICIES.calculationDeadLetters.ttlMs,
 });
 
 const CACHE_STALE_TTL = Object.freeze({
@@ -29,16 +30,31 @@ const CACHE_STALE_TTL = Object.freeze({
     fxRates: CACHE_POLICIES.fxRates.staleTtlMs,
     savedCalculations: CACHE_POLICIES.savedCalculations.staleTtlMs,
     calculationOutbox: CACHE_POLICIES.calculationOutbox.staleTtlMs,
+    calculationDeadLetters: CACHE_POLICIES.calculationDeadLetters.staleTtlMs,
 });
 
 const memoryEntries = new Map();
 let databasePromise;
+const DURABLE_ENTRY_EXPIRY = Number.MAX_SAFE_INTEGER;
+const PRIVATE_CACHE_LIMITS = Object.freeze({
+    portfolioIndex: CACHE_POLICIES.portfolioIndex.maxEntries,
+    portfolioDetail: CACHE_POLICIES.portfolioDetail.maxEntries,
+    portfolioOutbox: CACHE_POLICIES.portfolioOutbox.maxEntries,
+    watchlists: CACHE_POLICIES.watchlists.maxEntries,
+    dipPerformance: CACHE_POLICIES.dipPerformance.maxEntries,
+    fxRates: CACHE_POLICIES.fxRates.maxEntries,
+    savedCalculations: CACHE_POLICIES.savedCalculations.maxEntries,
+    calculationOutbox: CACHE_POLICIES.calculationOutbox.maxEntries,
+    calculationDeadLetters: CACHE_POLICIES.calculationDeadLetters.maxEntries,
+});
 
 function openDatabase() {
     if (databasePromise) return databasePromise;
     if (!globalThis.indexedDB) {
-        databasePromise = Promise.resolve(null);
-        return databasePromise;
+        // Do not memoize an unavailable API. Some embedded browsers expose
+        // IndexedDB after the page has initialized, and the store should be
+        // able to recover from an early memory-only call.
+        return null;
     }
 
     databasePromise = new Promise((resolve) => {
@@ -98,7 +114,9 @@ function assertUid(uid) {
 
 function assertScopedKey(uid, key) {
     const normalized = String(key || "");
-    if (!normalized.includes(`:${uid}`)) {
+    const marker = `:${uid}`;
+    if (!normalized.includes(marker)
+        || (!normalized.endsWith(marker) && !normalized.includes(`${marker}:`))) {
         throw new TypeError("Private client-data keys must include the active Firebase UID.");
     }
     return normalized;
@@ -125,7 +143,57 @@ function createKeys(uid) {
         dipPerformance: (resultKey) => `dip-performance:${uid}:${encode(resultKey)}`,
         calculations: () => `saved-calculations:${uid}`,
         calculationOutbox: () => `calculation-outbox:${uid}`,
+        calculationDeadLetters: () => `calculation-dead-letters:${uid}`,
     });
+}
+
+async function runTransactionWithStatus(mode, operation) {
+    const database = await openDatabase();
+    if (!database) return { completed: false, result: undefined };
+    return new Promise((resolve, reject) => {
+        const transaction = database.transaction(ENTRY_STORE, mode);
+        const store = transaction.objectStore(ENTRY_STORE);
+        let result;
+        try {
+            result = operation(store);
+        } catch (error) {
+            reject(error);
+            return;
+        }
+        transaction.oncomplete = () => resolve({ completed: true, result: result?.result });
+        transaction.onerror = () => reject(transaction.error || result?.error);
+        transaction.onabort = () => reject(transaction.error || new Error("Client cache transaction aborted."));
+    });
+}
+
+function cacheFamilyForKey(uid, key) {
+    const prefix = String(key || "");
+    const scoped = (name) => `${name}:${uid}`;
+    if (prefix === scoped("portfolio-index")) return "portfolioIndex";
+    if (prefix.startsWith(`${scoped("portfolio-outbox")}:`)) return "portfolioOutbox";
+    if (prefix.startsWith(`${scoped("portfolio")}:`)) return "portfolioDetail";
+    if (prefix === scoped("watchlists")) return "watchlists";
+    if (prefix.startsWith(`${scoped("dip-performance")}:`)) return "dipPerformance";
+    if (prefix.startsWith(`${scoped("fx-rates")}:`)) return "fxRates";
+    if (prefix === scoped("saved-calculations")) return "savedCalculations";
+    if (prefix === scoped("calculation-outbox")) return "calculationOutbox";
+    if (prefix === scoped("calculation-dead-letters")) return "calculationDeadLetters";
+    return null;
+}
+
+function isMutationQueueKey(key) {
+    const value = String(key || "");
+    return value.startsWith("portfolio-outbox:")
+        || value.startsWith("calculation-outbox:")
+        || value.startsWith("calculation-dead-letters:");
+}
+
+function estimateEntryBytes(entry) {
+    try {
+        return new TextEncoder().encode(JSON.stringify(entry?.data ?? null)).byteLength;
+    } catch {
+        try { return JSON.stringify(entry?.data ?? null).length * 2; } catch { return 0; }
+    }
 }
 
 function createDipPerformanceResultKey(watchlist) {
@@ -148,25 +216,85 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
     const uid = assertUid(rawUid);
     const keys = createKeys(uid);
 
+    function limitForKey(scopedKey, { maxEntries = null, maxBytes = null, policyName = null } = {}) {
+        const family = policyName || cacheFamilyForKey(uid, scopedKey);
+        return {
+            family,
+            maxEntries: Number.isFinite(maxEntries)
+                ? Math.max(1, Math.floor(maxEntries))
+                : (family ? PRIVATE_CACHE_LIMITS[family] : null),
+            maxBytes: Number.isFinite(maxBytes) ? Math.max(1, Math.floor(maxBytes)) : null,
+        };
+    }
+
+    async function prunePrivateEntries(scopedKey, limits) {
+        if (!limits.family || (!Number.isFinite(limits.maxEntries) && !Number.isFinite(limits.maxBytes))) {
+            return;
+        }
+
+        const matches = (entry) => entry?.uid === uid
+            && cacheFamilyForKey(uid, entry.key) === limits.family;
+        const sortNewest = (left, right) => Number(right.cachedAt || 0) - Number(left.cachedAt || 0);
+        const retained = [...memoryEntries.values()]
+            .filter(matches)
+            .sort(sortNewest);
+        const removeKeys = new Set();
+        if (Number.isFinite(limits.maxEntries)) {
+            retained.slice(limits.maxEntries).forEach((entry) => removeKeys.add(entry.key));
+        }
+        if (Number.isFinite(limits.maxBytes)) {
+            let bytes = 0;
+            retained.forEach((entry) => {
+                if (removeKeys.has(entry.key)) return;
+                const entryBytes = estimateEntryBytes(entry);
+                if (bytes > 0 && bytes + entryBytes > limits.maxBytes) removeKeys.add(entry.key);
+                else bytes += entryBytes;
+            });
+        }
+        removeKeys.forEach((key) => memoryEntries.delete(key));
+        if (!removeKeys.size) return;
+
+        const database = await openDatabase();
+        if (!database) return;
+        await new Promise((resolve, reject) => {
+            const transaction = database.transaction(ENTRY_STORE, "readwrite");
+            const cursor = transaction.objectStore(ENTRY_STORE).openCursor();
+            cursor.onsuccess = () => {
+                const current = cursor.result;
+                if (!current) return;
+                if (removeKeys.has(current.key) && current.value?.uid === uid) current.delete();
+                current.continue();
+            };
+            cursor.onerror = () => reject(cursor.error);
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error || new Error("Client cache pruning aborted."));
+        });
+    }
+
     async function remove(key) {
         const scopedKey = assertScopedKey(uid, key);
         memoryEntries.delete(scopedKey);
         try {
-            await runTransaction("readwrite", (store) => store.delete(scopedKey));
+            const result = await runTransactionWithStatus("readwrite", (store) => store.delete(scopedKey));
+            return { key: scopedKey, persisted: result.completed === true };
         } catch (error) {
             console.warn(`Unable to remove client cache entry ${scopedKey}`, error);
+            return { key: scopedKey, persisted: false, error };
         }
     }
 
     async function get(key, { allowExpired = true } = {}) {
         const scopedKey = assertScopedKey(uid, key);
         let entry = memoryEntries.get(scopedKey);
+        let loadedFromDatabase = false;
         if (!entry) {
             try {
                 const database = await openDatabase();
                 if (database) {
                     const transaction = database.transaction(ENTRY_STORE, "readonly");
                     entry = await requestResult(transaction.objectStore(ENTRY_STORE).get(scopedKey));
+                    loadedFromDatabase = Boolean(entry);
                 }
             } catch (error) {
                 console.warn(`Unable to read client cache entry ${scopedKey}`, error);
@@ -178,6 +306,20 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
             recordCacheEvent("uid", "miss");
             return null;
         }
+        if (isMutationQueueKey(scopedKey)
+            && (entry.expiresAt !== DURABLE_ENTRY_EXPIRY || entry.staleExpiresAt !== DURABLE_ENTRY_EXPIRY)) {
+            entry = {
+                ...entry,
+                expiresAt: DURABLE_ENTRY_EXPIRY,
+                staleExpiresAt: DURABLE_ENTRY_EXPIRY,
+            };
+            try {
+                await runTransaction("readwrite", (store) => store.put(entry));
+            } catch (error) {
+                console.warn(`Unable to upgrade mutation queue durability for ${scopedKey}`, error);
+            }
+        }
+        if (loadedFromDatabase) entry = { ...entry, persisted: true };
         memoryEntries.set(scopedKey, entry);
         const timestamp = now();
         const isFresh = entry.expiresAt > timestamp;
@@ -202,6 +344,10 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
         staleTtlMs = 0,
         serverUpdatedAt = null,
         version = null,
+        durable = false,
+        maxEntries = null,
+        maxBytes = null,
+        policyName = null,
     } = {}) {
         const scopedKey = assertScopedKey(uid, key);
         if (!Number.isFinite(ttlMs) || ttlMs < 0) {
@@ -216,19 +362,41 @@ function createUserDataStore(rawUid, { now = () => Date.now() } = {}) {
             schemaVersion: ENVELOPE_SCHEMA_VERSION,
             uid,
             cachedAt,
-            expiresAt: cachedAt + ttlMs,
-            staleExpiresAt: cachedAt + ttlMs + staleTtlMs,
+            expiresAt: durable || isMutationQueueKey(scopedKey)
+                ? DURABLE_ENTRY_EXPIRY
+                : cachedAt + ttlMs,
+            staleExpiresAt: durable || isMutationQueueKey(scopedKey)
+                ? DURABLE_ENTRY_EXPIRY
+                : cachedAt + ttlMs + staleTtlMs,
             serverUpdatedAt,
             version,
             data,
         };
         memoryEntries.set(scopedKey, entry);
+        const limits = limitForKey(scopedKey, { maxEntries, maxBytes, policyName });
+        let persisted = false;
+        let persistenceError = null;
         try {
-            await runTransaction("readwrite", (store) => store.put(entry));
+            const result = await runTransaction("readwrite", (store) => store.put(entry));
+            persisted = result !== undefined;
+            if (!persisted) persistenceError = new Error("IndexedDB is unavailable; data is memory-only.");
         } catch (error) {
             console.warn(`Unable to persist client cache entry ${scopedKey}`, error);
+            persistenceError = error;
         }
-        return { ...entry, isFresh: true };
+        const memoryEntry = { ...entry, persisted };
+        memoryEntries.set(scopedKey, memoryEntry);
+        try {
+            await prunePrivateEntries(scopedKey, limits);
+        } catch (error) {
+            console.warn(`Unable to enforce client cache limits for ${scopedKey}`, error);
+        }
+        return {
+            ...memoryEntry,
+            isFresh: true,
+            persisted,
+            persistenceError,
+        };
     }
 
     async function removePrefix(prefix) {

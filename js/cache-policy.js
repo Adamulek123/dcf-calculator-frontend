@@ -8,6 +8,7 @@ function policy({
     staleTtlMs,
     maxEntries = null,
     maxBytes = null,
+    durable = false,
     version = 1,
     invalidatedBy = [],
     key,
@@ -18,6 +19,7 @@ function policy({
         staleTtlMs,
         maxEntries,
         maxBytes,
+        durable,
         version,
         invalidatedBy: Object.freeze([...invalidatedBy]),
         key,
@@ -105,6 +107,7 @@ const CACHE_POLICIES = Object.freeze({
         ttlMs: 7 * DAY,
         staleTtlMs: 7 * DAY,
         maxEntries: 20,
+        durable: true,
         invalidatedBy: ["portfolio-sync-success", "portfolio-delete"],
     }),
     watchlists: policy({
@@ -140,7 +143,16 @@ const CACHE_POLICIES = Object.freeze({
         ttlMs: 30 * DAY,
         staleTtlMs: 30 * DAY,
         maxEntries: 100,
+        durable: true,
         invalidatedBy: ["calculation-sync-success", "account-change"],
+    }),
+    calculationDeadLetters: policy({
+        ownership: "uid",
+        ttlMs: 30 * DAY,
+        staleTtlMs: 30 * DAY,
+        maxEntries: 100,
+        durable: true,
+        invalidatedBy: ["calculation-dead-letter-remove", "account-change"],
     }),
 });
 

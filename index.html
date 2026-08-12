@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
-                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-                   font-src https://fonts.gstatic.com;
+                   script-src 'self';
+                   style-src 'self' https://fonts.googleapis.com;
+                   font-src 'self' https://fonts.gstatic.com;
                    img-src 'self' https://img.logo.dev data:;
-                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;">
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com;
+                   base-uri 'self';
+                   object-src 'none';
+                   form-action 'self';">
     <meta name="theme-color" content="#f8fafc">
     <title>DCF Calculator | Institutional-Grade Valuation Workspace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -56,15 +58,9 @@
                      width="2560" height="1440"
                      alt="DCF Calculator shown on an open laptop">
 
-                <noscript>
-                    <img src="assets/frames/poster.webp" width="2560" height="1440"
-                         style="width:100%;height:100%;object-fit:contain;position:absolute;inset:0"
-                         alt="DCF Calculator shown on an open laptop">
-                </noscript>
-
                 <!-- CTA overlay — fades in when laptop is fully open, sits inside sticky -->
-                <div class="hero-scroll__cta">                 
-                    <div class="hero-actions" style="justify-content:center">
+                <div class="hero-scroll__cta">
+                    <div class="hero-actions">
                         <a class="btn btn-solid" href="login.html">Enter Platform</a>
                         <a class="btn btn-ghost" href="#highlights">Explore Highlights</a>
                     </div>

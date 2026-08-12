@@ -30,23 +30,28 @@ async function getPublicEntry(key, { allowExpired = false } = {}) {
     const database = await openDatabase();
     if (!database) return null;
     return new Promise((resolve) => {
-        const tx = database.transaction(STORE_NAME, "readonly");
+        const tx = database.transaction(STORE_NAME, "readwrite");
         const store = tx.objectStore(STORE_NAME);
         const request = store.get(key);
+        let result = null;
         request.onsuccess = () => {
             const record = request.result;
             const now = Date.now();
             const isFresh = record?.expiresAt > now;
             const staleExpiresAt = record?.staleExpiresAt || record?.expiresAt || 0;
             if (!record || (!isFresh && (!allowExpired || staleExpiresAt <= now))) {
-                if (record) void deletePublicRecord(key);
+                if (record) store.delete(key);
                 recordCacheEvent("public", record ? "expired" : "miss");
-                return resolve(null);
+                return;
             }
+            record.lastAccessed = now;
+            store.put(record);
             recordCacheEvent("public", isFresh ? "hit" : "stale");
-            resolve({ ...record, isFresh });
+            result = { ...record, isFresh };
         };
-        request.onerror = () => resolve(null);
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = () => resolve(null);
+        tx.onabort = () => resolve(null);
     });
 }
 
@@ -129,9 +134,14 @@ async function setPublicRecord(key, data, ttlMs, {
 
 async function deletePublicRecord(key) {
     const database = await openDatabase();
-    if (!database) return;
+    if (!database) return false;
     const tx = database.transaction(STORE_NAME, "readwrite");
     tx.objectStore(STORE_NAME).delete(key);
+    return new Promise((resolve) => {
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.onabort = () => resolve(false);
+    });
 }
 
 export { deletePublicRecord, getPublicEntry, getPublicRecord, setPublicRecord };

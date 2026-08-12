@@ -1,4 +1,4 @@
-const SHELL_CACHE = "dcf-shell-v13";
+const SHELL_CACHE = "dcf-shell-v14";
 const SHELL_ASSETS = [
     "./",
     "./index.html",
@@ -16,11 +16,16 @@ const SHELL_ASSETS = [
     "./js/api.js",
     "./js/auth.js",
     "./js/auth-guard.js",
+    "./js/login-page.js",
+    "./js/register-page.js",
     "./js/dcf-calculator.js",
+    "./js/dcf-calculator-entry.js",
     "./js/portfolio-creator.js",
     "./js/dip-finder.js",
     "./js/financial-data.js",
+    "./js/financial-data-entry.js",
     "./js/earnings-calendar.js",
+    "./js/earnings-calendar-resilience.mjs",
     "./js/cache-metrics.js",
     "./js/cache-policy.js",
     "./js/cache-registry.js",
@@ -33,6 +38,23 @@ const SHELL_ASSETS = [
     "./js/charts.js",
     "./js/cache.js",
 ];
+
+const SHELL_NAVIGATION_SUFFIXES = SHELL_ASSETS
+    .filter((asset) => asset.endsWith(".html"))
+    .map((asset) => asset.replace(/^\./, ""));
+
+function normalizedShellNavigation(request, url) {
+    if (request.mode !== "navigate") return null;
+    const scopePath = new URL(self.registration.scope).pathname;
+    const isKnownShellPath = url.pathname === scopePath
+        || SHELL_NAVIGATION_SUFFIXES.some((suffix) => url.pathname.endsWith(suffix));
+    if (!isKnownShellPath) return null;
+    return new Request(`${url.origin}${url.pathname}`, {
+        method: "GET",
+        headers: { Accept: request.headers.get("Accept") || "text/html" },
+        credentials: "same-origin",
+    });
+}
 
 self.addEventListener("install", (event) => {
     event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)));
@@ -52,17 +74,26 @@ self.addEventListener("fetch", (event) => {
     const url = new URL(request.url);
     if (request.method !== "GET" || url.origin !== self.location.origin) return;
 
+    const navigationCacheKey = normalizedShellNavigation(request, url);
     const isShellNavigation = request.mode === "navigate";
-    const isPrecachedAsset = SHELL_ASSETS.some((asset) => url.pathname.endsWith(asset.replace(/^\.\//, "/")));
+    const isPrecachedAsset = SHELL_ASSETS
+        .filter((asset) => asset !== "./")
+        .some((asset) => url.pathname.endsWith(asset.replace(/^\.\//, "/")));
     if (!isShellNavigation && !isPrecachedAsset) return;
 
     event.respondWith((async () => {
-        const cached = await caches.match(request);
+        const assetCacheKey = isPrecachedAsset
+            ? new Request(`${url.origin}${url.pathname}`, { method: "GET", credentials: "same-origin" })
+            : null;
+        const cacheKey = navigationCacheKey || assetCacheKey || request;
+        const cached = navigationCacheKey || isPrecachedAsset
+            ? await caches.match(cacheKey)
+            : null;
         try {
             const network = await fetch(request);
-            if (network.ok) {
+            if (network.ok && (navigationCacheKey || isPrecachedAsset)) {
                 const cache = await caches.open(SHELL_CACHE);
-                cache.put(request, network.clone());
+                await cache.put(cacheKey, network.clone());
             }
             return network;
         } catch {

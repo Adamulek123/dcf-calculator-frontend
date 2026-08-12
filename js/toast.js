@@ -22,12 +22,23 @@ function showToast(message, isError = false, duration = 3000, container = docume
 
     container.appendChild(toast);
 
+    const timeout = Number(duration);
+    const visibleFor = Number.isFinite(timeout) ? Math.max(0, timeout) : 3000;
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+
     setTimeout(() => {
-        toast.style.animation = "fadeOut 0.5s forwards";
-        toast.addEventListener("animationend", () => {
+        if (reducedMotion) {
             toast.remove();
-        });
-    }, duration);
+            return;
+        }
+
+        toast.classList.add("is-dismissing");
+        const fallbackCleanup = setTimeout(() => toast.remove(), 650);
+        toast.addEventListener("animationend", () => {
+            clearTimeout(fallbackCleanup);
+            toast.remove();
+        }, { once: true });
+    }, visibleFor);
 }
 
 export { showToast };
