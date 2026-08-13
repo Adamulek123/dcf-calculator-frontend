@@ -490,3 +490,26 @@ test("service-worker shell precaches both authentication page entry modules", ()
         assert.equal(existsSync(new URL(`../js/${moduleName}`, import.meta.url)), true);
     }
 });
+
+test("shared stylesheet revisions stay aligned with the service-worker cache", () => {
+    const serviceWorker = readFileSync(new URL("../sw.js", import.meta.url), "utf8");
+    const stylesheetRevision = serviceWorker.match(/\.\/css\/style\.css\?v=(\d+)/)?.[1];
+
+    assert.ok(stylesheetRevision, "service worker must precache a versioned shared stylesheet");
+    assert.match(serviceWorker, /dcf-shell-v\d+/);
+    assert.match(serviceWorker, /url\.pathname\}\$\{url\.search\}/);
+
+    for (const pageName of [
+        "index.html",
+        "login.html",
+        "register.html",
+        "dcf-calculator.html",
+        "portfolio-creator.html",
+        "dip-finder.html",
+        "financial-data.html",
+        "earnings-calendar.html",
+    ]) {
+        const page = readFileSync(new URL(`../${pageName}`, import.meta.url), "utf8");
+        assert.match(page, new RegExp(`css/style\\.css\\?v=${stylesheetRevision}`));
+    }
+});

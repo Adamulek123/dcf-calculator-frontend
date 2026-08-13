@@ -1,4 +1,4 @@
-const SHELL_CACHE = "dcf-shell-v14";
+const SHELL_CACHE = "dcf-shell-v15";
 const SHELL_ASSETS = [
     "./",
     "./index.html",
@@ -9,7 +9,7 @@ const SHELL_ASSETS = [
     "./dip-finder.html",
     "./financial-data.html",
     "./earnings-calendar.html",
-    "./css/style.css",
+    "./css/style.css?v=15",
     "./js/service-worker-register.js",
     "./js/script.js",
     "./js/hero-animation.js",
@@ -42,6 +42,10 @@ const SHELL_ASSETS = [
 const SHELL_NAVIGATION_SUFFIXES = SHELL_ASSETS
     .filter((asset) => asset.endsWith(".html"))
     .map((asset) => asset.replace(/^\./, ""));
+
+const SHELL_ASSET_PATHS = SHELL_ASSETS
+    .filter((asset) => asset !== "./")
+    .map((asset) => new URL(asset, self.registration.scope).pathname);
 
 function normalizedShellNavigation(request, url) {
     if (request.mode !== "navigate") return null;
@@ -76,14 +80,12 @@ self.addEventListener("fetch", (event) => {
 
     const navigationCacheKey = normalizedShellNavigation(request, url);
     const isShellNavigation = request.mode === "navigate";
-    const isPrecachedAsset = SHELL_ASSETS
-        .filter((asset) => asset !== "./")
-        .some((asset) => url.pathname.endsWith(asset.replace(/^\.\//, "/")));
+    const isPrecachedAsset = SHELL_ASSET_PATHS.includes(url.pathname);
     if (!isShellNavigation && !isPrecachedAsset) return;
 
     event.respondWith((async () => {
         const assetCacheKey = isPrecachedAsset
-            ? new Request(`${url.origin}${url.pathname}`, { method: "GET", credentials: "same-origin" })
+            ? new Request(`${url.origin}${url.pathname}${url.search}`, { method: "GET", credentials: "same-origin" })
             : null;
         const cacheKey = navigationCacheKey || assetCacheKey || request;
         const cached = navigationCacheKey || isPrecachedAsset
