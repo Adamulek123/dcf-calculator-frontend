@@ -210,7 +210,9 @@ function renderMetadata() {
     if (manifest.changedAt && manifest.changedAt !== manifest.checkedAt) {
         parts.push(`calendar changed ${formatDateTime(manifest.changedAt)}`);
     }
-    if (manifest.constituentVersion) parts.push(`constituents ${manifest.constituentVersion}`);
+    if (manifest.tickerDirectoryListingCount) {
+        parts.push(`${manifest.tickerDirectoryListingCount.toLocaleString()} directory listings`);
+    }
     if (isProviderStale) parts.push("provider refresh overdue");
     elements.meta.textContent = parts.join(" · ");
 
@@ -699,14 +701,14 @@ function renderWeek() {
     } else {
         const empty = document.createElement("div");
         empty.className = "earnings-empty-week";
-        empty.innerHTML = "<strong>No reports scheduled</strong><span>No S&amp;P 500 earnings are expected for this week.</span>";
+        empty.innerHTML = "<strong>No reports scheduled</strong><span>No US-listed company earnings are expected for this week.</span>";
         elements.days.appendChild(empty);
     }
     const additional = additionalDates(events, weekdayDates);
     if (additional) elements.days.appendChild(additional);
     setActiveMobileDay(selectedMobileDay);
 
-    setStatus(events.length ? "" : "No S&P 500 earnings are expected for this week.");
+    setStatus(events.length ? "" : "No US-listed company earnings are expected for this week.");
 }
 
 async function readCachedWeek(start) {
