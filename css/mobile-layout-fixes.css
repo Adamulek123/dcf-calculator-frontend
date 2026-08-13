@@ -103,6 +103,21 @@
     margin-left: 0;
 }
 
+/* The base field rule gives every input width: 100%. Keep the segmented
+   control's native radios focusable without letting those hidden boxes
+   create horizontal overflow. */
+.portfolio-terminal-page .pt-segment input[type="radio"] {
+    width: 1px;
+    height: 1px;
+    min-height: 0;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
 @media (max-width: 650px) {
     .portfolio-terminal-page .app-layout {
         display: block;
