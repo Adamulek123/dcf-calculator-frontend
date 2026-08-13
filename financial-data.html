@@ -3,21 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
-                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+                   script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
+                   style-src 'self' https://fonts.googleapis.com;
+                   style-src-elem 'self' https://fonts.googleapis.com;
+                   style-src-attr 'unsafe-inline';
                    font-src https://fonts.gstatic.com;
                    img-src 'self' https://img.logo.dev data:;
-                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com https://img.logo.dev;">
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://cdn.jsdelivr.net https://www.gstatic.com https://img.logo.dev;
+                   object-src 'none';
+                   base-uri 'self';
+                   form-action 'self';">
     <meta name="theme-color" content="#0b101a">
     <title>Financial Data | DCF Calculator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+            integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC"
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body class="financial-page">
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -30,9 +36,11 @@
                 <!-- Header Card with Search and Company Info -->
                 <div class="financial-header-card">
                     <div class="financial-search-wrapper" id="financialSearchWrapper">
-                        <input type="text" autocomplete="off" id="financialTickerInput" placeholder="Enter a ticker to begin.">
-                        <button id="getFinancialDataBtn" class="financial-search-btn">Search</button>
-                        <div id="tickerAutocomplete" class="ticker-autocomplete hidden"></div>
+                        <input type="text" autocomplete="off" id="financialTickerInput" placeholder="Enter a ticker to begin."
+                               role="combobox" aria-autocomplete="list" aria-haspopup="listbox"
+                               aria-controls="tickerAutocomplete" aria-expanded="false">
+                        <button id="getFinancialDataBtn" class="financial-search-btn" type="button">Search</button>
+                        <div id="tickerAutocomplete" class="ticker-autocomplete hidden" role="listbox" aria-label="Ticker suggestions"></div>
                     </div>
 
                     <!-- Company Info Section (inside header) -->
@@ -154,9 +162,9 @@
                     <!-- Period Toggle -->
                     <div id="financialPeriodToggle" class="financial-period-toggle">
                         <div class="financial-period-toggle-group">
-                            <button id="quarterlyBtn" class="financial-period-btn active">Quarterly</button>
-                            <button id="quarterlyTTMBtn" class="financial-period-btn">Quarterly (TTM)</button>
-                            <button id="annuallyBtn" class="financial-period-btn">Annually</button>
+                            <button id="quarterlyBtn" class="financial-period-btn active" type="button" aria-pressed="true">Quarterly</button>
+                            <button id="quarterlyTTMBtn" class="financial-period-btn" type="button" aria-pressed="false">Quarterly (TTM)</button>
+                            <button id="annuallyBtn" class="financial-period-btn" type="button" aria-pressed="false">Annually</button>
                         </div>
                     </div>
 
@@ -168,8 +176,9 @@
     </div>
 
     <!-- Fullscreen Chart Modal -->
-    <div id="fullscreen-chart-modal" class="hidden">
-        <div id="fullscreen-chart-container">
+    <div id="fullscreen-chart-modal" class="hidden" role="dialog" aria-modal="true"
+         aria-labelledby="fullscreen-chart-title" aria-hidden="true" tabindex="-1">
+        <div id="fullscreen-chart-container" role="document">
             <div class="fullscreen-header">
                 <div class="fullscreen-header-left">
                     <img id="fullscreen-company-logo" class="fullscreen-company-logo" src="" alt="" referrerpolicy="strict-origin-when-cross-origin">
@@ -177,28 +186,28 @@
                 </div>
                 <div class="fullscreen-header-right">
                     <div id="fcf-toggle-container" class="fcf-toggle-group hidden">
-                        <button class="fcf-toggle-btn active" data-fcf-view="fcf">FCF</button>
-                        <button class="fcf-toggle-btn" data-fcf-view="fcf-sbc">FCF & SBC</button>
-                        <button class="fcf-toggle-btn" data-fcf-view="sbc-adj-fcf">SBC Adj. FCF</button>
-                        <button class="fcf-toggle-btn" data-fcf-view="fcf-per-share">FCF Per Share</button>
-                        <button class="fcf-toggle-btn" data-fcf-view="sbc-adj-fcf-per-share">SBC Adj. FCF Per Share</button>
+                        <button class="fcf-toggle-btn active" type="button" data-fcf-view="fcf">FCF</button>
+                        <button class="fcf-toggle-btn" type="button" data-fcf-view="fcf-sbc">FCF & SBC</button>
+                        <button class="fcf-toggle-btn" type="button" data-fcf-view="sbc-adj-fcf">SBC Adj. FCF</button>
+                        <button class="fcf-toggle-btn" type="button" data-fcf-view="fcf-per-share">FCF Per Share</button>
+                        <button class="fcf-toggle-btn" type="button" data-fcf-view="sbc-adj-fcf-per-share">SBC Adj. FCF Per Share</button>
                     </div>
                     <div class="fullscreen-period-dropdown">
-                        <button id="fullscreen-period-btn" class="fullscreen-period-btn">
+                        <button id="fullscreen-period-btn" class="fullscreen-period-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
                             <span id="fullscreen-period-text">All</span>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                             </svg>
                         </button>
-                        <div id="fullscreen-period-menu" class="fullscreen-period-menu hidden">
-                            <button class="fullscreen-period-option active" data-period="all">All</button>
-                            <button class="fullscreen-period-option" data-period="1y">1 Year</button>
-                            <button class="fullscreen-period-option" data-period="2y">2 Years</button>
-                            <button class="fullscreen-period-option" data-period="5y">5 Years</button>
-                            <button class="fullscreen-period-option" data-period="10y">10 Years</button>
+                        <div id="fullscreen-period-menu" class="fullscreen-period-menu hidden" role="listbox" aria-label="Chart period">
+                            <button class="fullscreen-period-option active" type="button" role="option" aria-selected="true" data-period="all">All</button>
+                            <button class="fullscreen-period-option" type="button" role="option" aria-selected="false" data-period="1y">1 Year</button>
+                            <button class="fullscreen-period-option" type="button" role="option" aria-selected="false" data-period="2y">2 Years</button>
+                            <button class="fullscreen-period-option" type="button" role="option" aria-selected="false" data-period="5y">5 Years</button>
+                            <button class="fullscreen-period-option" type="button" role="option" aria-selected="false" data-period="10y">10 Years</button>
                         </div>
                     </div>
-                    <button id="close-fullscreen-btn">&times;</button>
+                    <button id="close-fullscreen-btn" type="button" aria-label="Close fullscreen chart">&times;</button>
                 </div>
             </div>
             <div class="fullscreen-chart-body">
@@ -215,13 +224,7 @@
 
     <div id="toast-container"></div>
 
-    <script type="module">
-        import { runAuthGuard } from "./js/auth-guard.js";
-        import { renderSidebar } from "./js/sidebar.js";
-        import "./js/financial-data.js";
-        runAuthGuard();
-        renderSidebar();
-    </script>
+    <script type="module" src="js/financial-data-entry.js"></script>
     <script src="js/service-worker-register.js" defer></script>
 </body>
 </html>

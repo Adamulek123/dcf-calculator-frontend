@@ -11,8 +11,16 @@ function financialPolicy(dataType) {
 async function getCachedFinancialData(ticker, dataType) {
     const policy = financialPolicy(dataType);
     const cacheKey = publicCache.key(policy, { ticker, dataType });
-    const entry = await publicCache.get(policy, cacheKey, { allowStale: false });
-    return entry?.data ?? null;
+    const entry = await publicCache.get(policy, cacheKey, { allowStale: true });
+    if (!entry) return null;
+    return {
+        data: entry.data,
+        isFresh: entry.isFresh !== false,
+        isStale: entry.isFresh === false,
+        cachedAt: entry.cachedAt ?? null,
+        staleExpiresAt: entry.staleExpiresAt ?? null,
+        policy
+    };
 }
 
 async function setCachedFinancialData(ticker, dataType, data) {

@@ -5,6 +5,11 @@ import { renderSidebar } from "./sidebar.js";
 import { getLogoUrl, onLogoError } from "./ticker.js";
 import { showToast } from "./toast.js";
 import { isAdvertisedWeek, visibleWeekdayDates } from "./earnings-calendar-coverage.mjs";
+import {
+    canUseStaleEstimate,
+    isEstimateFresh,
+    isEstimateWithinStaleWindow,
+} from "./earnings-calendar-resilience.mjs";
 
 runAuthGuard();
 renderSidebar();
@@ -331,28 +336,44 @@ async function loadEventEstimates(event, { force = false } = {}) {
     if (!event.eventId || !revision) throw new Error("Estimate details are not available for this calendar event.");
     const key = estimateCacheKey(event, revision);
     let entry = loadedEstimates.get(key);
+    // The in-memory map outlives the one-hour freshness window and can also
+    // outlive the IndexedDB record. Recheck absolute timestamps on every
+    // access so an entry can never be resurrected after its seven-day stale
+    // horizon.
+    if (entry && !isEstimateWithinStaleWindow(entry)) {
+        loadedEstimates.delete(key);
+        entry = null;
+    }
     if (!entry) {
         entry = await publicCache.get("earningsEstimate", key, { allowStale: true });
         if (entry) loadedEstimates.set(key, entry);
     }
-    if (entry?.isFresh && !force) return entry.data;
+    if (isEstimateFresh(entry) && !force) return { detail: entry.data, isStale: false };
 
     const headers = {};
     if (entry?.version && !force) headers["If-None-Match"] = entry.version;
     const endpoint = `/earnings-calendar/weeks/${encodeURIComponent(start)}/events/${encodeURIComponent(event.eventId)}/estimates?revision=${encodeURIComponent(revision)}`;
-    const response = await publicApiCall(endpoint, {
-        headers,
-        cache: force ? "reload" : "default",
-        coalesce: !force,
-        retryAttempts: 0,
-    });
+    let response;
+    try {
+        response = await publicApiCall(endpoint, {
+            headers,
+            cache: force ? "reload" : "default",
+            coalesce: !force,
+            retryAttempts: 0,
+        });
+    } catch (error) {
+        if (canUseStaleEstimate(null, entry)) {
+            return { detail: entry.data, isStale: true };
+        }
+        throw error;
+    }
     if (response.status === 304 && entry?.data) {
         const refreshed = await publicCache.set("earningsEstimate", key, entry.data, {
             version: entry.version,
             serverUpdatedAt: loadedWeeks.get(start)?.changedAt || null,
         }) || { ...entry, isFresh: true };
         loadedEstimates.set(key, refreshed);
-        return refreshed.data;
+        return { detail: refreshed.data, isStale: false };
     }
     const data = await response.json().catch(() => ({}));
     if (response.status === 409) {
@@ -361,22 +382,31 @@ async function loadEventEstimates(event, { force = false } = {}) {
         renderWeek();
         throw new Error("The calendar changed. Reopen the company to load its latest estimates.");
     }
-    if (!response.ok) throw new Error(data.message || "Unable to load consensus estimates.");
+    if (!response.ok) {
+        if (canUseStaleEstimate(response.status, entry)) {
+            return { detail: entry.data, isStale: true };
+        }
+        throw new Error(data.message || (response.status === 404
+            ? "Consensus estimates are not available for this event."
+            : "Unable to load consensus estimates."));
+    }
     const stored = await publicCache.set("earningsEstimate", key, data, {
         version: response.headers.get("ETag"),
         serverUpdatedAt: loadedWeeks.get(start)?.changedAt || null,
     }) || { data, isFresh: true, version: response.headers.get("ETag") };
     loadedEstimates.set(key, stored);
-    return data;
+    return { detail: data, isStale: false };
 }
 
 async function populateEventEstimates(event, requestId, { force = false } = {}) {
     renderEstimateState(null, { loading: true });
     try {
-        const detail = await loadEventEstimates(event, { force });
+        const { detail, isStale } = await loadEventEstimates(event, { force });
         if (requestId !== pendingDrawerRequest || activeDrawerEvent?.eventId !== event.eventId) return;
         renderEstimateState(detail);
-        setStatus(`Consensus estimates loaded for ${event.symbol || "the selected company"}.`);
+        setStatus(isStale
+            ? `Showing a cached estimate for ${event.symbol || "the selected company"}; live data is temporarily unavailable.`
+            : `Consensus estimates loaded for ${event.symbol || "the selected company"}.`);
     } catch (error) {
         if (requestId !== pendingDrawerRequest || activeDrawerEvent?.eventId !== event.eventId) return;
         renderEstimateState(null, { error: true });

@@ -1,9 +1,161 @@
 import { getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
 
+const activeChartInstances = new Set();
+
+function parseFiniteNumber(value) {
+    if (typeof value === "number") {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value !== "string") {
+        return null;
+    }
+    const normalized = value.trim();
+    if (!normalized) {
+        return null;
+    }
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function canonicalPeriodKey(record) {
+    const period = String(record?.fiscal_period || "").trim().toUpperCase();
+    const year = Number.parseInt(record?.fiscal_year, 10);
+    if (!period || !Number.isInteger(year) || year < 1900 || year > 2200) {
+        return null;
+    }
+    return `${year}-${period}`;
+}
+
+function compareCanonicalPeriods(left, right) {
+    const [leftYear, leftPeriod] = String(left).split("-");
+    const [rightYear, rightPeriod] = String(right).split("-");
+    const yearDelta = Number(leftYear) - Number(rightYear);
+    if (yearDelta !== 0) return yearDelta;
+    const periodOrder = { Q1: 1, Q2: 2, Q3: 3, Q4: 4, FY: 5 };
+    return (periodOrder[leftPeriod] || 0) - (periodOrder[rightPeriod] || 0);
+}
+
+function formatCanonicalPeriod(period) {
+    const match = String(period || "").match(/^(\d{4})-(Q[1-4]|FY)$/);
+    if (!match) return String(period || "");
+    return match[2] === "FY" ? match[1] : `${match[2]} ${match[1]}`;
+}
+
+function buildPeriodValuePairs(records, factName) {
+    const pairsByPeriod = new Map();
+    (Array.isArray(records) ? records : []).forEach((record) => {
+        const period = canonicalPeriodKey(record);
+        const value = parseFiniteNumber(record?.facts?.[factName]?.value);
+        if (!period || value === null) return;
+        pairsByPeriod.set(period, { period, value });
+    });
+    return [...pairsByPeriod.values()].sort((left, right) => compareCanonicalPeriods(left.period, right.period));
+}
+
+function buildPerShareValuePairs(records, numeratorFact, sharesFact = "SharesOutstanding") {
+    const pairsByPeriod = new Map();
+    (Array.isArray(records) ? records : []).forEach((record) => {
+        const period = canonicalPeriodKey(record);
+        const numerator = parseFiniteNumber(record?.facts?.[numeratorFact]?.value);
+        const shares = parseFiniteNumber(record?.facts?.[sharesFact]?.value);
+        if (!period || numerator === null || shares === null || shares === 0) return;
+        const value = numerator / shares;
+        if (!Number.isFinite(value)) return;
+        pairsByPeriod.set(period, { period, value });
+    });
+    return [...pairsByPeriod.values()].sort((left, right) => compareCanonicalPeriods(left.period, right.period));
+}
+
+function alignPeriodValueSeries(seriesDefinitions) {
+    const definitions = Array.isArray(seriesDefinitions) ? seriesDefinitions : [];
+    if (!definitions.length) return { periods: [], labels: [], datasets: [] };
+
+    const pairsByName = definitions.map((definition) => {
+        const pairs = Array.isArray(definition?.pairs) ? definition.pairs : [];
+        return new Map(pairs.map((pair) => [pair.period, pair.value]));
+    });
+    const periods = [...pairsByName[0].keys()]
+        .filter((period) => pairsByName.every((series) => series.has(period)))
+        .sort(compareCanonicalPeriods);
+
+    return {
+        periods,
+        labels: periods.map(formatCanonicalPeriod),
+        datasets: definitions.map((definition, index) => ({
+            label: definition.label,
+            data: periods.map((period) => pairsByName[index].get(period)),
+            ...(definition.style || {})
+        }))
+    };
+}
+
+function registerChartInstance(chart) {
+    if (chart) {
+        activeChartInstances.add(chart);
+        if (typeof chart.destroy === "function" && !chart.__financialDestroyWrapped) {
+            const originalDestroy = chart.destroy;
+            chart.destroy = function wrappedFinancialDestroy(...args) {
+                activeChartInstances.delete(chart);
+                return originalDestroy.apply(this, args);
+            };
+            chart.__financialDestroyWrapped = true;
+        }
+    }
+    return chart;
+}
+
+function destroyChart(chart) {
+    if (!chart) return;
+    activeChartInstances.delete(chart);
+    if (typeof chart.destroy === "function") {
+        chart.destroy();
+    }
+}
+
+function destroyChartsWithin(root) {
+    if (!root) return;
+    [...activeChartInstances].forEach((chart) => {
+        const canvas = chart.canvas || chart.__financialCanvas;
+        if (canvas && (canvas === root || root.contains?.(canvas))) {
+            destroyChart(chart);
+        }
+    });
+}
+
+function destroyAllCharts() {
+    [...activeChartInstances].forEach(destroyChart);
+}
+
+function cancelFullscreenRender(state = {}) {
+    state.renderGeneration = (state.renderGeneration || 0) + 1;
+    if (state.pendingFullscreenRender !== null && state.pendingFullscreenRender !== undefined) {
+        const cancel = globalThis.cancelAnimationFrame || globalThis.clearTimeout;
+        cancel(state.pendingFullscreenRender);
+        state.pendingFullscreenRender = null;
+    }
+    return state.renderGeneration;
+}
+
+function prefersReducedMotion() {
+    return Boolean(globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+}
+
 function createChart(canvas, title, chartData, isFullscreen = false, options = {}) {
     const ChartCtor = options.ChartCtor || globalThis.Chart;
     if (!ChartCtor) {
         throw new Error("Chart.js is required to create charts.");
+    }
+
+    const trackedChart = [...activeChartInstances].find((chart) => {
+        const chartCanvas = chart.canvas || chart.__financialCanvas;
+        return chartCanvas === canvas;
+    });
+    if (trackedChart) {
+        destroyChart(trackedChart);
+    }
+    const existingChart = ChartCtor.getChart?.(canvas);
+    if (existingChart && existingChart !== trackedChart) {
+        destroyChart(existingChart);
     }
 
     const ctx = canvas.getContext("2d");
@@ -95,7 +247,10 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
     const yAxisStepSize = calculateStepSize(maxValue, yAxisMin);
     const growthElements = options.growthElements;
 
-    return new ChartCtor(ctx, {
+    const reducedMotion = prefersReducedMotion();
+    const animationDuration = reducedMotion ? 0 : (isFullscreen ? 800 : 0);
+    const transitionDuration = reducedMotion ? 0 : (isFullscreen ? 400 : 0);
+    const chart = new ChartCtor(ctx, {
         type: chartData.type,
         data: {
             labels: chartData.labels,
@@ -104,14 +259,14 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: isFullscreen ? {
-                duration: 800,
+            animation: animationDuration > 0 ? {
+                duration: animationDuration,
                 easing: "easeOutQuart"
             } : false,
             transitions: {
-                active: { animation: { duration: isFullscreen ? 300 : 0 } },
-                hide: { animation: { duration: 400, easing: "easeOutQuart" } },
-                show: { animation: { duration: 400, easing: "easeOutQuart" } }
+                active: { animation: { duration: reducedMotion ? 0 : (isFullscreen ? 300 : 0) } },
+                hide: { animation: { duration: transitionDuration, easing: "easeOutQuart" } },
+                show: { animation: { duration: transitionDuration, easing: "easeOutQuart" } }
             },
             elements: {
                 bar: { borderSkipped: "start", borderWidth: 0 }
@@ -137,7 +292,7 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
                 },
                 tooltip: {
                     enabled: isFullscreen,
-                    animation: isFullscreen ? { duration: 100 } : false,
+                    animation: isFullscreen && !reducedMotion ? { duration: 100 } : false,
                     callbacks: {
                         label(context) {
                             let label = context.dataset.label || "";
@@ -226,6 +381,8 @@ function createChart(canvas, title, chartData, isFullscreen = false, options = {
             onClick: onClickHandler
         }
     });
+    chart.__financialCanvas = canvas;
+    return registerChartInstance(chart);
 }
 
 function calculateYoYGrowth(chartData, yearsBack, useCAGR = false) {
@@ -345,12 +502,16 @@ function updatePeriodDropdown(chartData, fullscreenPeriodMenu = document.getElem
     const options = fullscreenPeriodMenu.querySelectorAll(".fullscreen-period-option");
     options.forEach((option) => {
         const period = option.dataset.period;
-        if (available.includes(period)) {
+        const enabled = available.includes(period);
+        if (enabled) {
             option.classList.remove("disabled");
         } else {
             option.classList.add("disabled");
         }
-        option.classList.toggle("active", period === currentFullscreenPeriod);
+        option.disabled = !enabled;
+        const selected = period === currentFullscreenPeriod;
+        option.classList.toggle("active", selected);
+        option.setAttribute("aria-selected", String(selected));
     });
 }
 
@@ -481,6 +642,19 @@ function updateGrowthBadgesFromChart(chart, growthElements = {}) {
     updateBadge(growth10y, "10Y", g10);
 }
 
+function scheduleFullscreenChartRender(state, canvas, title, chartData, options = {}) {
+    const generation = cancelFullscreenRender(state);
+    const request = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
+    state.pendingFullscreenRender = request(() => {
+        state.pendingFullscreenRender = null;
+        if (state.renderGeneration !== generation) return;
+        if (state.fullscreenModal?.classList?.contains("hidden")) return;
+        destroyChart(state.activeFullscreenChart);
+        state.activeFullscreenChart = createChart(canvas, title, chartData, true, options);
+    });
+    return generation;
+}
+
 function openFullscreen(title, chartData, context = {}) {
     const {
         state = {},
@@ -501,11 +675,10 @@ function openFullscreen(title, chartData, context = {}) {
     }
 
     fullscreenModal.classList.remove("hidden");
-
-    if (state.activeFullscreenChart) {
-        state.activeFullscreenChart.destroy();
-        state.activeFullscreenChart = null;
-    }
+    state.fullscreenModal = fullscreenModal;
+    cancelFullscreenRender(state);
+    destroyChart(state.activeFullscreenChart);
+    state.activeFullscreenChart = null;
 
     state.currentFullscreenTitle = title;
     state.currentFullscreenPeriod = "all";
@@ -537,18 +710,31 @@ function openFullscreen(title, chartData, context = {}) {
     if (fullscreenPeriodMenu) {
         fullscreenPeriodMenu.classList.add("hidden");
     }
+    const fullscreenPeriodButton = fullscreenPeriodMenu?.parentElement?.querySelector(".fullscreen-period-btn");
+    fullscreenPeriodButton?.setAttribute("aria-expanded", "false");
     updatePeriodDropdown(fullData, fullscreenPeriodMenu, state.currentFullscreenPeriod);
     updateGrowthBadges(fullData, growthElements);
 
-    requestAnimationFrame(() => {
-        state.activeFullscreenChart = createChart(fullscreenCanvas, title, fullData, true, { growthElements });
-    });
+    scheduleFullscreenChartRender(state, fullscreenCanvas, title, fullData, { growthElements });
 
     return state;
 }
 
 export {
     createChart,
+    parseFiniteNumber,
+    canonicalPeriodKey,
+    formatCanonicalPeriod,
+    buildPeriodValuePairs,
+    buildPerShareValuePairs,
+    alignPeriodValueSeries,
+    registerChartInstance,
+    destroyChart,
+    destroyChartsWithin,
+    destroyAllCharts,
+    cancelFullscreenRender,
+    scheduleFullscreenChartRender,
+    prefersReducedMotion,
     calculateYoYGrowth,
     filterChartDataByPeriod,
     getAvailablePeriods,

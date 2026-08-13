@@ -1,7 +1,22 @@
 import { apiCall, setButtonState } from "./api.js";
 import { getCachedFinancialData, setCachedFinancialData } from "./cache.js";
-import { debounce, fetchTickers, isValidTicker, showTickerSuggestions, hideTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
-import { createChart, filterChartDataByPeriod, openFullscreen, updateGrowthBadges } from "./charts.js";
+import { debounce, fetchTickers, isValidTicker, isTickerSyntaxValid, buildTickerQueryUrl, showTickerSuggestions, hideTickerSuggestions, getLogoUrl, onLogoLoad, onLogoError } from "./ticker.js";
+import {
+    createChart,
+    filterChartDataByPeriod,
+    openFullscreen,
+    updateGrowthBadges,
+    parseFiniteNumber,
+    formatCanonicalPeriod,
+    buildPeriodValuePairs,
+    buildPerShareValuePairs,
+    alignPeriodValueSeries,
+    registerChartInstance,
+    destroyChart,
+    destroyChartsWithin,
+    cancelFullscreenRender,
+    scheduleFullscreenChartRender
+} from "./charts.js";
 import { showToast } from "./toast.js";
 import { auth, logoutUser, observeAuthState } from "./auth.js";
 
@@ -77,6 +92,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     let currentFCFView = "fcf";
     let financialLoadGeneration = 0;
     let financialLoadPending = false;
+    let activeTickerSuggestion = -1;
 
     const apiDeps = {
         auth,
@@ -165,8 +181,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         const datesWithTotal = allDates.filter(date => {
             const dateData = geoData[date];
             if (!dateData || dateData.Total === undefined || dateData.Total === null) return false;
-            const totalValue = parseFloat(dateData.Total);
-            return !isNaN(totalValue) && totalValue > 0;
+            const totalValue = parseFiniteNumber(dateData.Total);
+            return totalValue !== null && totalValue > 0;
         });
 
         if (datesWithTotal.length === 0) return null;
@@ -201,8 +217,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         const data = limitedDates.map(date => {
             const value = geoData[date]?.Total;
             if (value === undefined || value === null) return 0;
-            const parsed = parseFloat(value);
-            return isNaN(parsed) ? 0 : parsed;
+            const parsed = parseFiniteNumber(value);
+            return parsed ?? 0;
         });
 
         return {
@@ -245,8 +261,8 @@ window.addEventListener("DOMContentLoaded", async () => {
                 if (key === "Total" || key.startsWith("_")) return false;
                 const value = dateData[key];
                 if (value === undefined || value === null) return false;
-                const parsed = parseFloat(value);
-                return !isNaN(parsed) && parsed !== 0;
+                const parsed = parseFiniteNumber(value);
+                return parsed !== null && parsed !== 0;
             });
         });
 
@@ -297,8 +313,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         }
 
         const sortedSegmentNames = Array.from(allSegmentNames).sort((a, b) => {
-            const valueA = typeData[sortingDate]?.[a] ? parseFloat(typeData[sortingDate][a]) : 0;
-            const valueB = typeData[sortingDate]?.[b] ? parseFloat(typeData[sortingDate][b]) : 0;
+            const valueA = parseFiniteNumber(typeData[sortingDate]?.[a]) ?? 0;
+            const valueB = parseFiniteNumber(typeData[sortingDate]?.[b]) ?? 0;
             return valueB - valueA;
         });
 
@@ -315,8 +331,8 @@ window.addEventListener("DOMContentLoaded", async () => {
             const data = dates.map(date => {
                 const value = typeData[date]?.[segmentName];
                 if (value === undefined || value === null) return 0;
-                const parsed = parseFloat(value);
-                return isNaN(parsed) ? 0 : parsed;
+                const parsed = parseFiniteNumber(value);
+                return parsed ?? 0;
             });
             return { label: segmentName, data, backgroundColor: colorPalette[index % colorPalette.length] };
         });
@@ -325,9 +341,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     function renderPriceChart() {
-        if (!storedPriceHistory || storedPriceHistory.length === 0) return;
+        const priceRows = (Array.isArray(storedPriceHistory) ? storedPriceHistory : [])
+            .map((row) => ({ date: String(row?.date || ""), price: parseFiniteNumber(row?.price) }))
+            .filter((row) => row.date && row.price !== null);
+        if (priceRows.length === 0) return;
 
-        const isPositive = (storedYearChangePct || 0) >= 0;
+        const isPositive = (storedYearChangePct === null ? 0 : storedYearChangePct) >= 0;
         const changeIcon = isPositive ? "↑" : "↓";
         const changeClass = isPositive ? "" : "negative";
         const changePctDisplay = storedYearChangePct !== null ? `${storedYearChangePct.toFixed(2)}%` : "";
@@ -350,8 +369,8 @@ window.addEventListener("DOMContentLoaded", async () => {
         `;
         els.chartsGrid.appendChild(priceChartCard);
 
-        const labels = storedPriceHistory.map(d => d.date);
-        const prices = storedPriceHistory.map(d => d.price);
+        const labels = priceRows.map((row) => row.date);
+        const prices = priceRows.map((row) => row.price);
         const priceChartData = {
             labels, data: prices, type: "line",
             backgroundColor: "rgba(140, 208, 126, 1)",
@@ -361,7 +380,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         const canvas = priceChartCard.querySelector("canvas");
         const ctx = canvas.getContext("2d");
-        new Chart(ctx, {
+        const priceChart = new Chart(ctx, {
             type: "line",
             data: {
                 labels,
@@ -389,105 +408,115 @@ window.addEventListener("DOMContentLoaded", async () => {
                 }
             }
         });
+        priceChart.__financialCanvas = canvas;
+        registerChartInstance(priceChart);
 
         priceChartCard.querySelector(".financial-chart-expand-btn").addEventListener("click", (e) => {
             e.stopPropagation();
-            openFullscreen("Price", priceChartData, buildFullscreenContext());
+            openFinancialFullscreen("Price", priceChartData, e.currentTarget);
             if (els.fcfToggleContainer) els.fcfToggleContainer.classList.add("hidden");
         });
     }
 
     function filterDataByPeriod(data, periodView, ttmData = null) {
         if (periodView === "quarterlyTTM") {
-            if (ttmData && ttmData.length > 0) return ttmData;
+            if (Array.isArray(ttmData) && ttmData.length > 0) return ttmData;
             return [];
         }
-        if (!data || data.length === 0) return data;
+        if (!Array.isArray(data) || data.length === 0) return Array.isArray(data) ? data : [];
         return data.filter(item => {
-            const fiscalPeriod = item.fiscal_period || "";
+            let fiscalPeriod = String(item.fiscal_period || "").trim().toUpperCase();
+            const periodKey = String(item.period || item.period_key || "");
+            const keyMatch = periodKey.match(/^(Q[1-4]|FY)_\d{4}$/i);
+            if (!fiscalPeriod && keyMatch) fiscalPeriod = keyMatch[1].toUpperCase();
+            if (!fiscalPeriod) {
+                const dateValue = item.end || item.period_end || item.date;
+                const dateMatch = String(dateValue || "").match(/^\d{4}-(\d{2})-\d{2}$/);
+                if (dateMatch) {
+                    const month = Number.parseInt(dateMatch[1], 10);
+                    fiscalPeriod = month === 12 ? "FY" : `Q${Math.min(4, Math.max(1, Math.ceil(month / 3)))}`;
+                }
+            }
             if (periodView === "annually") return fiscalPeriod === "FY";
             return ["Q1", "Q2", "Q3", "Q4"].includes(fiscalPeriod);
         });
     }
 
-    function filterSegmentDataByPeriod(segmentData, periodView, ttmSegmentData = null) {
-        if (periodView === "quarterlyTTM") {
-            if (!ttmSegmentData) return null;
-            const transformedData = { geographic: {}, product: {}, business: {} };
-            Object.keys(ttmSegmentData).forEach(periodKey => {
-                const entry = ttmSegmentData[periodKey];
-                if (!entry || typeof entry !== "object") return;
-                if (entry.geographic && Object.keys(entry.geographic).length > 0) {
-                    transformedData.geographic[periodKey] = entry.geographic;
-                }
-                if (entry.product && Object.keys(entry.product).length > 0) {
-                    transformedData.product[periodKey] = entry.product;
-                }
-            });
-            Object.keys(transformedData).forEach(key => {
-                if (Object.keys(transformedData[key]).length === 0) delete transformedData[key];
-            });
-            return Object.keys(transformedData).length > 0 ? transformedData : null;
+    function inferSegmentPeriod(periodKey, entry = {}) {
+        const explicitPeriod = String(entry.fiscal_period || entry._fiscal_period || "").trim().toUpperCase();
+        const explicitYear = Number.parseInt(entry.fiscal_year || entry._fiscal_year, 10);
+        const keyMatch = String(periodKey || "").match(/^(Q[1-4]|FY)_(\d{4})(?:_TTM)?$/i);
+        if (keyMatch) {
+            return { period: explicitPeriod || keyMatch[1].toUpperCase(), year: explicitYear || Number.parseInt(keyMatch[2], 10) };
         }
+        if (explicitPeriod && Number.isInteger(explicitYear)) {
+            return { period: explicitPeriod, year: explicitYear };
+        }
+        const dateMatch = String(periodKey || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!dateMatch) return { period: explicitPeriod, year: explicitYear };
+        const month = Number.parseInt(dateMatch[2], 10);
+        const quarter = Math.min(4, Math.max(1, Math.ceil(month / 3)));
+        return { period: month === 12 ? "FY" : `Q${quarter}`, year: Number.parseInt(dateMatch[1], 10) };
+    }
 
-        if (!segmentData) return null;
+    function cleanSegmentValues(values) {
+        if (!values || typeof values !== "object") return null;
+        const cleaned = {};
+        Object.entries(values).forEach(([name, value]) => {
+            if (name.startsWith("_") || name === "fiscal_period" || name === "fiscal_year") return;
+            const parsed = parseFiniteNumber(value);
+            if (parsed !== null) cleaned[name] = parsed;
+        });
+        return Object.keys(cleaned).length > 0 ? cleaned : null;
+    }
 
-        const transformedData = { geographic: {}, product: {}, business: {} };
-        const topLevelKeys = Object.keys(segmentData);
-        const isAlreadyTransformed = topLevelKeys.some(key => ["geographic", "product", "business"].includes(key));
+    function filterSegmentDataByPeriod(segmentData, periodView, ttmSegmentData = null) {
+        const source = periodView === "quarterlyTTM" ? ttmSegmentData : segmentData;
+        if (!source || typeof source !== "object") return null;
 
-        if (isAlreadyTransformed) {
-            ["geographic", "product", "business"].forEach(segmentType => {
-                if (segmentData[segmentType]) {
-                    transformedData[segmentType] = {};
-                    Object.keys(segmentData[segmentType]).forEach(dateKey => {
-                        const isQuarterly = /^Q[1-4]_\d{4}$/.test(dateKey);
-                        const isAnnual = /^FY_\d{4}$/.test(dateKey);
-                        if (periodView === "annually" && isAnnual) {
-                            transformedData[segmentType][dateKey] = segmentData[segmentType][dateKey];
-                        } else if (periodView === "quarterly" && isQuarterly) {
-                            transformedData[segmentType][dateKey] = segmentData[segmentType][dateKey];
-                        }
-                    });
-                }
+        const segmentTypes = ["geographic", "product", "business"];
+        const transformedData = Object.fromEntries(segmentTypes.map((type) => [type, {}]));
+        const hasTopLevelTypes = segmentTypes.some((type) => source[type] && typeof source[type] === "object");
+
+        const includePeriod = (period) => periodView === "quarterlyTTM"
+            || (periodView === "annually" ? period === "FY" : ["Q1", "Q2", "Q3", "Q4"].includes(period));
+
+        const addEntry = (segmentType, periodKey, values, metadata = {}) => {
+            const cleaned = cleanSegmentValues(values);
+            if (!cleaned) return;
+            transformedData[segmentType][periodKey] = {
+                ...cleaned,
+                _fiscal_period: metadata.period || undefined,
+                _fiscal_year: metadata.year || undefined
+            };
+        };
+
+        if (hasTopLevelTypes) {
+            segmentTypes.forEach((segmentType) => {
+                const entries = source[segmentType];
+                if (!entries || typeof entries !== "object") return;
+                Object.entries(entries).forEach(([periodKey, values]) => {
+                    const metadata = inferSegmentPeriod(periodKey, values);
+                    if (includePeriod(metadata.period)) addEntry(segmentType, periodKey, values, metadata);
+                });
             });
         } else {
-            Object.keys(segmentData).forEach(periodKey => {
-                const entry = segmentData[periodKey];
+            Object.entries(source).forEach(([periodKey, entry]) => {
                 if (!entry || typeof entry !== "object") return;
-                let fiscalPeriod = entry.fiscal_period;
-                let fiscalYear = entry.fiscal_year;
-                const periodMatch = periodKey.match(/^(Q[1-4]|FY)_(\d{4})$/);
-                if (periodMatch && !fiscalPeriod) {
-                    fiscalPeriod = periodMatch[1];
-                    fiscalYear = parseInt(periodMatch[2]);
-                }
-                let isQuarterlyData = true;
-                if (fiscalPeriod) {
-                    isQuarterlyData = fiscalPeriod.startsWith("Q");
-                } else {
-                    const dateMatch = periodKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-                    if (dateMatch) isQuarterlyData = parseInt(dateMatch[2]) !== 12;
-                }
-                const shouldInclude = (periodView === "annually" && !isQuarterlyData) ||
-                    (periodView === "quarterly" && isQuarterlyData);
-                if (!shouldInclude) return;
-                if (entry.geographic) {
-                    transformedData.geographic[periodKey] = { ...entry.geographic, _fiscal_period: fiscalPeriod, _fiscal_year: fiscalYear };
-                }
-                if (entry.product) {
-                    transformedData.product[periodKey] = { ...entry.product, _fiscal_period: fiscalPeriod, _fiscal_year: fiscalYear };
-                }
-                if (entry.business) {
-                    transformedData.business[periodKey] = { ...entry.business, _fiscal_period: fiscalPeriod, _fiscal_year: fiscalYear };
-                }
+                const metadata = inferSegmentPeriod(periodKey, entry);
+                if (!includePeriod(metadata.period)) return;
+                segmentTypes.forEach((segmentType) => {
+                    if (entry[segmentType]) addEntry(segmentType, periodKey, entry[segmentType], metadata);
+                });
             });
         }
 
-        Object.keys(transformedData).forEach(key => {
-            if (Object.keys(transformedData[key]).length === 0) delete transformedData[key];
-        });
-        return Object.keys(transformedData).length > 0 ? transformedData : null;
+        const availableTypes = Object.fromEntries(
+            segmentTypes
+                .filter((type) => Object.keys(transformedData[type]).length > 0)
+                .map((type) => [type, transformedData[type]])
+        );
+        return Object.keys(availableTypes).length > 0 ? availableTypes : null;
     }
 
     function updatePeriodView(newView) {
@@ -498,6 +527,9 @@ window.addEventListener("DOMContentLoaded", async () => {
         els.quarterlyBtn.classList.toggle("active", newView === "quarterly");
         els.quarterlyTTMBtn.classList.toggle("active", newView === "quarterlyTTM");
         els.annuallyBtn.classList.toggle("active", newView === "annually");
+        els.quarterlyBtn.setAttribute("aria-pressed", String(newView === "quarterly"));
+        els.quarterlyTTMBtn.setAttribute("aria-pressed", String(newView === "quarterlyTTM"));
+        els.annuallyBtn.setAttribute("aria-pressed", String(newView === "annually"));
 
         if (cachedBasicData || cachedTTMData) {
             renderCombinedCharts(
@@ -524,7 +556,39 @@ window.addEventListener("DOMContentLoaded", async () => {
         };
     }
 
+    function focusableFullscreenElements() {
+        return [...els.fullscreenModal.querySelectorAll(
+            "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex=\"-1\"])"
+        )].filter((element) => !element.closest(".hidden") && element.getAttribute("aria-hidden") !== "true");
+    }
+
+    function openFinancialFullscreen(title, chartData, trigger) {
+        fullscreenState.lastFocusedElement = trigger || document.activeElement;
+        fullscreenState.fullscreenModal = els.fullscreenModal;
+        openFullscreen(title, chartData, buildFullscreenContext());
+        els.fullscreenModal.setAttribute("aria-hidden", "false");
+        els.closeFullscreenBtn.focus();
+    }
+
+    function closeFinancialFullscreen() {
+        if (els.fullscreenModal.classList.contains("hidden")) return;
+        els.fullscreenModal.classList.add("hidden");
+        els.fullscreenModal.setAttribute("aria-hidden", "true");
+        cancelFullscreenRender(fullscreenState);
+        destroyChart(fullscreenState.activeFullscreenChart);
+        fullscreenState.activeFullscreenChart = null;
+        fullscreenState.currentFullscreenTitle = "";
+        fullscreenState.currentFullscreenData = null;
+        fullscreenState.currentFullscreenPeriod = "all";
+        if (els.fcfToggleContainer) els.fcfToggleContainer.classList.add("hidden");
+        currentFCFView = "fcf";
+        const restoreTarget = fullscreenState.lastFocusedElement;
+        fullscreenState.lastFocusedElement = null;
+        if (restoreTarget?.isConnected && typeof restoreTarget.focus === "function") restoreTarget.focus();
+    }
+
     function renderCombinedCharts(basicData, segmentData) {
+        destroyChartsWithin(els.chartsGrid);
         els.chartsGrid.innerHTML = "";
 
         // Reset all stored FCF data and full chart data store
@@ -540,9 +604,11 @@ window.addEventListener("DOMContentLoaded", async () => {
             renderPriceChart();
         }
 
-        if (!basicData || basicData.length === 0) {
+        if (!Array.isArray(basicData) || basicData.length === 0) {
             if (!storedPriceHistory || storedPriceHistory.length === 0) {
-                els.chartsGrid.innerHTML = "<p class=\"chart-message\">No financial data found.</p>";
+                els.chartsGrid.innerHTML = "<p class=\"chart-message chart-empty-state\">No chartable financial data is available for this period.</p>";
+            } else {
+                els.chartsGrid.insertAdjacentHTML("beforeend", "<p class=\"chart-message chart-empty-state\">No financial statement data is available for this period.</p>");
             }
             return;
         }
@@ -564,6 +630,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         const maxBars = currentPeriodView === "annually" ? 10 : 16;
         const limitedData = sortedData.slice(-maxBars);
+        const hasFiniteFact = (record, factName) => parseFiniteNumber(record?.facts?.[factName]?.value) !== null;
 
         const colors = [
             "rgba(54, 162, 235, 0.8)", "rgba(255, 99, 132, 0.8)", "rgba(75, 192, 192, 0.8)",
@@ -573,6 +640,10 @@ window.addEventListener("DOMContentLoaded", async () => {
         ];
 
         const chartOrder = [];
+        const hasChartSeries = (chart) => Boolean(
+            chart?.data?.labels?.length
+            && (chart.data.datasets?.length || chart.data.data?.length)
+        );
 
         // Revenue (from geographic Total)
         if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
@@ -589,40 +660,40 @@ window.addEventListener("DOMContentLoaded", async () => {
         if (segmentData && segmentData.product && Object.keys(segmentData.product).length > 0) {
             const productKeyCount = Object.keys(segmentData.product).length;
             const productChart = createSegmentChart("Revenue by Product", segmentData.product, colors, true, maxBars);
-            if (productChart) chartOrder.push(productChart);
+            if (hasChartSeries(productChart)) chartOrder.push(productChart);
             const productFull = createSegmentChart("Revenue by Product", segmentData.product, colors, true, productKeyCount);
-            if (productFull) fullChartDataStore["Revenue by Product"] = productFull.data;
+            if (hasChartSeries(productFull)) fullChartDataStore["Revenue by Product"] = productFull.data;
         }
 
         // Revenue by Geography
         if (segmentData && segmentData.geographic && Object.keys(segmentData.geographic).length > 0) {
             const geoSegKeyCount = Object.keys(segmentData.geographic).length;
             const geoChart = createSegmentChart("Revenue by Geography", segmentData.geographic, colors, true, maxBars);
-            if (geoChart) chartOrder.push(geoChart);
+            if (hasChartSeries(geoChart)) chartOrder.push(geoChart);
             const geoFull = createSegmentChart("Revenue by Geography", segmentData.geographic, colors, true, geoSegKeyCount);
-            if (geoFull) fullChartDataStore["Revenue by Geography"] = geoFull.data;
+            if (hasChartSeries(geoFull)) fullChartDataStore["Revenue by Geography"] = geoFull.data;
         }
 
         // Revenue by Business
         if (segmentData && segmentData.business && Object.keys(segmentData.business).length > 0) {
             const bizKeyCount = Object.keys(segmentData.business).length;
             const bizChart = createSegmentChart("Revenue by Business", segmentData.business, colors, true, maxBars);
-            if (bizChart) chartOrder.push(bizChart);
+            if (hasChartSeries(bizChart)) chartOrder.push(bizChart);
             const bizFull = createSegmentChart("Revenue by Business", segmentData.business, colors, true, bizKeyCount);
-            if (bizFull) fullChartDataStore["Revenue by Business"] = bizFull.data;
+            if (hasChartSeries(bizFull)) fullChartDataStore["Revenue by Business"] = bizFull.data;
         }
 
         // Earnings Per Share
-        const epsData = limitedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
-        const epsDataFull = sortedData.filter(d => d.facts?.EarningsPerShareBasic || d.facts?.EarningsPerShareDiluted);
+        const epsData = limitedData.filter(d => hasFiniteFact(d, "EarningsPerShareBasic") || hasFiniteFact(d, "EarningsPerShareDiluted"));
+        const epsDataFull = sortedData.filter(d => hasFiniteFact(d, "EarningsPerShareBasic") || hasFiniteFact(d, "EarningsPerShareDiluted"));
         if (epsData.length > 0) {
             chartOrder.push({
                 title: "Earnings Per Share",
                 data: {
                     labels: epsData.map(formatPeriodLabel),
                     datasets: [
-                        { label: "EPS Basic", data: epsData.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null), backgroundColor: "rgba(240, 206, 99, 1)" },
-                        { label: "EPS Diluted", data: epsData.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null), backgroundColor: "rgba(255, 99, 132, 1)", hidden: true }
+                        { label: "EPS Basic", data: epsData.map(d => d.facts?.EarningsPerShareBasic ? parseFiniteNumber(d.facts.EarningsPerShareBasic.value) : null), backgroundColor: "rgba(240, 206, 99, 1)" },
+                        { label: "EPS Diluted", data: epsData.map(d => d.facts?.EarningsPerShareDiluted ? parseFiniteNumber(d.facts.EarningsPerShareDiluted.value) : null), backgroundColor: "rgba(255, 99, 132, 1)", hidden: true }
                     ],
                     type: "bar"
                 }
@@ -630,89 +701,81 @@ window.addEventListener("DOMContentLoaded", async () => {
             fullChartDataStore["Earnings Per Share"] = {
                 labels: epsDataFull.map(formatPeriodLabel),
                 datasets: [
-                    { label: "EPS Basic", data: epsDataFull.map(d => d.facts?.EarningsPerShareBasic ? parseFloat(d.facts.EarningsPerShareBasic.value) : null), backgroundColor: "rgba(240, 206, 99, 1)" },
-                    { label: "EPS Diluted", data: epsDataFull.map(d => d.facts?.EarningsPerShareDiluted ? parseFloat(d.facts.EarningsPerShareDiluted.value) : null), backgroundColor: "rgba(255, 99, 132, 1)", hidden: true }
+                    { label: "EPS Basic", data: epsDataFull.map(d => d.facts?.EarningsPerShareBasic ? parseFiniteNumber(d.facts.EarningsPerShareBasic.value) : null), backgroundColor: "rgba(240, 206, 99, 1)" },
+                    { label: "EPS Diluted", data: epsDataFull.map(d => d.facts?.EarningsPerShareDiluted ? parseFiniteNumber(d.facts.EarningsPerShareDiluted.value) : null), backgroundColor: "rgba(255, 99, 132, 1)", hidden: true }
                 ],
                 type: "bar"
             };
         }
 
         // Net Income
-        const netIncomeData = limitedData.filter(d => d.facts?.NetIncomeLoss);
-        const netIncomeDataFull = sortedData.filter(d => d.facts?.NetIncomeLoss);
+        const netIncomeData = limitedData.filter(d => hasFiniteFact(d, "NetIncomeLoss"));
+        const netIncomeDataFull = sortedData.filter(d => hasFiniteFact(d, "NetIncomeLoss"));
         if (netIncomeData.length > 0) {
-            chartOrder.push({ title: "Net Income", data: { labels: netIncomeData.map(formatPeriodLabel), data: netIncomeData.map(d => parseFloat(d.facts.NetIncomeLoss.value)), type: "bar", backgroundColor: "rgba(254, 190, 125, 1)" } });
-            fullChartDataStore["Net Income"] = { labels: netIncomeDataFull.map(formatPeriodLabel), data: netIncomeDataFull.map(d => parseFloat(d.facts.NetIncomeLoss.value)), type: "bar", backgroundColor: "rgba(254, 190, 125, 1)" };
+            chartOrder.push({ title: "Net Income", data: { labels: netIncomeData.map(formatPeriodLabel), data: netIncomeData.map(d => parseFiniteNumber(d.facts.NetIncomeLoss.value)), type: "bar", backgroundColor: "rgba(254, 190, 125, 1)" } });
+            fullChartDataStore["Net Income"] = { labels: netIncomeDataFull.map(formatPeriodLabel), data: netIncomeDataFull.map(d => parseFiniteNumber(d.facts.NetIncomeLoss.value)), type: "bar", backgroundColor: "rgba(254, 190, 125, 1)" };
         }
 
-        // Free Cash Flow
-        const fcfData = limitedData.filter(d => d.facts?.FreeCashFlow);
-        const fcfDataFull = sortedData.filter(d => d.facts?.FreeCashFlow);
-        if (fcfData.length > 0) {
-            const fcfLimited = { labels: fcfData.map(formatPeriodLabel), data: fcfData.map(d => parseFloat(d.facts.FreeCashFlow.value)), type: "bar", backgroundColor: "rgba(243, 143, 42, 1)", borderColor: "rgba(243, 143, 42, 1)" };
-            storedFullFCFData = { labels: fcfDataFull.map(formatPeriodLabel), data: fcfDataFull.map(d => parseFloat(d.facts.FreeCashFlow.value)), type: "bar", backgroundColor: "rgba(243, 143, 42, 1)", borderColor: "rgba(243, 143, 42, 1)" };
+        const periodPairsToChart = (pairs, style) => ({
+            labels: pairs.map((pair) => formatCanonicalPeriod(pair.period)),
+            data: pairs.map((pair) => pair.value),
+            type: "bar",
+            ...style
+        });
+
+        // Free Cash Flow, adjusted FCF, and related series are keyed by the
+        // canonical fiscal period so a missing fact cannot shift later values.
+        const fcfPairs = buildPeriodValuePairs(sortedData, "FreeCashFlow");
+        if (fcfPairs.length > 0) {
+            const fcfStyle = { backgroundColor: "rgba(243, 143, 42, 1)", borderColor: "rgba(243, 143, 42, 1)" };
+            const fcfLimited = periodPairsToChart(fcfPairs.slice(-maxBars), fcfStyle);
+            storedFullFCFData = periodPairsToChart(fcfPairs, fcfStyle);
             fullChartDataStore["Free Cash Flow"] = storedFullFCFData;
             chartOrder.push({ title: "Free Cash Flow", data: fcfLimited });
         }
 
-        // Adjusted FCF
-        const adjFcfData = limitedData.filter(d => d.facts?.AdjustedFreeCashFlow);
-        const adjFcfDataFull = sortedData.filter(d => d.facts?.AdjustedFreeCashFlow);
-        if (adjFcfData.length > 0) {
-            storedFullAdjustedFCFData = { labels: adjFcfDataFull.map(formatPeriodLabel), data: adjFcfDataFull.map(d => parseFloat(d.facts.AdjustedFreeCashFlow.value)), type: "bar", backgroundColor: "rgba(160, 203, 232, 1)", borderColor: "rgba(160, 203, 232, 1)" };
+        const adjustedFcfPairs = buildPeriodValuePairs(sortedData, "AdjustedFreeCashFlow");
+        if (adjustedFcfPairs.length > 0) {
+            storedFullAdjustedFCFData = periodPairsToChart(adjustedFcfPairs, {
+                backgroundColor: "rgba(160, 203, 232, 1)",
+                borderColor: "rgba(160, 203, 232, 1)"
+            });
         }
 
-        // FCF & SBC combined
-        const sbcDataFull = sortedData.filter(d => d.facts?.ShareBasedCompensation);
-        if (storedFullFCFData && sbcDataFull.length > 0) {
-            storedFullFCFAndSBCData = {
-                labels: storedFullFCFData.labels,
-                datasets: [
-                    { label: "FCF", data: storedFullFCFData.data, backgroundColor: "rgba(243, 143, 42, 1)" },
-                    { label: "SBC", data: sbcDataFull.map(d => parseFloat(d.facts.ShareBasedCompensation.value)), backgroundColor: "rgba(160, 203, 232, 1)" }
-                ],
-                type: "bar"
-            };
+        const alignedFcfAndSbc = alignPeriodValueSeries([
+            { label: "FCF", pairs: fcfPairs, style: { backgroundColor: "rgba(243, 143, 42, 1)" } },
+            { label: "SBC", pairs: buildPeriodValuePairs(sortedData, "ShareBasedCompensation"), style: { backgroundColor: "rgba(160, 203, 232, 1)" } }
+        ]);
+        if (alignedFcfAndSbc.periods.length > 0) {
+            storedFullFCFAndSBCData = { labels: alignedFcfAndSbc.labels, datasets: alignedFcfAndSbc.datasets, type: "bar" };
         }
 
-        // FCF Per Share and SBC Adj. FCF Per Share
-        const sharesDataForFCF = sortedData.filter(d => d.facts?.SharesOutstanding);
-        if (fcfDataFull.length > 0 && sharesDataForFCF.length > 0) {
-            const sharesMap = new Map();
-            sharesDataForFCF.forEach(d => sharesMap.set(formatPeriodLabel(d), parseFloat(d.facts.SharesOutstanding.value)));
-
-            const fcfPerShareValues = fcfDataFull.map(d => {
-                const shares = sharesMap.get(formatPeriodLabel(d));
-                return shares ? parseFloat(d.facts.FreeCashFlow.value) / shares : null;
-            }).filter(v => v !== null);
-
-            if (fcfPerShareValues.length > 0) {
-                storedFullFCFPerShareData = { labels: fcfDataFull.map(formatPeriodLabel).slice(0, fcfPerShareValues.length), data: fcfPerShareValues, type: "bar", backgroundColor: "rgba(243, 143, 42, 1)", borderColor: "rgba(243, 143, 42, 1)" };
-            }
-
-            if (adjFcfDataFull.length > 0) {
-                const adjFcfPerShareValues = adjFcfDataFull.map(d => {
-                    const shares = sharesMap.get(formatPeriodLabel(d));
-                    return shares ? parseFloat(d.facts.AdjustedFreeCashFlow.value) / shares : null;
-                }).filter(v => v !== null);
-
-                if (adjFcfPerShareValues.length > 0) {
-                    storedFullSBCAdjFCFPerShareData = { labels: adjFcfDataFull.map(formatPeriodLabel).slice(0, adjFcfPerShareValues.length), data: adjFcfPerShareValues, type: "bar", backgroundColor: "rgba(160, 203, 232, 1)", borderColor: "rgba(160, 203, 232, 1)" };
-                }
-            }
+        const fcfPerSharePairs = buildPerShareValuePairs(sortedData, "FreeCashFlow");
+        if (fcfPerSharePairs.length > 0) {
+            storedFullFCFPerShareData = periodPairsToChart(fcfPerSharePairs, {
+                backgroundColor: "rgba(243, 143, 42, 1)",
+                borderColor: "rgba(243, 143, 42, 1)"
+            });
+        }
+        const adjustedFcfPerSharePairs = buildPerShareValuePairs(sortedData, "AdjustedFreeCashFlow");
+        if (adjustedFcfPerSharePairs.length > 0) {
+            storedFullSBCAdjFCFPerShareData = periodPairsToChart(adjustedFcfPerSharePairs, {
+                backgroundColor: "rgba(160, 203, 232, 1)",
+                borderColor: "rgba(160, 203, 232, 1)"
+            });
         }
 
         // Cash & Debt
-        const cashDebtData = limitedData.filter(d => d.facts?.CashCashEquivalentsAndShortTermInvestments || d.facts?.LongTermDebtNoncurrent);
-        const cashDebtDataFull = sortedData.filter(d => d.facts?.CashCashEquivalentsAndShortTermInvestments || d.facts?.LongTermDebtNoncurrent);
+        const cashDebtData = limitedData.filter(d => hasFiniteFact(d, "CashCashEquivalentsAndShortTermInvestments") || hasFiniteFact(d, "LongTermDebtNoncurrent"));
+        const cashDebtDataFull = sortedData.filter(d => hasFiniteFact(d, "CashCashEquivalentsAndShortTermInvestments") || hasFiniteFact(d, "LongTermDebtNoncurrent"));
         if (cashDebtData.length > 0) {
             chartOrder.push({
                 title: "Cash & Debt",
                 data: {
                     labels: cashDebtData.map(formatPeriodLabel),
                     datasets: [
-                        { label: "Cash", data: cashDebtData.map(d => d.facts?.CashCashEquivalentsAndShortTermInvestments ? parseFloat(d.facts.CashCashEquivalentsAndShortTermInvestments.value) : null), backgroundColor: "rgba(85, 158, 56, 1)" },
-                        { label: "Debt", data: cashDebtData.map(d => d.facts?.LongTermDebtNoncurrent ? parseFloat(d.facts.LongTermDebtNoncurrent.value) : null), backgroundColor: "rgb(250, 86, 78, 1)" }
+                        { label: "Cash", data: cashDebtData.map(d => d.facts?.CashCashEquivalentsAndShortTermInvestments ? parseFiniteNumber(d.facts.CashCashEquivalentsAndShortTermInvestments.value) : null), backgroundColor: "rgba(85, 158, 56, 1)" },
+                        { label: "Debt", data: cashDebtData.map(d => d.facts?.LongTermDebtNoncurrent ? parseFiniteNumber(d.facts.LongTermDebtNoncurrent.value) : null), backgroundColor: "rgb(250, 86, 78, 1)" }
                     ],
                     type: "bar"
                 }
@@ -720,35 +783,35 @@ window.addEventListener("DOMContentLoaded", async () => {
             fullChartDataStore["Cash & Debt"] = {
                 labels: cashDebtDataFull.map(formatPeriodLabel),
                 datasets: [
-                    { label: "Cash", data: cashDebtDataFull.map(d => d.facts?.CashCashEquivalentsAndShortTermInvestments ? parseFloat(d.facts.CashCashEquivalentsAndShortTermInvestments.value) : null), backgroundColor: "rgba(85, 158, 56, 1)" },
-                    { label: "Debt", data: cashDebtDataFull.map(d => d.facts?.LongTermDebtNoncurrent ? parseFloat(d.facts.LongTermDebtNoncurrent.value) : null), backgroundColor: "rgb(250, 86, 78, 1)" }
+                    { label: "Cash", data: cashDebtDataFull.map(d => d.facts?.CashCashEquivalentsAndShortTermInvestments ? parseFiniteNumber(d.facts.CashCashEquivalentsAndShortTermInvestments.value) : null), backgroundColor: "rgba(85, 158, 56, 1)" },
+                    { label: "Debt", data: cashDebtDataFull.map(d => d.facts?.LongTermDebtNoncurrent ? parseFiniteNumber(d.facts.LongTermDebtNoncurrent.value) : null), backgroundColor: "rgb(250, 86, 78, 1)" }
                 ],
                 type: "bar"
             };
         }
 
         // CapEx
-        const capexData = limitedData.filter(d => d.facts?.CapEx);
-        const capexDataFull = sortedData.filter(d => d.facts?.CapEx);
+        const capexData = limitedData.filter(d => hasFiniteFact(d, "CapEx"));
+        const capexDataFull = sortedData.filter(d => hasFiniteFact(d, "CapEx"));
         if (capexData.length > 0) {
-            chartOrder.push({ title: "CapEx", data: { labels: capexData.map(formatPeriodLabel), data: capexData.map(d => parseFloat(d.facts.CapEx.value)), type: "bar", backgroundColor: "rgb(52, 152, 219, 1)", borderColor: "rgb(52, 152, 219, 1)" } });
-            fullChartDataStore["CapEx"] = { labels: capexDataFull.map(formatPeriodLabel), data: capexDataFull.map(d => parseFloat(d.facts.CapEx.value)), type: "bar", backgroundColor: "rgb(52, 152, 219, 1)", borderColor: "rgb(52, 152, 219, 1)" };
+            chartOrder.push({ title: "CapEx", data: { labels: capexData.map(formatPeriodLabel), data: capexData.map(d => parseFiniteNumber(d.facts.CapEx.value)), type: "bar", backgroundColor: "rgb(52, 152, 219, 1)", borderColor: "rgb(52, 152, 219, 1)" } });
+            fullChartDataStore["CapEx"] = { labels: capexDataFull.map(formatPeriodLabel), data: capexDataFull.map(d => parseFiniteNumber(d.facts.CapEx.value)), type: "bar", backgroundColor: "rgb(52, 152, 219, 1)", borderColor: "rgb(52, 152, 219, 1)" };
         }
 
         // Shares Outstanding
-        const sharesData = limitedData.filter(d => d.facts?.SharesOutstanding);
-        const sharesDataFull = sortedData.filter(d => d.facts?.SharesOutstanding);
+        const sharesData = limitedData.filter(d => hasFiniteFact(d, "SharesOutstanding"));
+        const sharesDataFull = sortedData.filter(d => hasFiniteFact(d, "SharesOutstanding"));
         if (sharesData.length > 0) {
-            chartOrder.push({ title: "Shares Outstanding", data: { labels: sharesData.map(formatPeriodLabel), data: sharesData.map(d => parseFloat(d.facts.SharesOutstanding.value)), type: "bar", backgroundColor: "rgba(94, 150, 146, 1)", borderColor: "rgba(94, 150, 146, 1)" } });
-            fullChartDataStore["Shares Outstanding"] = { labels: sharesDataFull.map(formatPeriodLabel), data: sharesDataFull.map(d => parseFloat(d.facts.SharesOutstanding.value)), type: "bar", backgroundColor: "rgba(94, 150, 146, 1)", borderColor: "rgba(94, 150, 146, 1)" };
+            chartOrder.push({ title: "Shares Outstanding", data: { labels: sharesData.map(formatPeriodLabel), data: sharesData.map(d => parseFiniteNumber(d.facts.SharesOutstanding.value)), type: "bar", backgroundColor: "rgba(94, 150, 146, 1)", borderColor: "rgba(94, 150, 146, 1)" } });
+            fullChartDataStore["Shares Outstanding"] = { labels: sharesDataFull.map(formatPeriodLabel), data: sharesDataFull.map(d => parseFiniteNumber(d.facts.SharesOutstanding.value)), type: "bar", backgroundColor: "rgba(94, 150, 146, 1)", borderColor: "rgba(94, 150, 146, 1)" };
         }
 
         // Backlog (RPO)
-        const rpoData = limitedData.filter(d => d.facts?.RevenueRemainingPerformanceObligation);
-        const rpoDataFull = sortedData.filter(d => d.facts?.RevenueRemainingPerformanceObligation);
+        const rpoData = limitedData.filter(d => hasFiniteFact(d, "RevenueRemainingPerformanceObligation"));
+        const rpoDataFull = sortedData.filter(d => hasFiniteFact(d, "RevenueRemainingPerformanceObligation"));
         if (rpoData.length > 0) {
-            chartOrder.push({ title: "Backlog (RPO)", data: { labels: rpoData.map(formatPeriodLabel), data: rpoData.map(d => parseFloat(d.facts.RevenueRemainingPerformanceObligation.value)), type: "bar", backgroundColor: "rgba(216, 81, 64, 1)", borderColor: "rgba(216, 81, 64, 1)" } });
-            fullChartDataStore["Backlog (RPO)"] = { labels: rpoDataFull.map(formatPeriodLabel), data: rpoDataFull.map(d => parseFloat(d.facts.RevenueRemainingPerformanceObligation.value)), type: "bar", backgroundColor: "rgba(216, 81, 64, 1)", borderColor: "rgba(216, 81, 64, 1)" };
+            chartOrder.push({ title: "Backlog (RPO)", data: { labels: rpoData.map(formatPeriodLabel), data: rpoData.map(d => parseFiniteNumber(d.facts.RevenueRemainingPerformanceObligation.value)), type: "bar", backgroundColor: "rgba(216, 81, 64, 1)", borderColor: "rgba(216, 81, 64, 1)" } });
+            fullChartDataStore["Backlog (RPO)"] = { labels: rpoDataFull.map(formatPeriodLabel), data: rpoDataFull.map(d => parseFiniteNumber(d.facts.RevenueRemainingPerformanceObligation.value)), type: "bar", backgroundColor: "rgba(216, 81, 64, 1)", borderColor: "rgba(216, 81, 64, 1)" };
         }
 
         // Render all chart cards
@@ -771,7 +834,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
             chartCard.querySelector(".financial-chart-expand-btn").addEventListener("click", (e) => {
                 e.stopPropagation();
-                openFullscreen(chart.title, chart.data, buildFullscreenContext());
+                openFinancialFullscreen(chart.title, chart.data, e.currentTarget);
                 if (els.fcfToggleContainer) {
                     if (chart.title === "Free Cash Flow") {
                         els.fcfToggleContainer.classList.remove("hidden");
@@ -785,21 +848,30 @@ window.addEventListener("DOMContentLoaded", async () => {
                 }
             });
         });
+
+        if (chartOrder.length === 0) {
+            els.chartsGrid.insertAdjacentHTML(
+                "beforeend",
+                "<p class=\"chart-message chart-empty-state\">No chartable financial data is available for this period.</p>"
+            );
+        }
     }
 
     async function fetchWithCache(ticker, cacheKey, endpoint, required = false) {
         const cached = await getCachedFinancialData(ticker, cacheKey);
-        if (cached) return cached;
+        const cachedData = cached?.data ?? null;
+        if (cached?.isFresh) return cachedData;
         try {
             const response = await apiCall(endpoint, {}, apiDeps);
             const data = await response.json();
             if (!response.ok) {
                 if (required) throw new Error(data.error || `Failed to fetch ${cacheKey}`);
-                return null;
+                return cachedData;
             }
             await setCachedFinancialData(ticker, cacheKey, data);
             return data;
         } catch (error) {
+            if (cachedData !== null) return cachedData;
             if (!required) return null;
             const detail = error instanceof TypeError
                 ? "Backend is unavailable right now. Please try again later."
@@ -837,6 +909,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         setButtonState(els.searchBtn, "Search", false);
         if (showPrompt) {
             setStatus("");
+            destroyChartsWithin(els.chartsGrid);
             els.chartsGrid.innerHTML = "<p class=\"chart-message\">Search to load financial data.</p>";
             els.chartsGrid.classList.add("visible");
         }
@@ -853,6 +926,12 @@ window.addEventListener("DOMContentLoaded", async () => {
             showToast("Please enter a ticker symbol.", true, 3000, els.toastContainer);
             return;
         }
+        if (!isTickerSyntaxValid(ticker)) {
+            financialLoadPending = false;
+            setButtonState(els.searchBtn, "Search", false);
+            showToast("Please enter a valid ticker symbol.", true, 3000, els.toastContainer);
+            return;
+        }
         if (strictTickerValidation && !isValidTicker(ticker)) {
             financialLoadPending = false;
             setButtonState(els.searchBtn, "Search", false);
@@ -863,6 +942,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         financialLoadPending = true;
         setButtonState(els.searchBtn, "Loading...", true);
         setStatus("Fetching financial data...");
+        destroyChartsWithin(els.chartsGrid);
         els.chartsGrid.innerHTML = "<p class=\"chart-message\">Loading financial data\u2026</p>";
 
         // Reset animated sections before loading new data
@@ -875,9 +955,9 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         try {
             const [filings, stockInfoData, priceData] = await Promise.all([
-                fetchWithCache(ticker, "filings_bundle", `/financial-filings?ticker=${ticker}`, true),
-                fetchWithCache(ticker, "stock_info_data", `/get_stock_info_data?ticker=${ticker}`),
-                fetchWithCache(ticker, "price_data", `/get_market_price?ticker=${ticker}&include=history`)
+                fetchWithCache(ticker, "filings_bundle", buildTickerQueryUrl("/financial-filings", ticker), true),
+                fetchWithCache(ticker, "stock_info_data", buildTickerQueryUrl("/get_stock_info_data", ticker)),
+                fetchWithCache(ticker, "price_data", buildTickerQueryUrl("/get_market_price", ticker, { include: "history" }))
             ]);
             if (!isCurrentLoad()) return;
             const basicData = filings?.sections?.basic?.data;
@@ -898,7 +978,9 @@ window.addEventListener("DOMContentLoaded", async () => {
             cachedTTMData = ttmData;
             cachedTTMSegmentData = ttmSegmentData;
             storedPriceHistory = priceData?.history || null;
-            storedYearChangePct = priceData?.yearChangePct || null;
+            storedYearChangePct = Number.isFinite(priceData?.yearChangePct)
+                ? priceData.yearChangePct
+                : null;
 
             renderCompanyHeader(ticker, basicData, priceData);
             renderMetrics(stockInfoData || {});
@@ -936,6 +1018,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             if (!isCurrentLoad()) return;
             const message = error?.message || "Failed to load financial data.";
             setStatus(message, true);
+            destroyChartsWithin(els.chartsGrid);
             els.chartsGrid.innerHTML = "<p class=\"chart-message error\">Unable to load data from backend.</p>";
             showToast(message, true, 4500, els.toastContainer);
             els.chartsGrid.classList.add("visible");
@@ -951,37 +1034,70 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     els.fullscreenPeriodBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        els.fullscreenPeriodMenu.classList.toggle("hidden");
+        const isHidden = els.fullscreenPeriodMenu.classList.toggle("hidden");
+        els.fullscreenPeriodBtn.setAttribute("aria-expanded", String(!isHidden));
     });
 
     document.addEventListener("click", (event) => {
         if (!els.fullscreenPeriodBtn.contains(event.target) && !els.fullscreenPeriodMenu.contains(event.target)) {
             els.fullscreenPeriodMenu.classList.add("hidden");
+            els.fullscreenPeriodBtn.setAttribute("aria-expanded", "false");
         }
     });
 
     els.fullscreenPeriodMenu.addEventListener("click", (event) => {
         const option = event.target.closest(".fullscreen-period-option");
-        if (!option || option.classList.contains("disabled")) return;
+        if (!option || option.classList.contains("disabled") || option.disabled) return;
         fullscreenState.currentFullscreenPeriod = option.dataset.period;
         els.fullscreenPeriodText.textContent = option.textContent;
-        els.fullscreenPeriodMenu.querySelectorAll(".fullscreen-period-option").forEach(opt => opt.classList.toggle("active", opt === option));
+        els.fullscreenPeriodMenu.querySelectorAll(".fullscreen-period-option").forEach((opt) => {
+            const selected = opt === option;
+            opt.classList.toggle("active", selected);
+            opt.setAttribute("aria-selected", String(selected));
+        });
         els.fullscreenPeriodMenu.classList.add("hidden");
+        els.fullscreenPeriodBtn.setAttribute("aria-expanded", "false");
         const filteredData = filterChartDataByPeriod(fullscreenState.currentFullscreenData, fullscreenState.currentFullscreenPeriod);
-        if (fullscreenState.activeFullscreenChart) fullscreenState.activeFullscreenChart.destroy();
         updateGrowthBadges(filteredData, growthElements);
-        fullscreenState.activeFullscreenChart = createChart(els.fullscreenCanvas, fullscreenState.currentFullscreenTitle, filteredData, true, { growthElements });
+        scheduleFullscreenChartRender(
+            fullscreenState,
+            els.fullscreenCanvas,
+            fullscreenState.currentFullscreenTitle,
+            filteredData,
+            { growthElements }
+        );
     });
 
-    els.closeFullscreenBtn.addEventListener("click", () => {
-        els.fullscreenModal.classList.add("hidden");
-        if (fullscreenState.activeFullscreenChart) fullscreenState.activeFullscreenChart.destroy();
-        fullscreenState.activeFullscreenChart = null;
-        fullscreenState.currentFullscreenTitle = "";
-        fullscreenState.currentFullscreenData = null;
-        fullscreenState.currentFullscreenPeriod = "all";
-        if (els.fcfToggleContainer) els.fcfToggleContainer.classList.add("hidden");
-        currentFCFView = "fcf";
+    els.closeFullscreenBtn.addEventListener("click", closeFinancialFullscreen);
+    els.fullscreenModal.addEventListener("click", (event) => {
+        if (event.target === els.fullscreenModal) closeFinancialFullscreen();
+    });
+    document.addEventListener("keydown", (event) => {
+        if (els.fullscreenModal.classList.contains("hidden")) return;
+        if (event.key === "Escape") {
+            event.preventDefault();
+            closeFinancialFullscreen();
+            return;
+        }
+        if (event.key !== "Tab") return;
+        const focusable = focusableFullscreenElements();
+        if (!focusable.length) {
+            event.preventDefault();
+            els.fullscreenModal.focus();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        } else if (!els.fullscreenModal.contains(document.activeElement)) {
+            event.preventDefault();
+            first.focus();
+        }
     });
 
     // Period toggle buttons
@@ -999,10 +1115,8 @@ window.addEventListener("DOMContentLoaded", async () => {
             currentFCFView = newView;
             els.fcfToggleContainer.querySelectorAll(".fcf-toggle-btn").forEach(b => b.classList.toggle("active", b === btn));
 
-            if (fullscreenState.activeFullscreenChart) {
-                fullscreenState.activeFullscreenChart.destroy();
-                fullscreenState.activeFullscreenChart = null;
-            }
+            destroyChart(fullscreenState.activeFullscreenChart);
+            fullscreenState.activeFullscreenChart = null;
 
             let newFullData;
             let chartTitle;
@@ -1024,26 +1138,70 @@ window.addEventListener("DOMContentLoaded", async () => {
             else if (currentPeriodView === "annually") displayTitle = `${chartTitle} (Annual)`;
             if (els.fullscreenChartTitle) els.fullscreenChartTitle.textContent = `${displayTitle} - ${ticker}`;
 
+            if (!newFullData) return;
             const filteredData = filterChartDataByPeriod(newFullData, fullscreenState.currentFullscreenPeriod);
             updateGrowthBadges(filteredData, growthElements);
-            requestAnimationFrame(() => {
-                fullscreenState.activeFullscreenChart = createChart(els.fullscreenCanvas, chartTitle, filteredData, true, { growthElements });
-            });
+            scheduleFullscreenChartRender(
+                fullscreenState,
+                els.fullscreenCanvas,
+                chartTitle,
+                filteredData,
+                { growthElements }
+            );
         });
     }
 
     // Ticker search
-    const debouncedSuggestions = debounce((query) => showTickerSuggestions(query, els.autocomplete), 180);
+    function setActiveTickerSuggestion(index) {
+        const items = [...els.autocomplete.querySelectorAll(".ticker-suggestion")];
+        if (!items.length) {
+            activeTickerSuggestion = -1;
+            els.tickerInput.removeAttribute("aria-activedescendant");
+            return;
+        }
+        activeTickerSuggestion = (index + items.length) % items.length;
+        items.forEach((item, itemIndex) => {
+            const selected = itemIndex === activeTickerSuggestion;
+            item.classList.toggle("is-active", selected);
+            item.setAttribute("aria-selected", String(selected));
+        });
+        const activeItem = items[activeTickerSuggestion];
+        els.tickerInput.setAttribute("aria-activedescendant", activeItem.id);
+        activeItem.scrollIntoView?.({ block: "nearest" });
+    }
+
+    const debouncedSuggestions = debounce(async (query) => {
+        await showTickerSuggestions(query, els.autocomplete);
+        activeTickerSuggestion = -1;
+        els.tickerInput.removeAttribute("aria-activedescendant");
+        els.tickerInput.setAttribute("aria-expanded", String(!els.autocomplete.classList.contains("hidden")));
+    }, 180);
     els.tickerInput.addEventListener("input", (event) => {
         invalidateFinancialLoad({ showPrompt: true });
+        activeTickerSuggestion = -1;
         hideTickerSuggestions(els.autocomplete);
         debouncedSuggestions(event.target.value.trim());
     });
     els.tickerInput.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
+        const items = [...els.autocomplete.querySelectorAll(".ticker-suggestion")];
+        const suggestionsOpen = !els.autocomplete.classList.contains("hidden") && items.length > 0;
+        if (event.key === "ArrowDown" && suggestionsOpen) {
+            event.preventDefault();
+            setActiveTickerSuggestion(activeTickerSuggestion + 1);
+        } else if (event.key === "ArrowUp" && suggestionsOpen) {
+            event.preventDefault();
+            setActiveTickerSuggestion(activeTickerSuggestion - 1);
+        } else if (event.key === "Enter" && suggestionsOpen && activeTickerSuggestion >= 0) {
+            event.preventDefault();
+            els.tickerInput.value = items[activeTickerSuggestion].dataset.symbol || "";
+            activeTickerSuggestion = -1;
+            hideTickerSuggestions(els.autocomplete);
+            loadFinancialData();
+        } else if (event.key === "Enter") {
             hideTickerSuggestions(els.autocomplete);
             loadFinancialData();
         } else if (event.key === "Escape") {
+            activeTickerSuggestion = -1;
             hideTickerSuggestions(els.autocomplete);
         }
     });
@@ -1051,6 +1209,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         const suggestion = event.target.closest(".ticker-suggestion");
         if (!suggestion) return;
         els.tickerInput.value = suggestion.dataset.symbol;
+        activeTickerSuggestion = -1;
         hideTickerSuggestions(els.autocomplete);
         loadFinancialData();
     });

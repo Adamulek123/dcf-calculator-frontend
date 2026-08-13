@@ -20,6 +20,32 @@ import {
     showTickerSuggestions,
 } from "./ticker.js";
 
+async function orchestrateBootstrapActiveDetail({
+    responseStatus,
+    hasCachedIndex,
+    activePortfolioId,
+    activeDetail = null,
+    canApply,
+    loadPortfolio,
+    loadCachedDetail = async () => null,
+    persistDetail = () => {},
+    hydrateDetail = async () => true,
+}) {
+    if (!canApply()) return true;
+    if (responseStatus === 304 && hasCachedIndex) {
+        return loadPortfolio(activePortfolioId);
+    }
+    if (!activeDetail || activeDetail.portfolioId !== activePortfolioId) {
+        return loadPortfolio(activePortfolioId);
+    }
+    const cachedDetail = await loadCachedDetail(activePortfolioId);
+    if (!canApply()) return true;
+    persistDetail(activeDetail, cachedDetail);
+    if (!canApply()) return true;
+    return hydrateDetail(activeDetail, cachedDetail);
+}
+
+if (typeof window !== "undefined" && typeof document !== "undefined") {
 runAuthGuard();
 renderSidebar();
 
@@ -92,7 +118,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let metadata = new Map();
     let tickerReady = false;
     let loadState = "loading";
-    let filterSide = "all";
+    const initialFilter = new URLSearchParams(globalThis.location?.search || "").get("filter");
+    let filterSide = ["all", "buy", "sell"].includes(initialFilter) ? initialFilter : "all";
     let editingId = null;
     let deletingId = null;
     let managingPortfolioId = null;
@@ -102,10 +129,15 @@ window.addEventListener("DOMContentLoaded", () => {
     let savedRevision = 0;
     let serverRevision = null;
     let outboxRestoredForId = null;
+    let outboxRestoredForGeneration = -1;
+    let outboxRestoredForUid = null;
+    let outboxPersistenceState = "unknown";
+    let persistenceWarningRevision = null;
     let saveTimer = null;
     let savePromise = null;
     let saveFailed = false;
     let pendingMutationId = null;
+    let pendingMutationPersistence = Promise.resolve(true);
     let conflictPortfolio = null;
     let pendingPortfolioCreate = null;
     let activeSuggestion = -1;
@@ -114,11 +146,15 @@ window.addEventListener("DOMContentLoaded", () => {
     let cacheChannel = null;
     let revalidationPromise = null;
     let portfolioLoadGeneration = 0;
+    let portfolioIndexLoadGeneration = 0;
     let activationSequence = 0;
     let activationPending = false;
     let availableWatchlists = [];
+    let watchlistDialogGeneration = 0;
+    let pendingPortfolioWatchlistCreate = null;
     const quotes = new Map();
     const inFlight = new Map();
+    const QUOTE_BATCH_SIZE = 50;
 
     const num = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
     const ticker = (value) => String(value || "").trim().toUpperCase();
@@ -139,6 +175,57 @@ window.addEventListener("DOMContentLoaded", () => {
         .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
     const quote = (value) => quotes.get(ticker(value));
+
+    function syncFilterUrl() {
+        if (!globalThis.history?.replaceState || !globalThis.location?.href) return;
+        const url = new URL(globalThis.location.href);
+        if (filterSide === "all") url.searchParams.delete("filter");
+        else url.searchParams.set("filter", filterSide);
+        globalThis.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    function reportPersistenceFailure(label, error = null) {
+        outboxPersistenceState = "failed";
+        console.warn(`Unable to persist ${label}`, error || "IndexedDB is unavailable.");
+        if (persistenceWarningRevision === revision) return;
+        persistenceWarningRevision = revision;
+        showToast(
+            "This change is only in this tab for now. Keep it open until the server confirms the save.",
+            true,
+            5000,
+            els.toast,
+        );
+        renderSync();
+    }
+
+    function persistCacheEntry(key, data, options = {}, { durable = false, label = "portfolio cache" } = {}) {
+        if (!dataStore || !key) return Promise.resolve(null);
+        return Promise.resolve()
+            .then(() => dataStore.set(key, data, options))
+            .then((result) => {
+                if (durable && result?.persisted === false) reportPersistenceFailure(label, result.persistenceError);
+                return result;
+            })
+            .catch((error) => {
+                if (durable) reportPersistenceFailure(label, error);
+                else console.warn(`Unable to persist ${label}`, error);
+                return null;
+            });
+    }
+
+    function removeCacheEntry(key, label = "portfolio cache") {
+        if (!dataStore || !key) return Promise.resolve(null);
+        return Promise.resolve()
+            .then(() => dataStore.remove(key))
+            .then((result) => {
+                if (result?.persisted === false) console.warn(`${label} removal is memory-only.`);
+                return result;
+            })
+            .catch((error) => {
+                console.warn(`Unable to remove ${label}`, error);
+                return null;
+            });
+    }
 
     function relative(iso) {
         const time = Date.parse(iso || "");
@@ -483,7 +570,7 @@ window.addEventListener("DOMContentLoaded", () => {
             ? `Updating ${loading} price${loading === 1 ? "" : "s"}…`
             : times.length
                 ? `Prices updated ${relative(new Date(Math.max(...times)).toISOString())}${failed ? ` · ${failed} unavailable` : ""}`
-                : failed ? "Prices unavailable. Try again." : "Prices are ready to load.";
+                : failed ? "Prices unavailable. Check again." : "Prices are ready to check.";
     }
 
     function renderSync() {
@@ -507,6 +594,9 @@ window.addEventListener("DOMContentLoaded", () => {
             els.syncStatus.textContent = "Changes not saved";
             els.syncStatus.classList.add("is-error");
             els.syncRetry.classList.remove("hidden");
+        } else if (outboxPersistenceState === "failed" && revision > savedRevision) {
+            els.syncStatus.textContent = "Changes only in this tab";
+            els.syncStatus.classList.add("is-error");
         } else if (revision > savedRevision) {
             els.syncStatus.textContent = "Waiting to save…";
             els.syncStatus.classList.add("is-loading");
@@ -587,7 +677,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     function cachePortfolioIndex({ version = null, serverUpdatedAt = null } = {}) {
         if (!dataStore) return;
-        void dataStore.set(dataStore.keys.portfolioIndex(), portfolioIndexSnapshot(), {
+        void persistCacheEntry(dataStore.keys.portfolioIndex(), portfolioIndexSnapshot(), {
             ttlMs: CACHE_TTL.portfolioIndex,
             staleTtlMs: CACHE_STALE_TTL.portfolioIndex,
             version,
@@ -616,7 +706,7 @@ window.addEventListener("DOMContentLoaded", () => {
         serverUpdatedAt = null,
     } = {}) {
         if (!dataStore || !activePortfolioId) return;
-        void dataStore.set(dataStore.keys.portfolio(activePortfolioId), portfolioDetailSnapshot(syncState), {
+        void persistCacheEntry(dataStore.keys.portfolio(activePortfolioId), portfolioDetailSnapshot(syncState), {
             ttlMs: CACHE_TTL.portfolioDetail,
             staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
             version,
@@ -630,7 +720,7 @@ window.addEventListener("DOMContentLoaded", () => {
         serverUpdatedAt = null,
     } = {}) {
         if (!dataStore) return;
-        void dataStore.set(dataStore.keys.watchlists(), {
+        void persistCacheEntry(dataStore.keys.watchlists(), {
             watchlists: watchlistItems.map((watchlist) => ({
                 ...watchlist,
                 tickers: [...(watchlist.tickers || [])],
@@ -818,7 +908,7 @@ window.addEventListener("DOMContentLoaded", () => {
         pendingMutationId = newClientOperationId();
         updateActivePortfolioSummary();
         cacheActivePortfolio("pending");
-        persistPendingSnapshot();
+        void queuePendingSnapshot();
         if (message) els.live.textContent = message;
         render();
         scheduleSave();
@@ -850,37 +940,133 @@ window.addEventListener("DOMContentLoaded", () => {
             && !hasUnsavedPortfolioState();
     }
 
-    function pendingSnapshot() {
-        return {
-            portfolioId: activePortfolioId,
-            positions: positions.map((position) => ({ ...position })),
-            baseCurrency: currency,
-            baseRevision: serverRevision,
-            clientRevision: revision,
-            mutationId: pendingMutationId || newClientOperationId(),
-            savedAt: new Date().toISOString(),
-        };
-    }
-
-    function persistPendingSnapshot() {
-        if (!dataStore || !activePortfolioId) return;
-        void dataStore.set(dataStore.keys.portfolioOutbox(activePortfolioId), pendingSnapshot(), {
-            ttlMs: CACHE_TTL.portfolioOutbox,
-            staleTtlMs: CACHE_STALE_TTL.portfolioOutbox,
-            version: serverRevision,
+    function createPortfolioSaveRequest(mutationId, {
+        portfolioId = activePortfolioId,
+        sourcePositions = positions,
+        baseCurrency = currency,
+        baseRevision = serverRevision,
+    } = {}) {
+        if (!mutationId) throw new Error("A pending portfolio mutation requires an id.");
+        return Object.freeze({
+            portfolioId,
+            positions: Object.freeze(sourcePositions.map((position) => Object.freeze({ ...position }))),
+            baseCurrency,
+            baseRevision,
+            idempotencyKey: mutationId,
         });
     }
 
+    function pendingSnapshot(
+        requestPayload = createPortfolioSaveRequest(pendingMutationId),
+        clientRevision = revision,
+    ) {
+        return Object.freeze({
+            portfolioId: requestPayload.portfolioId,
+            positions: requestPayload.positions,
+            baseCurrency: requestPayload.baseCurrency,
+            baseRevision: requestPayload.baseRevision,
+            clientRevision,
+            mutationId: requestPayload.idempotencyKey,
+            // This is the exact immutable body used by /portfolio/save. Keeping
+            // it in the outbox guarantees an idempotent replay after a lost
+            // response, including the advanced base revision.
+            request: requestPayload,
+            savedAt: new Date().toISOString(),
+        });
+    }
+
+    function persistPendingSnapshot(snapshot = pendingSnapshot()) {
+        if (!dataStore || !snapshot?.portfolioId) {
+            outboxPersistenceState = "unavailable";
+            return Promise.resolve(false);
+        }
+        const key = dataStore.keys.portfolioOutbox(snapshot.portfolioId);
+        return persistCacheEntry(key, snapshot, {
+            ttlMs: CACHE_TTL.portfolioOutbox,
+            staleTtlMs: CACHE_STALE_TTL.portfolioOutbox,
+            version: snapshot.baseRevision,
+        }, { durable: true, label: "portfolio recovery changes" }).then((result) => {
+            if (result?.persisted === true) {
+                outboxPersistenceState = "persisted";
+                return true;
+            }
+            if (outboxPersistenceState !== "failed") reportPersistenceFailure("portfolio recovery changes");
+            return false;
+        });
+    }
+
+    function queuePendingSnapshot(snapshot = pendingSnapshot()) {
+        // IndexedDB writes are serialized so a later edit cannot be overtaken
+        // by an earlier snapshot. The save path awaits this chain before it
+        // sends the corresponding idempotency key to the server.
+        pendingMutationPersistence = Promise.resolve(pendingMutationPersistence)
+            .catch(() => false)
+            .then(() => persistPendingSnapshot(snapshot));
+        return pendingMutationPersistence;
+    }
+
+    async function removePendingSnapshot(portfolioId = activePortfolioId) {
+        if (!dataStore || !portfolioId) return true;
+        try {
+            const result = await dataStore.remove(dataStore.keys.portfolioOutbox(portfolioId));
+            if (result?.persisted === false) {
+                reportPersistenceFailure("saved portfolio recovery cleanup", result.error);
+                return false;
+            }
+            outboxPersistenceState = "unknown";
+            return true;
+        } catch (error) {
+            reportPersistenceFailure("saved portfolio recovery cleanup", error);
+            return false;
+        }
+    }
+
     async function restorePendingSnapshot() {
-        if (!dataStore || !activePortfolioId || outboxRestoredForId === activePortfolioId) return;
-        outboxRestoredForId = activePortfolioId;
+        if (!dataStore || !activePortfolioId
+            || (outboxRestoredForId === activePortfolioId
+                && outboxRestoredForGeneration === portfolioLoadGeneration
+                && outboxRestoredForUid === initializedUid)) return;
+        const hydration = Object.freeze({
+            generation: portfolioLoadGeneration,
+            uid: initializedUid,
+            portfolioId: activePortfolioId,
+            revision,
+            savedRevision,
+            dirtyRevision: revision > savedRevision ? revision : null,
+        });
         const pending = await dataStore.get(dataStore.keys.portfolioOutbox(activePortfolioId));
-        if (!pending?.data || pending.data.portfolioId !== activePortfolioId) return;
-        positions = Array.isArray(pending.data.positions) ? pending.data.positions : positions;
-        currency = ticker(pending.data.baseCurrency) || currency;
-        serverRevision = pending.data.baseRevision ?? serverRevision;
+        if (hydration.generation !== portfolioLoadGeneration
+            || hydration.uid !== initializedUid
+            || hydration.portfolioId !== activePortfolioId
+            || hydration.revision !== revision
+            || hydration.savedRevision !== savedRevision
+            || (hydration.dirtyRevision !== null && hydration.dirtyRevision !== revision)
+            || hasUnsavedPortfolioState()) return;
+        const storedRequest = pending?.data?.request && typeof pending.data.request === "object"
+            ? pending.data.request
+            : pending?.data;
+        if (!pending?.data || storedRequest?.portfolioId !== activePortfolioId) {
+            outboxRestoredForId = activePortfolioId;
+            outboxRestoredForGeneration = portfolioLoadGeneration;
+            outboxRestoredForUid = initializedUid;
+            return;
+        }
+        outboxRestoredForId = activePortfolioId;
+        outboxRestoredForGeneration = portfolioLoadGeneration;
+        outboxRestoredForUid = initializedUid;
+        positions = Array.isArray(storedRequest.positions)
+            ? storedRequest.positions.map((position) => ({ ...position }))
+            : positions;
+        currency = ticker(storedRequest.baseCurrency) || currency;
+        serverRevision = storedRequest.baseRevision ?? serverRevision;
         revision = Math.max(1, Number(pending.data.clientRevision) || 1);
-        pendingMutationId = pending.data.mutationId || newClientOperationId();
+        const restoredMutationId = String(
+            storedRequest.idempotencyKey || pending.data.mutationId || "",
+        ).trim();
+        pendingMutationId = restoredMutationId || newClientOperationId();
+        pendingMutationPersistence = restoredMutationId
+            ? Promise.resolve(true)
+            : queuePendingSnapshot();
         savedRevision = 0;
         saveFailed = true;
         cacheActivePortfolio("unsynced");
@@ -901,55 +1087,75 @@ window.addEventListener("DOMContentLoaded", () => {
         if (savePromise) return savePromise;
         const targetRevision = revision;
         const mutationId = pendingMutationId || newClientOperationId();
-        pendingMutationId = mutationId;
+        if (!pendingMutationId) pendingMutationId = mutationId;
+        const requestPayload = createPortfolioSaveRequest(mutationId);
+        const targetPortfolioId = requestPayload.portfolioId;
+        // Always rewrite the outbox at the network boundary. A prior edit may
+        // have been captured while an older request was still on its previous
+        // base revision; this write advances it to the exact body sent now.
+        const targetPersistence = queuePendingSnapshot(
+            pendingSnapshot(requestPayload, targetRevision),
+        );
         saveFailed = false;
         savePromise = (async () => {
             renderSync();
             try {
+                if (await targetPersistence !== true) {
+                    throw new Error("Portfolio recovery changes must be saved locally before syncing.");
+                }
                 const response = await request("/portfolio/save", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        portfolioId: activePortfolioId,
-                        positions,
-                        baseCurrency: currency,
-                        baseRevision: serverRevision,
-                        idempotencyKey: mutationId,
-                    }),
+                    body: JSON.stringify(requestPayload),
                 });
                 const data = await response.json();
                 if (!response.ok) {
                     if (response.status === 409 && data.code === "REVISION_CONFLICT" && data.portfolio) {
-                        conflictPortfolio = data.portfolio;
-                        serverRevision = data.portfolio.revision ?? serverRevision;
-                        pendingMutationId = newClientOperationId();
-                        persistPendingSnapshot();
-                        cacheActivePortfolio("conflict", {
+                        if (activePortfolioId === targetPortfolioId) {
+                            conflictPortfolio = data.portfolio;
+                            serverRevision = data.portfolio.revision ?? serverRevision;
+                        }
+                        if (pendingMutationId === mutationId) {
+                            pendingMutationId = newClientOperationId();
+                            void queuePendingSnapshot();
+                        }
+                        if (activePortfolioId === targetPortfolioId) cacheActivePortfolio("conflict", {
                             version: data.portfolio.revision ?? null,
                             serverUpdatedAt: data.portfolio.updatedAt ?? null,
                         });
                     }
                     throw new Error(data.message || "Failed to save portfolio.");
                 }
-                savedRevision = Math.max(savedRevision, targetRevision);
-                serverRevision = data.revision ?? serverRevision;
-                const activeSummary = portfolios.find((item) => item.id === activePortfolioId);
-                if (activeSummary) activeSummary.revision = serverRevision ?? activeSummary.revision ?? 0;
-                pendingMutationId = null;
-                if (revision <= targetRevision) void dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
-                cacheActivePortfolio(revision > targetRevision ? "pending" : "synced", {
-                    version: data.version || data.revision || null,
-                    serverUpdatedAt: data.updatedAt || null,
-                });
-                cacheChannel?.publish("portfolio-updated", {
-                    entityId: activePortfolioId,
-                    operation: "save",
-                    version: data.version || data.revision || null,
-                });
+                const responseRevision = data.revision ?? requestPayload.baseRevision;
+                if (activePortfolioId === targetPortfolioId) {
+                    savedRevision = Math.max(savedRevision, targetRevision);
+                    serverRevision = responseRevision ?? serverRevision;
+                }
+                const activeSummary = portfolios.find((item) => item.id === targetPortfolioId);
+                if (activeSummary) activeSummary.revision = responseRevision ?? activeSummary.revision ?? 0;
+                const isCurrentMutation = pendingMutationId === mutationId;
+                if (isCurrentMutation) {
+                    pendingMutationId = null;
+                    pendingMutationPersistence = Promise.resolve(true);
+                }
+                if (isCurrentMutation && activePortfolioId === targetPortfolioId && revision <= targetRevision) {
+                    await removePendingSnapshot(targetPortfolioId);
+                }
+                if (activePortfolioId === targetPortfolioId) {
+                    cacheActivePortfolio(revision > targetRevision ? "pending" : "synced", {
+                        version: data.version || data.revision || null,
+                        serverUpdatedAt: data.updatedAt || null,
+                    });
+                    cacheChannel?.publish("portfolio-updated", {
+                        entityId: targetPortfolioId,
+                        operation: "save",
+                        version: data.version || data.revision || null,
+                    });
+                }
                 return true;
             } catch (error) {
-                saveFailed = true;
-                cacheActivePortfolio("unsynced");
+                if (pendingMutationId === mutationId) saveFailed = true;
+                if (activePortfolioId === targetPortfolioId) cacheActivePortfolio("unsynced");
                 showToast(error.message, true, 3500, els.toast);
                 return false;
             } finally {
@@ -984,7 +1190,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!reapplyLocalChanges) {
             const remote = conflictPortfolio;
             conflictPortfolio = null;
-            await dataStore?.remove(dataStore.keys.portfolioOutbox(activePortfolioId));
+            await removePendingSnapshot(activePortfolioId);
             applyPortfolioData(remote, { markCanonical: true });
             showToast("Loaded the newer server version.", false, 3000, els.toast);
             return true;
@@ -992,7 +1198,7 @@ window.addEventListener("DOMContentLoaded", () => {
         conflictPortfolio = null;
         saveFailed = false;
         pendingMutationId = newClientOperationId();
-        persistPendingSnapshot();
+        void queuePendingSnapshot();
         return runSave();
     }
 
@@ -1025,19 +1231,25 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         render();
         const promise = (async () => {
-            try {
-            const response = await request("/portfolio/current-prices", {
-                method: "POST",
-                coalesce: true,
-                retry: true,
-                headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ tickers: needed }),
+            const batches = [];
+            for (let index = 0; index < needed.length; index += QUOTE_BATCH_SIZE) {
+                batches.push(needed.slice(index, index + QUOTE_BATCH_SIZE));
+            }
+
+            async function requestQuoteBatch(batch) {
+                const response = await request("/portfolio/current-prices", {
+                    method: "POST",
+                    coalesce: true,
+                    retry: true,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ tickers: batch }),
                 });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.message || "Failed to refresh prices.");
+                if (!response.ok) throw new Error(data.message || "Failed to check prices.");
                 const returned = new Set();
                 (data.tickers || []).forEach((raw, index) => {
                     const symbol = ticker(raw);
+                    if (!batch.includes(symbol)) return;
                     const price = num((data.prices || [])[index]);
                     returned.add(symbol);
                     quotes.set(symbol, {
@@ -1049,8 +1261,28 @@ window.addEventListener("DOMContentLoaded", () => {
                         status: Number.isFinite(price) ? "ready" : "error",
                     });
                 });
-                needed.filter((symbol) => !returned.has(symbol)).forEach((symbol) => {
+                batch.filter((symbol) => !returned.has(symbol)).forEach((symbol) => {
                     quotes.set(symbol, { price: null, asOf: null, freshness: "unavailable", status: "error" });
+                });
+                return data;
+            }
+
+            try {
+                const outcomes = await Promise.allSettled(batches.map((batch) => requestQuoteBatch(batch)));
+                const failures = [];
+                outcomes.forEach((outcome, index) => {
+                    if (outcome.status === "fulfilled") return;
+                    const batch = batches[index];
+                    failures.push({ batch, error: outcome.reason });
+                    batch.forEach((symbol) => {
+                        const old = quote(symbol);
+                        quotes.set(symbol, {
+                            price: old?.price ?? null,
+                            asOf: old?.asOf ?? null,
+                            freshness: old?.freshness ?? null,
+                            status: "error",
+                        });
+                    });
                 });
                 persistQuoteCache();
                 const draft = ticker(els.ticker.value);
@@ -1058,14 +1290,26 @@ window.addEventListener("DOMContentLoaded", () => {
                 if (!entryDirty && needed.includes(draft) && Number.isFinite(draftQuote?.price)) {
                     els.entry.value = (draftQuote.price * rate()).toFixed(4);
                 }
+                if (failures.length) {
+                    const failedSymbols = failures.reduce((count, item) => count + item.batch.length, 0);
+                    throw new Error(
+                        failures.length === batches.length
+                            ? "Unable to check prices. Please try again."
+                            : `${failedSymbols} price${failedSymbols === 1 ? "" : "s"} could not be checked.`,
+                    );
+                }
             } catch (error) {
-                needed.forEach((symbol) => {
-                    const old = quote(symbol);
-                    quotes.set(symbol, {
-                        price: old?.price ?? null, asOf: old?.asOf ?? null,
-                        freshness: old?.freshness ?? null, status: "error",
+                if (!String(error?.message || "").includes("price")) {
+                    needed.forEach((symbol) => {
+                        const old = quote(symbol);
+                        quotes.set(symbol, {
+                            price: old?.price ?? null,
+                            asOf: old?.asOf ?? null,
+                            freshness: old?.freshness ?? null,
+                            status: "error",
+                        });
                     });
-                });
+                }
                 throw error;
             } finally {
                 needed.forEach((symbol) => inFlight.delete(symbol));
@@ -1137,16 +1381,18 @@ window.addEventListener("DOMContentLoaded", () => {
         try {
             const query = new URLSearchParams({ base: "USD" });
             if (force) query.set("refresh", "1");
-            const response = await request(`/portfolio/conversion-rates?${query}`);
+            const response = await request(`/portfolio/conversion-rates?${query}`, {
+                coalesce: force ? false : true,
+            });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Failed to load exchange rates.");
             const version = data.version || data.date || null;
-            void dataStore?.set(dataStore.keys.fxRates("USD"), data, {
+            void persistCacheEntry(dataStore?.keys.fxRates("USD"), data, {
                 ttlMs: CACHE_TTL.fxRates,
                 staleTtlMs: CACHE_STALE_TTL.fxRates,
                 serverUpdatedAt: data.date || data.fetchedAt || null,
                 version,
-            });
+            }, "exchange-rate cache");
             if (!sameCachedPayload(cached, data, version)) applyRates(data);
             if (noisy) showToast("Exchange rates updated.", false, 2500, els.toast);
             return true;
@@ -1211,27 +1457,66 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         return data;
     }
+
+    async function hydrateActivePortfolioDetail(rawData, {
+        markCanonical = true,
+        expectedUid = initializedUid,
+        expectedPortfolioId = activePortfolioId,
+        expectedGeneration = portfolioLoadGeneration,
+        canApply = () => true,
+    } = {}) {
+        const normalized = normalizePortfolioData(rawData);
+        if (expectedUid !== initializedUid
+            || expectedPortfolioId !== activePortfolioId
+            || expectedGeneration !== portfolioLoadGeneration
+            || normalized.portfolioId !== expectedPortfolioId
+            || !canApply()
+            || hasUnsavedPortfolioState()) return false;
+
+        applyPortfolioData(normalized, { markCanonical });
+        if (expectedUid !== initializedUid
+            || expectedPortfolioId !== activePortfolioId
+            || expectedGeneration !== portfolioLoadGeneration
+            || hasUnsavedPortfolioState()) return false;
+
+        await restorePendingSnapshot();
+        return expectedUid === initializedUid
+            && expectedPortfolioId === activePortfolioId
+            && expectedGeneration === portfolioLoadGeneration;
+    }
+
     function reconcileCanonicalPortfolio(rawPortfolio) {
         if (!rawPortfolio?.portfolioId) return;
-        const portfolioId = rawPortfolio.portfolioId;
+        const canonical = normalizePortfolioData(rawPortfolio);
+        const portfolioId = canonical.portfolioId;
         const summary = portfolios.find((item) => item.id === portfolioId);
         if (summary) {
-            summary.name = rawPortfolio.name || summary.name;
-            summary.positionCount = Array.isArray(rawPortfolio.positions)
-                ? rawPortfolio.positions.length
+            summary.name = canonical.name || summary.name;
+            summary.positionCount = Array.isArray(canonical.positions)
+                ? canonical.positions.length
                 : summary.positionCount;
-            summary.baseCurrency = rawPortfolio.baseCurrency || summary.baseCurrency;
-            summary.revision = rawPortfolio.revision ?? summary.revision ?? 0;
-            summary.updatedAt = rawPortfolio.updatedAt || summary.updatedAt;
+            summary.baseCurrency = canonical.baseCurrency || summary.baseCurrency;
+            summary.revision = canonical.revision ?? summary.revision ?? 0;
+            summary.updatedAt = canonical.updatedAt || summary.updatedAt;
         }
         if (portfolioId === activePortfolioId) {
-            applyPortfolioData(rawPortfolio);
+            applyPortfolioData(canonical, { markCanonical: true });
+            cacheActivePortfolio("synced", {
+                version: canonical.revision ?? null,
+                serverUpdatedAt: canonical.updatedAt || null,
+            });
         } else {
+            void persistCacheEntry(dataStore?.keys.portfolio(portfolioId), canonical, {
+                ttlMs: CACHE_TTL.portfolioDetail,
+                staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
+                version: canonical.revision ?? null,
+                serverUpdatedAt: canonical.updatedAt || null,
+            });
             renderPicker();
         }
         cachePortfolioIndex({
-            version: rawPortfolio.revision ?? null,
-            serverUpdatedAt: rawPortfolio.updatedAt || null,
+            version: canonical.revision ?? null,
+            serverUpdatedAt: canonical.updatedAt || null,
         });
     }
 
@@ -1243,8 +1528,14 @@ window.addEventListener("DOMContentLoaded", () => {
         const cacheKey = dataStore ? dataStore.keys.portfolio(requestedPortfolioId) : null;
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
         if (cached && canApplyPortfolioLoad(context)) {
-            applyPortfolioData(cached.data, { markCanonical: cached.data?.syncState === "synced" });
-            await restorePendingSnapshot();
+            const hydrated = await hydrateActivePortfolioDetail(cached.data, {
+                markCanonical: cached.data?.syncState === "synced",
+                expectedUid: context.uid,
+                expectedPortfolioId: requestedPortfolioId,
+                expectedGeneration: context.generation,
+                canApply: () => canApplyPortfolioLoad(context),
+            });
+            if (!hydrated) return true;
             if (cached.isFresh && !force) return true;
             if (
                 context.generation !== portfolioLoadGeneration
@@ -1272,7 +1563,9 @@ window.addEventListener("DOMContentLoaded", () => {
             const query = `?portfolioId=${encodeURIComponent(requestedPortfolioId)}`;
             for (let attempt = 0; attempt < 2; attempt += 1) {
                 try {
-                    response = await request(`/portfolio/load${query}`, {}, 45000);
+                    response = await request(`/portfolio/load${query}`, {
+                        coalesce: force ? false : true,
+                    }, 45000);
                     data = await response.json();
                     if (response.ok) break;
                     lastError = new Error(data.message || "Failed to load portfolio.");
@@ -1285,15 +1578,19 @@ window.addEventListener("DOMContentLoaded", () => {
             const normalized = normalizePortfolioData(data);
             const version = data.version || data.revision || data.updatedAt || null;
             if (!canApplyPortfolioLoad(context)) return true;
-            void dataStore?.set(dataStore.keys.portfolio(normalized.portfolioId), normalized, {
+            void persistCacheEntry(dataStore?.keys.portfolio(normalized.portfolioId), normalized, {
                 ttlMs: CACHE_TTL.portfolioDetail,
                 staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
+            }, "portfolio cache");
+            await hydrateActivePortfolioDetail(normalized, {
+                markCanonical: true,
+                expectedUid: context.uid,
+                expectedPortfolioId: requestedPortfolioId,
+                expectedGeneration: context.generation,
+                canApply: () => canApplyPortfolioLoad(context),
             });
-            if (!sameCachedPayload(cached, normalized, version)) {
-                applyPortfolioData(normalized, { markCanonical: true });
-            }
             return true;
         } catch (error) {
             if (cached) {
@@ -1320,53 +1617,85 @@ window.addEventListener("DOMContentLoaded", () => {
 
     async function loadPortfolioIndex(force = false) {
         if (hasUnsavedPortfolioState()) return true;
+        const indexGeneration = ++portfolioIndexLoadGeneration;
+        const indexUid = initializedUid;
+        const indexPortfolioLoadGeneration = portfolioLoadGeneration;
+        const canApplyIndex = () => indexGeneration === portfolioIndexLoadGeneration
+            && indexUid === initializedUid
+            && indexPortfolioLoadGeneration === portfolioLoadGeneration
+            && !hasUnsavedPortfolioState();
         const cacheKey = dataStore?.keys.portfolioIndex();
         const cached = cacheKey ? await dataStore.get(cacheKey) : null;
-        if (cached && !hasUnsavedPortfolioState()) {
+        if (!canApplyIndex()) return true;
+        if (cached && canApplyIndex()) {
             applyPortfolioIndex(cached.data);
             if (cached.isFresh && !force) return loadPortfolio(activePortfolioId);
         }
         try {
             const response = await request("/portfolio/bootstrap", {
+                coalesce: force ? false : true,
                 headers: cached?.version ? { "If-None-Match": cached.version } : {},
             }, 45000);
-            if (response.status === 304 && cached) return true;
+            if (response.status === 304 && cached) {
+                return orchestrateBootstrapActiveDetail({
+                    responseStatus: response.status,
+                    hasCachedIndex: true,
+                    activePortfolioId,
+                    canApply: canApplyIndex,
+                    loadPortfolio: (portfolioId) => loadPortfolio(portfolioId),
+                });
+            }
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to load portfolios.");
+            if (!canApplyIndex()) return true;
             const next = {
                 portfolios: Array.isArray(data.portfolios) ? data.portfolios : [],
                 activePortfolioId: data.activePortfolioId || data.portfolios?.[0]?.id || null,
                 activationRevision: Math.max(0, Number(data.activationRevision) || 0),
             };
             const version = response.headers.get("ETag") || data.version || data.updatedAt || null;
-            void dataStore?.set(dataStore.keys.portfolioIndex(), {
+            void persistCacheEntry(dataStore?.keys.portfolioIndex(), {
                 ...next,
             }, {
                 ttlMs: CACHE_TTL.portfolioIndex,
                 staleTtlMs: CACHE_STALE_TTL.portfolioIndex,
                 serverUpdatedAt: data.updatedAt || null,
                 version,
-            });
-            if (hasUnsavedPortfolioState()) return true;
+            }, "portfolio index cache");
+            if (!canApplyIndex()) return true;
             if (!sameCachedPayload(cached, next, version)) applyPortfolioIndex(next);
-            const activeDetail = data.activePortfolio;
-            if (!activeDetail || activeDetail.portfolioId !== activePortfolioId) {
-                return loadPortfolio(activePortfolioId);
-            }
-            const detailKey = dataStore?.keys.portfolio(activePortfolioId);
-            const cachedDetail = detailKey ? await dataStore.get(detailKey) : null;
-            const detailVersion = activeDetail.revision ?? activeDetail.updatedAt ?? null;
-            void dataStore?.set(dataStore.keys.portfolio(activePortfolioId), activeDetail, {
-                ttlMs: CACHE_TTL.portfolioDetail,
-                staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
-                serverUpdatedAt: activeDetail.updatedAt || null,
-                version: detailVersion,
+            const expectedPortfolioId = activePortfolioId;
+            return orchestrateBootstrapActiveDetail({
+                responseStatus: response.status,
+                hasCachedIndex: Boolean(cached),
+                activePortfolioId: expectedPortfolioId,
+                activeDetail: data.activePortfolio,
+                canApply: canApplyIndex,
+                loadPortfolio: (portfolioId) => loadPortfolio(portfolioId),
+                loadCachedDetail: async (portfolioId) => {
+                    const detailKey = dataStore?.keys.portfolio(portfolioId);
+                    return detailKey ? dataStore.get(detailKey) : null;
+                },
+                persistDetail: (detail, cachedDetail) => {
+                    const detailVersion = detail.revision ?? detail.updatedAt ?? null;
+                    if (sameCachedPayload(cachedDetail, detail, detailVersion)) return;
+                    void persistCacheEntry(dataStore?.keys.portfolio(detail.portfolioId), detail, {
+                        ttlMs: CACHE_TTL.portfolioDetail,
+                        staleTtlMs: CACHE_STALE_TTL.portfolioDetail,
+                        serverUpdatedAt: detail.updatedAt || null,
+                        version: detailVersion,
+                    }, "portfolio detail cache");
+                },
+                hydrateDetail: (detail) => hydrateActivePortfolioDetail(detail, {
+                    markCanonical: true,
+                    expectedUid: indexUid,
+                    expectedPortfolioId,
+                    expectedGeneration: indexPortfolioLoadGeneration,
+                    canApply: canApplyIndex,
+                }),
             });
-            if (!sameCachedPayload(cachedDetail, activeDetail, detailVersion)) {
-                applyPortfolioData(activeDetail, { markCanonical: true });
-            }
-            return true;
         } catch (error) {
+            if (!canApplyIndex()) return true;
             if (cached) {
                 showToast("Showing saved portfolio list while the service is unavailable.", true, 3500, els.toast);
                 return loadPortfolio(activePortfolioId);
@@ -1391,6 +1720,7 @@ window.addEventListener("DOMContentLoaded", () => {
         setMenuError();
         const previousPortfolioId = activePortfolioId;
         const activationId = ++activationSequence;
+        portfolioIndexLoadGeneration += 1;
         activationPending = true;
         els.picker.open = false;
         activePortfolioId = portfolioId;
@@ -1471,6 +1801,65 @@ window.addEventListener("DOMContentLoaded", () => {
         els.portfolioDeleteDialog.showModal();
     }
 
+    async function reconcilePortfolioCreate(createOperation) {
+        if (!createOperation?.portfolioId) return false;
+        try {
+            const response = await request("/portfolio/bootstrap", { coalesce: false }, 45000);
+            const data = await response.json();
+            if (!response.ok) return false;
+            const created = (data.portfolios || []).find((item) => item.id === createOperation.portfolioId);
+            if (!created) return false;
+            pendingPortfolioCreate = null;
+            portfolios = Array.isArray(data.portfolios) ? data.portfolios : portfolios;
+            activePortfolioId = data.activePortfolioId || created.id;
+            activationRevision = Math.max(activationRevision, Number(data.activationRevision) || 0);
+            cachePortfolioIndex({
+                version: data.version || created.revision || null,
+                serverUpdatedAt: created.updatedAt || null,
+            });
+            await loadPortfolio(activePortfolioId, { force: true });
+            els.newPortfolioName.value = "";
+            renderPicker();
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async function reconcilePortfolioWatchlistCreate(createOperation, optimisticId, symbols) {
+        if (!createOperation?.idempotencyKey) return false;
+        try {
+            const response = await request("/watchlists", { coalesce: false });
+            const data = await response.json();
+            if (!response.ok) return false;
+            const candidate = (data.watchlists || []).find((item) => (
+                item.createOperationId === createOperation.idempotencyKey
+                || item.idempotencyKey === createOperation.idempotencyKey
+            ));
+            if (!candidate) return false;
+            pendingPortfolioWatchlistCreate = null;
+            const optimisticIndex = availableWatchlists.findIndex((item) => item.id === optimisticId);
+            if (optimisticIndex >= 0) availableWatchlists.splice(optimisticIndex, 1, candidate);
+            else availableWatchlists = [candidate, ...availableWatchlists];
+            cacheWatchlists(availableWatchlists, {
+                version: candidate.revision ?? null,
+                serverUpdatedAt: candidate.updatedAt || null,
+            });
+            cacheChannel?.publish("watchlist-updated", {
+                entityId: candidate.id,
+                operation: "create",
+                version: candidate.revision ?? null,
+            });
+            els.watchlistDialog.close();
+            const message = `${symbols.length} ticker${symbols.length === 1 ? "" : "s"} added to the new watchlist.`;
+            showToast("Watchlist creation was confirmed after the connection recovered.", false, 3500, els.toast);
+            els.live.textContent = message;
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     async function createPortfolio(event) {
         event.preventDefault();
         const name = els.newPortfolioName.value.trim().replace(/\s+/g, " ");
@@ -1527,7 +1916,11 @@ window.addEventListener("DOMContentLoaded", () => {
             await loadPortfolio(activePortfolioId);
             showToast(`${data.portfolio.name} created.`, false, 2500, els.toast);
         } catch (error) {
-            setMenuError(error.message);
+            if (await reconcilePortfolioCreate(createOperation)) {
+                showToast("Portfolio creation was confirmed after the connection recovered.", false, 3500, els.toast);
+            } else {
+                setMenuError(error.message);
+            }
         } finally {
             setBusy(els.createPortfolioBtn, false);
         }
@@ -1616,7 +2009,7 @@ window.addEventListener("DOMContentLoaded", () => {
             }
             if (!response.ok) throw new Error(data.message || "Unable to delete portfolio.");
             portfolios = portfolios.filter((item) => item.id !== portfolioId);
-            void dataStore?.remove(dataStore.keys.portfolio(portfolioId));
+            void removeCacheEntry(dataStore?.keys.portfolio(portfolioId), "deleted portfolio cache");
             managingPortfolioId = null;
             activationRevision = Math.max(
                 activationRevision,
@@ -1649,6 +2042,23 @@ window.addEventListener("DOMContentLoaded", () => {
         els.watchlistSave.disabled = existing && !availableWatchlists.length;
     }
 
+    function renderWatchlistSelect(loadingLabel = "") {
+        if (loadingLabel) {
+            els.watchlistSelect.replaceChildren(Object.assign(document.createElement("option"), {
+                textContent: loadingLabel,
+                value: "",
+            }));
+            return;
+        }
+        els.watchlistSelect.replaceChildren(...availableWatchlists.map((watchlist) => Object.assign(
+            document.createElement("option"),
+            {
+                value: watchlist.id,
+                textContent: `${watchlist.name} (${watchlist.tickers.length})`,
+            },
+        )));
+    }
+
     async function openWatchlistDialog() {
         const symbols = uniquePortfolioTickers();
         if (!symbols.length) return;
@@ -1658,30 +2068,46 @@ window.addEventListener("DOMContentLoaded", () => {
         els.watchlistError.classList.add("hidden");
         els.watchlistName.value = `${activePortfolioName} watch`.slice(0, 60);
         availableWatchlists = [];
-        els.watchlistSelect.replaceChildren(Object.assign(document.createElement("option"), {
-            textContent: "Loading watchlists…", value: "",
-        }));
+        const dialogGeneration = ++watchlistDialogGeneration;
+        renderWatchlistSelect("Loading saved watchlists…");
         renderWatchlistDestination();
         els.watchlistDialog.showModal();
+        let hydratedFromCache = false;
         try {
+            const cached = dataStore?.keys.watchlists()
+                ? await dataStore.get(dataStore.keys.watchlists())
+                : null;
+            if (dialogGeneration !== watchlistDialogGeneration) return;
+            if (Array.isArray(cached?.data?.watchlists)) {
+                hydratedFromCache = true;
+                availableWatchlists = cached.data.watchlists.map((watchlist) => ({
+                    ...watchlist,
+                    tickers: [...(watchlist.tickers || [])],
+                }));
+                renderWatchlistSelect();
+                renderWatchlistDestination();
+            }
             const response = await request("/watchlists");
             const data = await response.json();
+            if (dialogGeneration !== watchlistDialogGeneration) return;
             if (!response.ok) throw new Error(data.message || "Unable to load watchlists.");
             availableWatchlists = Array.isArray(data.watchlists) ? data.watchlists : [];
             cacheWatchlists(availableWatchlists, {
                 serverUpdatedAt: data.updatedAt || null,
                 version: data.version || null,
             });
-            els.watchlistSelect.replaceChildren(...availableWatchlists.map((watchlist) => Object.assign(document.createElement("option"), {
-                value: watchlist.id,
-                textContent: `${watchlist.name} (${watchlist.tickers.length})`,
-            })));
+            renderWatchlistSelect();
             renderWatchlistDestination();
         } catch (error) {
-            els.watchlistSelect.replaceChildren(Object.assign(document.createElement("option"), {
-                textContent: "Watchlists unavailable", value: "",
-            }));
-            els.watchlistError.textContent = error.message;
+            if (dialogGeneration !== watchlistDialogGeneration) return;
+            if (!hydratedFromCache) {
+                els.watchlistSelect.replaceChildren(Object.assign(document.createElement("option"), {
+                    textContent: "Watchlists unavailable", value: "",
+                }));
+            }
+            els.watchlistError.textContent = hydratedFromCache
+                ? "Showing saved watchlists; live refresh is unavailable."
+                : error.message;
             els.watchlistError.classList.remove("hidden");
             renderWatchlistDestination();
         }
@@ -1694,6 +2120,15 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!symbols.length) return;
         let endpoint = "/watchlists";
         let body;
+        const createOperation = mode === "new"
+            ? (pendingPortfolioWatchlistCreate?.name === els.watchlistName.value.trim().replace(/\s+/g, " ")
+                ? pendingPortfolioWatchlistCreate
+                : {
+                    name: els.watchlistName.value.trim().replace(/\s+/g, " "),
+                    idempotencyKey: newClientOperationId(),
+                })
+            : null;
+        if (createOperation) pendingPortfolioWatchlistCreate = createOperation;
         if (mode === "new") {
             const name = els.watchlistName.value.trim().replace(/\s+/g, " ");
             if (!name) {
@@ -1702,7 +2137,11 @@ window.addEventListener("DOMContentLoaded", () => {
                 els.watchlistName.focus();
                 return;
             }
-            body = { name, tickers: symbols };
+            body = {
+                name,
+                tickers: symbols,
+                idempotencyKey: createOperation.idempotencyKey,
+            };
         } else {
             const watchlistId = els.watchlistSelect.value;
             if (!watchlistId) {
@@ -1745,21 +2184,25 @@ window.addEventListener("DOMContentLoaded", () => {
                 : watchlist);
         }
         cacheWatchlists();
+        let responseStatus = null;
         try {
             const response = await request(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
             });
+            responseStatus = response.status;
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || "Unable to update watchlist.");
             if (mode === "new") {
-                availableWatchlists = availableWatchlists.map((watchlist) => watchlist.id === optimisticId ? data : watchlist);
-                cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.updatedAt || null });
+                const createdWatchlist = data.watchlist || data;
+                pendingPortfolioWatchlistCreate = null;
+                availableWatchlists = availableWatchlists.map((watchlist) => watchlist.id === optimisticId ? createdWatchlist : watchlist);
+                cacheWatchlists(availableWatchlists, { serverUpdatedAt: createdWatchlist.updatedAt || null });
                 cacheChannel?.publish("watchlist-updated", {
-                    entityId: data.id,
+                    entityId: createdWatchlist.id,
                     operation: "create",
-                    version: data.version || null,
+                    version: createdWatchlist.version || createdWatchlist.revision || null,
                 });
             } else if (data.watchlist) {
                 availableWatchlists = availableWatchlists.map((watchlist) => (
@@ -1767,9 +2210,9 @@ window.addEventListener("DOMContentLoaded", () => {
                 ));
                 cacheWatchlists(availableWatchlists, { serverUpdatedAt: data.watchlist.updatedAt || null });
                 if (previousDestination) {
-                    void dataStore?.remove(dataStore.keys.dipPerformance(
+                    void removeCacheEntry(dataStore?.keys.dipPerformance(
                         createDipPerformanceResultKey(previousDestination),
-                    ));
+                    ), "watchlist performance cache");
                 }
                 cacheChannel?.publish("watchlist-updated", {
                     entityId: data.watchlist.id,
@@ -1784,6 +2227,8 @@ window.addEventListener("DOMContentLoaded", () => {
             showToast(message, false, 3500, els.toast);
             els.live.textContent = message;
         } catch (error) {
+            if (mode === "new" && (!responseStatus || responseStatus >= 500)
+                && await reconcilePortfolioWatchlistCreate(createOperation, optimisticId, symbols)) return;
             availableWatchlists = previousWatchlists;
             cacheWatchlists();
             els.watchlistError.textContent = error.message;
@@ -1938,20 +2383,32 @@ window.addEventListener("DOMContentLoaded", () => {
         else if (action === "clear-filter") {
             filterSide = "all";
             els.filter.value = "all";
+            syncFilterUrl();
             renderPositions();
         }
     });
     els.filter.addEventListener("change", () => {
         filterSide = els.filter.value;
+        syncFilterUrl();
         renderPositions();
     });
     els.newPosition.addEventListener("click", () => resetForm({ focus: true }));
     els.refreshPrices.addEventListener("click", async () => {
         if (!positions.length) return;
-        setBusy(els.refreshPrices, true, "Refreshing…");
+        setBusy(els.refreshPrices, true, "Checking…");
         try {
             await requestQuotes(positions.map((item) => item.ticker), { force: true });
-            showToast("Prices updated.", false, 2500, els.toast);
+            const providerCached = [...new Set(positions.map((item) => ticker(item.ticker)))]
+                .map(quote)
+                .filter((item) => ["hit", "shared", "stale"].includes(item?.cacheStatus)).length;
+            showToast(
+                providerCached
+                    ? `Price check complete; ${providerCached} quote${providerCached === 1 ? " is" : "s are"} provider-cached.`
+                    : "Price check complete.",
+                false,
+                3000,
+                els.toast,
+            );
         } catch (error) {
             showToast(error.message, true, 3500, els.toast);
         } finally {
@@ -1995,6 +2452,7 @@ window.addEventListener("DOMContentLoaded", () => {
     els.watchlistBtn.addEventListener("click", openWatchlistDialog);
     els.watchlistForm.addEventListener("submit", savePortfolioWatchlist);
     els.watchlistCancel.addEventListener("click", () => els.watchlistDialog.close());
+    els.watchlistDialog.addEventListener("close", () => { watchlistDialogGeneration += 1; });
     els.watchlistForm.querySelectorAll('[name="watchlistMode"]')
         .forEach((radio) => radio.addEventListener("change", renderWatchlistDestination));
 
@@ -2037,6 +2495,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     hydrateQuoteCache();
+    els.filter.value = filterSide;
     updateCurrencyOptions();
     render();
     observeAuthState((user) => {
@@ -2057,3 +2516,6 @@ window.addEventListener("DOMContentLoaded", () => {
         void Promise.allSettled([loadRates(false), loadPortfolioIndex(false)]);
     });
 });
+}
+
+export { orchestrateBootstrapActiveDetail };

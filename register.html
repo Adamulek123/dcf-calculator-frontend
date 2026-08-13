@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- TODO: replace 'unsafe-inline' with nonces for a stricter production policy -->
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'self';
-                   script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com;
-                   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-                   font-src https://fonts.gstatic.com;
+                   script-src 'self' https://www.gstatic.com https://apis.google.com;
+                   style-src 'self' https://fonts.googleapis.com;
+                   font-src 'self' https://fonts.gstatic.com;
                    img-src 'self' https://img.logo.dev data:;
-                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com;">
+                   connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com;
+                   frame-src 'self' https://accounts.google.com https://dcf123-b6cb1.firebaseapp.com https://apis.google.com;
+                   base-uri 'self';
+                   object-src 'none';
+                   form-action 'self';">
     <meta name="theme-color" content="#0b101a">
     <title>Register | DCF Calculator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,14 +38,17 @@
                 <h1>Create your account</h1>
                 <p>Register with your email to start using the DCF Calculator.</p>
 
-                <form id="registerForm" class="stack auth-form" novalidate style="margin-top:1.25rem">
+                <form id="registerForm" class="stack auth-form" novalidate>
                     <label for="registerEmail">Email</label>
-                    <input type="email" id="registerEmail" name="email" autocomplete="email" required>
+                    <input type="email" id="registerEmail" name="email" autocomplete="email" autocapitalize="none" spellcheck="false" aria-invalid="false" aria-describedby="registerEmailError" required>
+                    <span id="registerEmailError" class="field-error" role="alert" aria-live="polite" hidden></span>
 
                     <label for="registerPassword">Password</label>
-                    <input type="password" id="registerPassword" name="password" autocomplete="new-password" minlength="6" required>
+                    <input type="password" id="registerPassword" name="password" autocomplete="new-password" spellcheck="false" aria-invalid="false" aria-describedby="registerPasswordHint registerPasswordError" minlength="6" required>
+                    <span id="registerPasswordHint" class="field-hint">Use at least 6 characters.</span>
+                    <span id="registerPasswordError" class="field-error" role="alert" aria-live="polite" hidden></span>
 
-                    <button type="submit" id="registerBtn" class="btn btn-solid" style="margin-top:0.25rem">Create account</button>
+                    <button type="submit" id="registerBtn" class="btn btn-solid auth-submit">Create account</button>
                 </form>
 
                 <p id="registerMessage" class="auth-message" role="status" aria-live="polite"></p>
@@ -51,44 +57,7 @@
 
     </main>
 
-    <script type="module">
-        import { registerWithEmail, getUserMessage } from "./js/auth.js";
-        import { runAuthGuard } from "./js/auth-guard.js";
-
-        runAuthGuard();
-
-        const registerForm = document.getElementById("registerForm");
-        const registerBtn  = document.getElementById("registerBtn");
-        const messageEl    = document.getElementById("registerMessage");
-
-        function setMessage(message, isError = false) {
-            messageEl.textContent = message;
-            messageEl.classList.toggle("error", isError);
-            messageEl.classList.toggle("success", !isError && Boolean(message));
-        }
-
-        registerForm.addEventListener("submit", async (event) => {
-            event.preventDefault();
-            setMessage("");
-
-            const email    = document.getElementById("registerEmail").value.trim();
-            const password = document.getElementById("registerPassword").value;
-
-            registerBtn.disabled = true;
-            registerBtn.textContent = "Creating account...";
-
-            try {
-                await registerWithEmail(email, password);
-                setMessage("Registration successful. Verify your email, then login.");
-                registerForm.reset();
-            } catch (error) {
-                setMessage(`Registration failed: ${getUserMessage(error, "register")}`, true);
-            } finally {
-                registerBtn.disabled = false;
-                registerBtn.textContent = "Create account";
-            }
-        });
-    </script>
+    <script type="module" src="js/register-page.js"></script>
     <script src="js/service-worker-register.js" defer></script>
 </body>
 </html>

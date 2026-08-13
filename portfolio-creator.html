@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com; style-src 'self' https://fonts.googleapis.com; style-src-elem 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https://img.logo.dev data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:9099 https://dcf-backend.onrender.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.gstatic.com https://img.logo.dev; object-src 'none'; base-uri 'self'; form-action 'self';">
 <meta name="theme-color" content="#f1eee5">
 <meta name="description" content="Build portfolios, monitor positions, and understand sector allocation.">
 <title>Portfolio Desk | DCF Calculator</title>
@@ -27,10 +27,10 @@
 <div id="portfolioOptions" class="pt-portfolio-options" role="listbox" aria-label="Your portfolios"></div>
 <form id="createPortfolioForm" class="pt-portfolio-create">
 <label class="sr-only" for="newPortfolioName">New portfolio name</label>
-<input id="newPortfolioName" maxlength="60" autocomplete="off" placeholder="New portfolio name">
+<input id="newPortfolioName" name="portfolioName" maxlength="60" autocomplete="off" placeholder="New portfolio name" aria-describedby="portfolioMenuError">
 <button id="createPortfolioBtn" type="submit">Add</button>
 </form>
-<span id="portfolioMenuError" class="pt-inline-error hidden" role="alert"></span>
+<span id="portfolioMenuError" class="pt-inline-error hidden" role="status" aria-live="polite"></span>
 </div>
 </details>
 </div>
@@ -40,10 +40,10 @@
 <button id="portfolioSyncRetryBtn" class="pt-link-button hidden" type="button">Retry</button>
 </div>
 <div class="pt-tool-row">
-<label><span class="sr-only">Display currency</span><select id="portfolioCurrencySelect" class="pt-square-control" aria-describedby="currencyHelp"></select></label>
+<label><span class="sr-only">Display currency</span><select id="portfolioCurrencySelect" name="displayCurrency" class="pt-square-control" aria-describedby="currencyHelp"></select></label>
 <span id="currencyHelp" class="sr-only">Changes displayed portfolio values and saves automatically.</span>
 <button id="refreshRatesBtn" class="pt-square-control pt-icon-control" type="button" aria-label="Refresh exchange rates" title="Refresh exchange rates">↻ FX</button>
-<button id="refreshPricesBtn" class="pt-square-control" type="button">↻ Refresh prices</button>
+<button id="refreshPricesBtn" class="pt-square-control" type="button" title="Check provider prices; a recent cached quote may be returned">↻ Check prices</button>
 </div>
 </div>
 </header>
@@ -64,10 +64,10 @@
 <form id="positionForm" class="pt-ticket-form" novalidate>
 <div class="pt-field pt-ticker-field">
 <label for="portfolioTickerInput">Company or ticker</label>
-<input id="portfolioTickerInput" type="text" autocomplete="off" placeholder="AAPL or Apple" aria-describedby="tickerPriceStatus tickerError" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="portfolioTickerAutocomplete">
+<input id="portfolioTickerInput" name="ticker" type="text" autocomplete="off" placeholder="AAPL or Apple" aria-describedby="tickerPriceStatus tickerError" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="portfolioTickerAutocomplete">
 <div id="portfolioTickerAutocomplete" class="ticker-autocomplete hidden" role="listbox" aria-label="Ticker suggestions"></div>
 <span id="tickerPriceStatus" class="pt-field-note" aria-live="polite">Select a result to load its latest price.</span>
-<span id="tickerError" class="pt-field-error hidden"></span>
+<span id="tickerError" class="pt-field-error hidden" role="status" aria-live="polite"></span>
 </div>
 <fieldset class="pt-field pt-choice-field">
 <legend>Direction</legend>
@@ -78,22 +78,22 @@
 </fieldset>
 <div class="pt-field">
 <label for="sizingModeSelect">Size entered as</label>
-<select id="sizingModeSelect"><option value="shares">Shares</option><option value="notional">Cash amount</option></select>
+<select id="sizingModeSelect" name="sizingMode"><option value="shares">Shares</option><option value="notional">Cash amount</option></select>
 </div>
 <div class="pt-field">
 <label id="positionSizeLabel" for="positionSizeInput">Position size</label>
-<div class="pt-affix-control pt-suffix-control"><input id="positionSizeInput" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="0" aria-describedby="positionSizeError"><span id="positionSizeSuffix">shares</span></div>
-<span id="positionSizeError" class="pt-field-error hidden"></span>
+<div class="pt-affix-control pt-suffix-control"><input id="positionSizeInput" name="positionSize" type="number" min="0" step="0.0001" inputmode="decimal" autocomplete="off" placeholder="0" aria-describedby="positionSizeError"><span id="positionSizeSuffix">shares</span></div>
+<span id="positionSizeError" class="pt-field-error hidden" role="status" aria-live="polite"></span>
 </div>
 <div class="pt-field">
 <label for="entryPriceInput">Entry price</label>
-<div class="pt-affix-control pt-prefix-control"><span id="entryCurrencyPrefix">USD</span><input id="entryPriceInput" type="number" min="0" step="0.0001" inputmode="decimal" placeholder="0.00" aria-describedby="entryPriceError"></div>
-<span id="entryPriceError" class="pt-field-error hidden"></span>
+<div class="pt-affix-control pt-prefix-control"><span id="entryCurrencyPrefix">USD</span><input id="entryPriceInput" name="entryPrice" type="number" min="0" step="0.0001" inputmode="decimal" autocomplete="off" placeholder="0.00" aria-describedby="entryPriceError"></div>
+<span id="entryPriceError" class="pt-field-error hidden" role="status" aria-live="polite"></span>
 </div>
 <div class="pt-field">
 <label for="leverageInput">Leverage</label>
-<div class="pt-affix-control pt-suffix-control pt-leverage-control"><input id="leverageInput" type="number" min="0.01" step="0.01" inputmode="decimal" value="1" aria-describedby="leverageError"><span>×</span></div>
-<span id="leverageError" class="pt-field-error hidden"></span>
+<div class="pt-affix-control pt-suffix-control pt-leverage-control"><input id="leverageInput" name="leverage" type="number" min="0.01" step="0.01" inputmode="decimal" autocomplete="off" value="1" aria-describedby="leverageError"><span>×</span></div>
+<span id="leverageError" class="pt-field-error hidden" role="status" aria-live="polite"></span>
 </div>
 <div class="pt-field pt-ticket-preview" aria-live="polite">
 <span>Gross exposure</span><strong id="previewExposure">—</strong><small id="previewLeverage">1× leverage</small>
@@ -111,7 +111,7 @@
 <div class="pt-ledger-head">
 <div><p id="positionsEyebrow" class="pt-overline">0 open positions</p><h2 id="positionsTitle">Holdings</h2></div>
 <div class="pt-head-actions">
-<label class="pt-filter-control"><span class="sr-only">Filter holdings</span><select id="positionsFilter" class="pt-square-control"><option value="all">Filter · All</option><option value="buy">Filter · Long</option><option value="sell">Filter · Short</option></select></label>
+<label class="pt-filter-control"><span class="sr-only">Filter holdings</span><select id="positionsFilter" name="positionFilter" class="pt-square-control"><option value="all">Filter · All</option><option value="buy">Filter · Long</option><option value="sell">Filter · Short</option></select></label>
 <button id="newPositionBtn" class="pt-dark-button" type="button">＋ New position</button>
 </div>
 </div>
@@ -149,7 +149,7 @@
 </dialog>
 
 <dialog id="renamePortfolioDialog" class="pt-dialog" aria-labelledby="renamePortfolioTitle">
-<form id="renamePortfolioForm"><p class="pt-overline">Portfolio settings</p><h2 id="renamePortfolioTitle">Rename portfolio</h2><label class="pt-dialog-field" for="renamePortfolioInput">Portfolio name<input id="renamePortfolioInput" maxlength="60" autocomplete="off"></label><span id="renamePortfolioError" class="pt-field-error hidden"></span><div class="pt-dialog-actions"><button id="cancelRenamePortfolioBtn" class="pt-square-control" type="button">Cancel</button><button id="saveRenamePortfolioBtn" class="pt-dark-button" type="submit">Save name</button></div></form>
+<form id="renamePortfolioForm"><p class="pt-overline">Portfolio settings</p><h2 id="renamePortfolioTitle">Rename portfolio</h2><label class="pt-dialog-field" for="renamePortfolioInput">Portfolio name<input id="renamePortfolioInput" name="portfolioName" maxlength="60" autocomplete="off" aria-describedby="renamePortfolioError"></label><span id="renamePortfolioError" class="pt-field-error hidden" role="status" aria-live="polite"></span><div class="pt-dialog-actions"><button id="cancelRenamePortfolioBtn" class="pt-square-control" type="button">Cancel</button><button id="saveRenamePortfolioBtn" class="pt-dark-button" type="submit">Save name</button></div></form>
 </dialog>
 
 <dialog id="deletePortfolioDialog" class="pt-dialog" aria-labelledby="deletePortfolioTitle">
@@ -161,9 +161,9 @@
 <p class="pt-overline">Dip Finder</p><h2 id="portfolioWatchlistTitle">Send portfolio to Dip Finder</h2>
 <p id="portfolioWatchlistSummary">Positions will be reduced to unique ticker symbols.</p>
 <fieldset class="pt-dialog-choice"><legend>Destination</legend><label><input type="radio" name="watchlistMode" value="new" checked> Create new watchlist</label><label><input type="radio" name="watchlistMode" value="existing"> Add to existing</label></fieldset>
-<div id="portfolioWatchlistNewField" class="pt-dialog-field"><label for="portfolioWatchlistName">Watchlist name</label><input id="portfolioWatchlistName" maxlength="60" autocomplete="off" placeholder="Portfolio watch"></div>
-<div id="portfolioWatchlistExistingField" class="pt-dialog-field hidden"><label for="portfolioWatchlistSelect">Existing watchlist</label><select id="portfolioWatchlistSelect"></select></div>
-<span id="portfolioWatchlistError" class="pt-field-error hidden"></span>
+<div id="portfolioWatchlistNewField" class="pt-dialog-field"><label for="portfolioWatchlistName">Watchlist name</label><input id="portfolioWatchlistName" name="watchlistName" maxlength="60" autocomplete="off" placeholder="Portfolio watch" aria-describedby="portfolioWatchlistError"></div>
+<div id="portfolioWatchlistExistingField" class="pt-dialog-field hidden"><label for="portfolioWatchlistSelect">Existing watchlist</label><select id="portfolioWatchlistSelect" name="watchlistId" aria-describedby="portfolioWatchlistError"></select></div>
+<span id="portfolioWatchlistError" class="pt-field-error hidden" role="status" aria-live="polite"></span>
 <div class="pt-dialog-actions"><button id="cancelPortfolioWatchlistBtn" class="pt-square-control" type="button">Cancel</button><button id="savePortfolioWatchlistBtn" class="pt-dark-button" type="submit">Create watchlist</button></div>
 </form>
 </dialog>

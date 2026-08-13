@@ -113,11 +113,18 @@ Open `http://localhost:8000/`.
 - `http://localhost:5000` on `localhost` or `127.0.0.1`
 - `https://dcf-backend.onrender.com` on other hosts
 
-On localhost, js/firebase-init.js connects Firebase Authentication to http://127.0.0.1:9099. The backend's documented python 123.py entrypoint now enables matching Auth and Firestore emulator hosts automatically. Start both emulators before testing:
+On localhost, `js/firebase-init.js` connects Firebase Authentication to
+`http://127.0.0.1:9099`. Emulator use is an explicit backend opt-in: set
+`USE_FIREBASE_EMULATORS=1` before starting `python 123.py`, then start both
+emulators before testing:
 
     firebase emulators:start --only auth,firestore --project dcf123-b6cb1
 
 This keeps local watchlist and portfolio writes out of production Firestore.
+Without the flag, the backend clears inherited emulator host variables and
+uses configured service-account credentials. Use `/live` for process liveness
+and `/ready` for dependency readiness; `/ready` returns `503` until required
+Firebase, Firestore, ticker, and production shared-rate-limit checks pass.
 
 ## Authentication and data flow
 
@@ -172,7 +179,21 @@ Dip Finder uses adjusted daily closes. Return compares the latest close with the
 
 ## Verification
 
-There is currently no automated frontend test suite. Before committing a change:
+The repository includes Node's built-in test-runner coverage for earnings helpers,
+API/cache behavior, DCF state, and other regression-prone pure helpers. Run all
+checked-in tests and syntax-check every browser module plus the service worker
+before committing:
+
+```bash
+node --test tests/*.test.mjs
+for file in js/*.js; do node --check "$file"; done
+node --check sw.js
+```
+
+The frontend GitHub Actions workflow runs the same complete test glob and
+syntax checks on every `js/*.js` module and `sw.js`.
+
+Automated checks do not replace browser and emulator verification:
 
 1. Serve the site over HTTP.
 2. Check the browser console for module and CSP errors.
