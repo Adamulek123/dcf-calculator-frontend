@@ -5700,6 +5700,28 @@ select.pt-square-control:hover {
 }
 
 @media (max-width: 650px) {
+    .dcf-page .app-layout,
+    .financial-page .app-layout {
+        display: block;
+    }
+    .dcf-page .app-main,
+    .financial-page .app-main {
+        width: 100%;
+        margin-left: 0;
+    }
+    .financial-search-wrapper {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+    .financial-search-wrapper input {
+        width: auto;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+    .financial-search-btn {
+        flex: 0 0 auto;
+    }
     .earnings-page .app-layout { display: block; }
     .earnings-page .app-main { width: 100%; margin-left: 0; }
     .earnings-page .sidebar { width: 100%; }
